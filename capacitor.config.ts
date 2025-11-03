@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Municipal Fault Reporter',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    iosScheme: 'https'
   },
   plugins: {
     Camera: {
