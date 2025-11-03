@@ -1,0 +1,18 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.municipality.faultreporter',
+  appName: 'Municipal Fault Reporter',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https'
+  },
+  plugins: {
+    Camera: {
+      presentationStyle: 'popover'
+    },
+    Geolocation: {}
+  }
+};
+
+export default config;
