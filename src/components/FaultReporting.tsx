@@ -135,16 +135,39 @@ const FileInput: React.FC<{
       });
 
       if (image.dataUrl) {
+        console.log('📸 Camera image captured, format:', image.format);
         setPreview(image.dataUrl);
         
-        const response = await fetch(image.dataUrl);
-        const blob = await response.blob();
-        const fileName = `photo_${Date.now()}.${image.format}`;
-        const photoFile = new File([blob], fileName, { type: `image/${image.format}` });
-        setFile(photoFile);
+        try {
+          const response = await fetch(image.dataUrl);
+          const blob = await response.blob();
+          console.log('📦 Blob created, size:', blob.size, 'type:', blob.type);
+          
+          // Ensure proper MIME type
+          const mimeType = blob.type || `image/${image.format}` || 'image/jpeg';
+          const fileName = `photo_${Date.now()}.${image.format || 'jpg'}`;
+          
+          // Create File with explicit type
+          const photoFile = new File([blob], fileName, { 
+            type: mimeType,
+            lastModified: Date.now()
+          });
+          
+          console.log('✅ File created:', {
+            name: photoFile.name,
+            size: photoFile.size,
+            type: photoFile.type
+          });
+          
+          setFile(photoFile);
+        } catch (conversionError) {
+          console.error('❌ Error converting image to file:', conversionError);
+          alert('Failed to process the image. Please try again.');
+        }
       }
     } catch (err) {
       console.error('Error capturing photo:', err);
+      alert('Failed to capture photo. Please check camera permissions.');
     }
   };
 

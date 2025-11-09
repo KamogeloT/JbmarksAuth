@@ -158,15 +158,54 @@ class Bitrix24Service {
    */
   private async fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
+      console.log('🔄 Converting file to base64:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
+      
       const reader = new FileReader();
+      
       reader.onload = () => {
-        const result = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-        const base64 = result.split(',')[1];
-        resolve(base64);
+        try {
+          const result = reader.result as string;
+          
+          if (!result) {
+            throw new Error('FileReader returned empty result');
+          }
+          
+          // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+          const parts = result.split(',');
+          if (parts.length < 2) {
+            console.error('❌ Invalid data URL format:', result.substring(0, 100));
+            throw new Error('Invalid data URL format');
+          }
+          
+          const base64 = parts[1];
+          console.log('✅ Base64 conversion successful, length:', base64.length);
+          resolve(base64);
+        } catch (error) {
+          console.error('❌ Error in FileReader onload:', error);
+          reject(error);
+        }
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      
+      reader.onerror = (error) => {
+        console.error('❌ FileReader error:', error);
+        reject(new Error(`FileReader failed: ${error}`));
+      };
+      
+      reader.onabort = () => {
+        console.error('❌ FileReader aborted');
+        reject(new Error('FileReader was aborted'));
+      };
+      
+      try {
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('❌ Error starting FileReader:', error);
+        reject(error);
+      }
     });
   }
 
@@ -175,6 +214,27 @@ class Bitrix24Service {
       console.log(`Uploading file: ${file.name} for fault type: ${faultType}`);
       console.log('📄 File size:', file.size, 'bytes');
       console.log('📄 File type:', file.type);
+      
+      // Validate file
+      if (!file || file.size === 0) {
+        console.error('❌ Invalid file: File is empty or undefined');
+        return {
+          success: false,
+          error: 'File is empty or invalid'
+        };
+      }
+      
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        console.error('❌ File too large:', file.size, 'bytes');
+        return {
+          success: false,
+          error: `File too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum size is 10MB.`
+        };
+      }
+      
+      if (!file.type || !file.type.startsWith('image/')) {
+        console.warn('⚠️ Warning: File type is not image:', file.type);
+      }
       
       const webhookUrl = this.getSanitizedWebhookUrl();
       const configuredFolderId = this.getConfiguredFolderId(faultType);
