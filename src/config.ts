@@ -47,7 +47,7 @@ export const defaultConfig: AppConfig = {
     },
   },
   app: {
-    name: 'Municipal Fault Reporting',
+    name: 'SDINMOTION',
     supportEmail: 'support@municipality.gov.za',
     supportPhone: '+27 18 297 5111',
   },

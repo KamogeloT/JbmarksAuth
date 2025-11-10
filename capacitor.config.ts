@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.municipality.faultreporter',
-  appName: 'Municipal Fault Reporter',
+  appName: 'SDINMOTION',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

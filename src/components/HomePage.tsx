@@ -41,7 +41,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           />
         </div>
         <h1 className="text-4xl font-extrabold mb-2">{config.app.name}</h1>
-        <p className="text-white text-lg mt-2 opacity-90">Your direct line to municipal services.</p>
+        <p className="text-white text-lg mt-2 opacity-90">Streamlining Municipal Service Delivery</p>
       </div>
 
       {/* How It Works */}

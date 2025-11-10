@@ -1,9 +1,9 @@
 {
-  "name": "fault-reporting-mobile-app",
+  "name": "sdinmotion-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Mobile-optimized Progressive Web App for reporting municipal faults",
+  "description": "SDINMOTION - Mobile app for municipal service reporting",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
