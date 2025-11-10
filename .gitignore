@@ -32,3 +32,12 @@ dist-ssr
 dev-dist
 sw.js
 workbox-*.js
+
+# Android signing keys
+*.jks
+*.keystore
+android/gradle.properties
+
+# Android build outputs (large binary files)
+*.aab
+*.apk
