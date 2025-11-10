@@ -161,9 +161,21 @@ class Bitrix24Service {
       console.log('🔄 Converting file to base64:', {
         name: file.name,
         size: file.size,
-        type: file.type
+        type: file.type,
+        isCamera: !!(file as any).__isCamera
       });
       
+      // Check if this file has pre-stored base64 data (from camera)
+      if ((file as any).__base64Data) {
+        console.log('✅ Using pre-stored base64 data from camera (avoiding double conversion)');
+        const base64 = (file as any).__base64Data;
+        console.log('✅ Base64 data length:', base64.length);
+        resolve(base64);
+        return;
+      }
+      
+      // For gallery images, read the file normally
+      console.log('📖 Reading file from gallery using FileReader');
       const reader = new FileReader();
       
       reader.onload = () => {
@@ -182,7 +194,7 @@ class Bitrix24Service {
           }
           
           const base64 = parts[1];
-          console.log('✅ Base64 conversion successful, length:', base64.length);
+          console.log('✅ Base64 conversion successful (gallery), length:', base64.length);
           resolve(base64);
         } catch (error) {
           console.error('❌ Error in FileReader onload:', error);

@@ -139,24 +139,39 @@ const FileInput: React.FC<{
         setPreview(image.dataUrl);
         
         try {
-          const response = await fetch(image.dataUrl);
-          const blob = await response.blob();
-          console.log('📦 Blob created, size:', blob.size, 'type:', blob.type);
+          // Extract base64 data directly from dataUrl
+          const base64Data = image.dataUrl.split(',')[1];
           
-          // Ensure proper MIME type
-          const mimeType = blob.type || `image/${image.format}` || 'image/jpeg';
+          // Convert base64 to blob
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          
+          // Determine MIME type
+          const mimeType = `image/${image.format || 'jpeg'}`;
+          const blob = new Blob([byteArray], { type: mimeType });
+          
+          console.log('📦 Blob created from base64, size:', blob.size, 'type:', blob.type);
+          
+          // Create File with proper metadata and store original base64
           const fileName = `photo_${Date.now()}.${image.format || 'jpg'}`;
-          
-          // Create File with explicit type
           const photoFile = new File([blob], fileName, { 
             type: mimeType,
             lastModified: Date.now()
           });
           
-          console.log('✅ File created:', {
+          // Store the original base64 data as a custom property for direct upload
+          (photoFile as any).__base64Data = base64Data;
+          (photoFile as any).__isCamera = true;
+          
+          console.log('✅ File created from camera:', {
             name: photoFile.name,
             size: photoFile.size,
-            type: photoFile.type
+            type: photoFile.type,
+            hasBase64: !!(photoFile as any).__base64Data
           });
           
           setFile(photoFile);

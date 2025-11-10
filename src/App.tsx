@@ -3,11 +3,13 @@ import { HomePage } from './components/HomePage';
 import { FaultReporting } from './components/FaultReporting';
 import { ReportHistory } from './components/ReportHistory';
 import { Navigation } from './components/Navigation';
+import { SplashScreen } from './components/SplashScreen';
 
 type View = 'home' | 'report' | 'history';
 type FaultType = 'Water' | 'Electricity' | 'Roads' | 'Waste';
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [currentView, setCurrentView] = useState<View>('home');
   const [selectedFaultType, setSelectedFaultType] = useState<FaultType | null>(null);
 
@@ -32,6 +34,11 @@ function App() {
         return <HomePage onNavigate={handleNavigate} />;
     }
   };
+
+  // Show splash screen on first load
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
