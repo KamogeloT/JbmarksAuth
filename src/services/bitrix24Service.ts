@@ -15,7 +15,8 @@ class Bitrix24Service {
 
   /**
    * Create a task in Bitrix24 from a fault report
-   * If file is provided, uploads it FIRST then creates task with file attached
+   * If file is provided, creates task FIRST, then attaches file via comment
+   * This is the most reliable method for Bitrix24 REST API
    */
   async createTaskFromFault(faultReport: FaultReport, file?: File): Promise<SubmitResult> {
     try {
@@ -23,27 +24,8 @@ class Bitrix24Service {
       
       console.log(`Creating task for ${faultReport.formType} fault, Group ID: ${groupId}`);
       
-      // Step 1: Upload file FIRST if provided (following official Bitrix24 docs)
-      let fileId: number | undefined;
-      
-      if (file) {
-        console.log('📤 Step 1: Uploading file BEFORE task creation...');
-        const uploadResult = await this.uploadFileToUploadFolder(file);
-        
-        if (!uploadResult.success) {
-          console.error('❌ File upload failed:', uploadResult.error);
-          return {
-            success: false,
-            error: `File upload failed: ${uploadResult.error}`
-          };
-        }
-        
-        fileId = uploadResult.fileId;
-        console.log('✅ File uploaded successfully, ID:', fileId);
-      }
-      
-      // Step 2: Create task with file attached (if fileId exists)
-      console.log('📝 Step 2: Creating task' + (fileId ? ' with attached file...' : '...'));
+      // Step 1: Create task first (without file)
+      console.log('📝 Step 1: Creating task...');
       
       const task: Bitrix24Task = {
         TITLE: this.generateTaskTitle(faultReport),
@@ -56,11 +38,6 @@ class Bitrix24Service {
         DEADLINE: this.getDeadline(faultReport.formType),
         UF_CRM_TASK: faultReport.refNumber
       };
-
-      // Add file to task if uploaded (official Bitrix24 way)
-      if (fileId) {
-        (task as any).UF_TASK_WEBDAV_FILES = [fileId];
-      }
 
       console.log('Task payload:', JSON.stringify(task, null, 2));
 
@@ -82,7 +59,7 @@ class Bitrix24Service {
       }
 
       const result = await response.json();
-      console.log('Bitrix24 response:', result);
+      console.log('Bitrix24 task creation response:', result);
 
       if (result.error) {
         console.error('❌ Bitrix24 error:', result.error);
@@ -92,24 +69,110 @@ class Bitrix24Service {
         };
       }
 
-      if (result.result?.task?.id) {
-        console.log('✅ Task created successfully, ID:', result.result.task.id);
-        return {
-          success: true,
-          taskId: String(result.result.task.id)
-        };
-      } else {
+      if (!result.result?.task?.id) {
         console.error('❌ Unexpected response format:', result);
         return {
           success: false,
           error: 'Unexpected response format from Bitrix24'
         };
       }
+
+      const taskId = String(result.result.task.id);
+      console.log('✅ Task created successfully, ID:', taskId);
+
+      // Step 2: If file provided, attach it via comment
+      if (file) {
+        console.log('📤 Step 2: Attaching file to task via comment...');
+        const attachResult = await this.attachFileToTask(taskId, file);
+        
+        if (!attachResult.success) {
+          console.warn('⚠️ File attachment failed:', attachResult.error);
+          console.warn('Task created but without image');
+          // Don't fail the whole operation - task is still created
+        } else {
+          console.log('✅ File attached successfully to task');
+        }
+      }
+
+      return {
+        success: true,
+        taskId: taskId
+      };
     } catch (error) {
       console.error('❌ Bitrix24 API Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error occurred'
+      };
+    }
+  }
+
+  /**
+   * Attach file to an existing task via comment
+   * This is the most reliable way to attach files in Bitrix24
+   */
+  private async attachFileToTask(taskId: string, file: File): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('📎 Attaching file to task', taskId);
+      
+      // Convert file to base64
+      const base64Content = await this.fileToBase64(file);
+      console.log('✅ File converted to base64, length:', base64Content.length);
+      
+      const webhookUrl = this.getSanitizedWebhookUrl();
+      
+      // Use task.commentitem.add to attach file
+      const params = new URLSearchParams();
+      params.append('TASKID', taskId);
+      params.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
+      params.append('FIELDS[FILES][0][name]', file.name);
+      params.append('FIELDS[FILES][0][content]', base64Content);
+      
+      console.log('🚀 Attaching file via task.commentitem.add...');
+      
+      const response = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ HTTP error ${response.status}:`, errorText);
+        return {
+          success: false,
+          error: `HTTP ${response.status}: ${errorText}`
+        };
+      }
+      
+      const result = await response.json();
+      console.log('📥 Attachment result:', result);
+      
+      if (result.error) {
+        console.error('❌ Bitrix24 error:', result.error);
+        return {
+          success: false,
+          error: result.error.error_description || result.error.error || 'Failed to attach file'
+        };
+      }
+      
+      if (result.result) {
+        console.log('✅ File attached successfully via comment');
+        return { success: true };
+      }
+      
+      return {
+        success: false,
+        error: 'Unexpected response format'
+      };
+      
+    } catch (error) {
+      console.error('❌ File attachment error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to attach file'
       };
     }
   }
