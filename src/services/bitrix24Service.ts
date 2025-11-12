@@ -114,6 +114,18 @@ class Bitrix24Service {
   private async attachFileToTask(taskId: string, file: File): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('📎 Attaching file to task', taskId);
+      console.log('📄 File details:', { name: file.name, size: file.size, type: file.type });
+      
+      // Validate file size
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        const errorMsg = `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`;
+        console.error('❌', errorMsg);
+        return {
+          success: false,
+          error: errorMsg
+        };
+      }
       
       // Convert file to base64
       const base64Content = await this.fileToBase64(file);
@@ -121,55 +133,105 @@ class Bitrix24Service {
       
       const webhookUrl = this.getSanitizedWebhookUrl();
       
-      // Use task.commentitem.add to attach file
-      const params = new URLSearchParams();
-      params.append('TASKID', taskId);
-      params.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
-      params.append('FIELDS[FILES][0][name]', file.name);
-      params.append('FIELDS[FILES][0][content]', base64Content);
+      // Try Method 1: task.commentitem.add (preferred)
+      console.log('🚀 Method 1: Trying task.commentitem.add...');
+      const params1 = new URLSearchParams();
+      params1.append('TASKID', taskId);
+      params1.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
+      params1.append('FIELDS[FILES][0][name]', file.name);
+      params1.append('FIELDS[FILES][0][content]', base64Content);
       
-      console.log('🚀 Attaching file via task.commentitem.add...');
-      
-      const response = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+      const response1 = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: params.toString()
+        body: params1.toString()
       });
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ HTTP error ${response.status}:`, errorText);
-        return {
-          success: false,
-          error: `HTTP ${response.status}: ${errorText}`
-        };
+      console.log('📊 Method 1 response status:', response1.status);
+      
+      if (response1.ok) {
+        const result1 = await response1.json();
+        console.log('📥 Method 1 result:', result1);
+        
+        if (!result1.error && result1.result) {
+          console.log('✅ File attached successfully via task.commentitem.add (Method 1)');
+          return { success: true };
+        }
+        
+        if (result1.error) {
+          console.warn('⚠️ Method 1 failed:', result1.error);
+          console.log('Trying alternative method...');
+        }
+      } else {
+        const errorText1 = await response1.text();
+        console.warn(`⚠️ Method 1 HTTP error ${response1.status}:`, errorText1);
+        console.log('Trying alternative method...');
       }
       
-      const result = await response.json();
-      console.log('📥 Attachment result:', result);
+      // Try Method 2: im.disk.file.commit (alternative for some Bitrix24 versions)
+      console.log('🚀 Method 2: Trying im.disk.file.commit...');
       
-      if (result.error) {
-        console.error('❌ Bitrix24 error:', result.error);
-        return {
-          success: false,
-          error: result.error.error_description || result.error.error || 'Failed to attach file'
-        };
+      // First upload to disk
+      const params2a = new URLSearchParams();
+      params2a.append('id', 'upload');
+      params2a.append('data[NAME]', file.name);
+      params2a.append('fileContent[0]', base64Content);
+      
+      const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params2a.toString()
+      });
+      
+      console.log('📊 Method 2 upload response status:', uploadResponse.status);
+      
+      if (uploadResponse.ok) {
+        const uploadResult = await uploadResponse.json();
+        console.log('📥 Method 2 upload result:', uploadResult);
+        
+        if (!uploadResult.error && uploadResult.result?.ID) {
+          // Now attach via comment with file ID
+          const fileId = uploadResult.result.ID;
+          console.log('✅ File uploaded to disk, ID:', fileId);
+          
+          const params2b = new URLSearchParams();
+          params2b.append('TASKID', taskId);
+          params2b.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
+          params2b.append('FIELDS[UF_FORUM_MESSAGE_DOC][0]', `n${fileId}`);
+          
+          const attachResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params2b.toString()
+          });
+          
+          if (attachResponse.ok) {
+            const attachResult = await attachResponse.json();
+            console.log('📥 Method 2 attach result:', attachResult);
+            
+            if (!attachResult.error && attachResult.result) {
+              console.log('✅ File attached successfully via disk upload (Method 2)');
+              return { success: true };
+            }
+          }
+        }
       }
       
-      if (result.result) {
-        console.log('✅ File attached successfully via comment');
-        return { success: true };
-      }
-      
+      // Both methods failed
+      console.error('❌ All attachment methods failed');
       return {
         success: false,
-        error: 'Unexpected response format'
+        error: 'Could not attach file using available methods. Check webhook permissions.'
       };
       
     } catch (error) {
-      console.error('❌ File attachment error:', error);
+      console.error('❌ File attachment exception:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to attach file'
