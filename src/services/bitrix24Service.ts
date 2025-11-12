@@ -3,6 +3,7 @@
 
 import { config } from '../config';
 import { FaultReport, Bitrix24Task, SubmitResult } from '../types';
+import { debugLogger } from './debugLogger';
 
 class Bitrix24Service {
   /**
@@ -20,9 +21,13 @@ class Bitrix24Service {
    */
   async createTaskFromFault(faultReport: FaultReport, file?: File): Promise<SubmitResult> {
     try {
+      await debugLogger.log('INFO', '=== START: Creating task from fault ===');
+      await debugLogger.log('INFO', `Fault Type: ${faultReport.formType}`, { hasFile: !!file, fileSize: file?.size });
+      
       const groupId = this.getGroupId(faultReport.formType);
       
       console.log(`Creating task for ${faultReport.formType} fault, Group ID: ${groupId}`);
+      await debugLogger.log('INFO', `Creating task for ${faultReport.formType}, Group ID: ${groupId}`);
       
       // Step 1: Create task first (without file)
       console.log('📝 Step 1: Creating task...');
@@ -42,6 +47,8 @@ class Bitrix24Service {
       console.log('Task payload:', JSON.stringify(task, null, 2));
 
       const webhookUrl = this.getSanitizedWebhookUrl();
+      await debugLogger.logApiCall('POST', `${webhookUrl}/tasks.task.add.json`, { fields: task });
+      
       const response = await fetch(`${webhookUrl}/tasks.task.add.json`, {
         method: 'POST',
         headers: {
@@ -51,6 +58,8 @@ class Bitrix24Service {
           fields: task
         })
       });
+      
+      await debugLogger.log('INFO', `Task creation response status: ${response.status}`);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -60,6 +69,7 @@ class Bitrix24Service {
 
       const result = await response.json();
       console.log('Bitrix24 task creation response:', result);
+      await debugLogger.logApiResponse('tasks.task.add.json', response.status, result);
 
       if (result.error) {
         console.error('❌ Bitrix24 error:', result.error);
@@ -79,15 +89,19 @@ class Bitrix24Service {
 
       const taskId = String(result.result.task.id);
       console.log('✅ Task created successfully, ID:', taskId);
+      await debugLogger.log('INFO', `✅ Task created successfully, ID: ${taskId}`);
 
       // Step 2: If file provided, attach it via comment
       if (file) {
         console.log('📤 Step 2: Attaching file to task via comment...');
+        await debugLogger.log('INFO', '📤 Step 2: Starting file attachment process');
+        
         const attachResult = await this.attachFileToTask(taskId, file);
         
         if (!attachResult.success) {
           console.error('❌ File attachment failed:', attachResult.error);
           console.error('Task created but without image');
+          await debugLogger.logError('File Attachment', attachResult.error);
           
           // Return error so user knows photo didn't upload
           return {
@@ -97,6 +111,7 @@ class Bitrix24Service {
           };
         } else {
           console.log('✅ File attached successfully to task');
+          await debugLogger.log('INFO', '✅ File attached successfully to task');
         }
       }
 
@@ -106,6 +121,7 @@ class Bitrix24Service {
       };
     } catch (error) {
       console.error('❌ Bitrix24 API Error:', error);
+      await debugLogger.logError('createTaskFromFault', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error occurred'
@@ -121,6 +137,7 @@ class Bitrix24Service {
     try {
       console.log('📎 Attaching file to task', taskId);
       console.log('📄 File details:', { name: file.name, size: file.size, type: file.type });
+      await debugLogger.log('INFO', `📎 Attaching file to task ${taskId}`, { name: file.name, size: file.size, type: file.type });
       
       // Validate file size
       const maxSize = 10 * 1024 * 1024; // 10MB
@@ -143,17 +160,21 @@ class Bitrix24Service {
       console.log('🚀 Method 1: Trying task group storage upload...');
       
       // Get task details to find group
+      await debugLogger.log('INFO', `Fetching task details for task ${taskId}`);
       const taskResponse = await fetch(`${webhookUrl}/tasks.task.get.json?taskId=${taskId}`, {
         method: 'GET'
       });
       
+      await debugLogger.log('INFO', `Task details response status: ${taskResponse.status}`);
       const taskResult = await taskResponse.json();
       const groupId = taskResult.result?.task?.groupId;
+      await debugLogger.log('INFO', `Task group ID: ${groupId}`);
       
       if (groupId) {
         console.log('👥 Task group ID:', groupId);
         
         // Get group's storage
+        await debugLogger.log('INFO', `Fetching storage for group ${groupId}`);
         const storageResponse = await fetch(`${webhookUrl}/disk.storage.getlist.json`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -165,8 +186,10 @@ class Bitrix24Service {
           })
         });
         
+        await debugLogger.log('INFO', `Storage response status: ${storageResponse.status}`);
         const storageResult = await storageResponse.json();
         console.log('📦 Group storage:', storageResult);
+        await debugLogger.log('INFO', `Storage result received`, { storageCount: storageResult.result?.length });
         
         if (storageResult.result && storageResult.result.length > 0) {
           const storageId = storageResult.result[0].ID;
@@ -183,15 +206,34 @@ class Bitrix24Service {
           uploadParams.append('fileContent', base64Content);
           uploadParams.append('generateUniqueName', '1');  // Auto-rename if exists
           
-          const uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: uploadParams.toString()
+          await debugLogger.log('INFO', `Starting file upload to folder ${folderId}`, { 
+            fileName: uniqueFileName, 
+            base64Length: base64Content.length 
           });
           
+          // Create abort controller for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+          
+          let uploadResponse1;
+          try {
+            uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: uploadParams.toString(),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+          } catch (fetchError) {
+            clearTimeout(timeoutId);
+            await debugLogger.logError('File upload fetch failed', fetchError);
+            throw fetchError;
+          }
+          
           console.log('📊 Method 1 upload status:', uploadResponse1.status);
+          await debugLogger.log('INFO', `File upload response status: ${uploadResponse1.status}`);
           
           if (uploadResponse1.ok) {
             const uploadResult1 = await uploadResponse1.json();
@@ -199,13 +241,17 @@ class Bitrix24Service {
             
             if (!uploadResult1.error && uploadResult1.result?.ID) {
               const diskId = uploadResult1.result.ID;
-              console.log('✅ File uploaded to group storage, Disk ID:', diskId);
+              const fileId = uploadResult1.result.FILE_ID;
+              console.log('✅ File uploaded to group storage, Disk ID:', diskId, 'File ID:', fileId);
+              await debugLogger.log('INFO', `✅ File uploaded to group storage`, { diskId, fileId });
               
-              // Attach file to task using tasks.task.files.attach with DISK_ID
-              console.log('📎 Attaching file to task using tasks.task.files.attach...');
+              // Attach file to task using tasks.task.files.attach with DISK_ID (try DISK_ID first)
+              console.log('📎 Attaching file to task using tasks.task.files.attach (trying DISK_ID first)...');
+              await debugLogger.log('INFO', '📎 Trying tasks.task.files.attach with DISK_ID', { taskId, diskId });
+              
               const attachParams = new URLSearchParams();
               attachParams.append('taskId', taskId);
-              attachParams.append('fileId', diskId);  // Use DISK_ID (not FILE_ID!)
+              attachParams.append('fileId', diskId);  // Try DISK_ID first
               
               const attachResponse = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
                 method: 'POST',
@@ -217,13 +263,45 @@ class Bitrix24Service {
               
               if (attachResponse.ok) {
                 const attachResult = await attachResponse.json();
-                console.log('📥 Attach result:', attachResult);
+                console.log('📥 Attach result (DISK_ID):', attachResult);
+                await debugLogger.logApiResponse('tasks.task.files.attach (DISK_ID)', attachResponse.status, attachResult);
                 
                 if (!attachResult.error && attachResult.result) {
-                  console.log('✅ File attached successfully! Attachment ID:', attachResult.result.attachmentId);
+                  console.log('✅ File attached successfully with DISK_ID! Attachment ID:', attachResult.result.attachmentId);
                   return { success: true };
+                }
+                
+                // DISK_ID failed, try FILE_ID as fallback
+                if (attachResult.error && fileId) {
+                  console.warn('⚠️ DISK_ID failed, trying FILE_ID as fallback...');
+                  await debugLogger.log('WARN', '⚠️ DISK_ID failed, trying FILE_ID as fallback', { taskId, fileId });
+                  
+                  const attachParams2 = new URLSearchParams();
+                  attachParams2.append('taskId', taskId);
+                  attachParams2.append('fileId', fileId);  // Try FILE_ID
+                  
+                  const attachResponse2 = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: attachParams2.toString()
+                  });
+                  
+                  if (attachResponse2.ok) {
+                    const attachResult2 = await attachResponse2.json();
+                    console.log('📥 Attach result (FILE_ID):', attachResult2);
+                    await debugLogger.logApiResponse('tasks.task.files.attach (FILE_ID)', attachResponse2.status, attachResult2);
+                    
+                    if (!attachResult2.error && attachResult2.result) {
+                      console.log('✅ File attached successfully with FILE_ID! Attachment ID:', attachResult2.result.attachmentId);
+                      return { success: true };
+                    } else {
+                      console.error('❌ Both DISK_ID and FILE_ID failed:', attachResult2.error);
+                    }
+                  }
                 } else {
-                  console.warn('⚠️ Attach returned error:', attachResult.error);
+                  console.warn('⚠️ DISK_ID attach returned error:', attachResult.error);
                 }
               }
             }
@@ -254,6 +332,7 @@ class Bitrix24Service {
       
     } catch (error) {
       console.error('❌ File attachment exception:', error);
+      await debugLogger.logError('attachFileToTask - Full Exception', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to attach file'

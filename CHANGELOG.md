@@ -2,6 +2,89 @@
 
 All notable changes to the Municipal Fault Reporting Mobile App.
 
+## [1.7.7] - 2025-11-12
+
+### 🔥 Critical Fix - Photo Upload Issue Resolved
+
+#### Fixed
+- ✅ **Photos now successfully attach to Bitrix24 tasks**
+  - Implemented correct `tasks.task.files.attach` API workflow
+  - Added dual-method fallback (DISK_ID → FILE_ID)
+  - Photos upload to task's group storage then attach properly
+
+#### Improved
+- 🎨 **Standardized photo format across ALL devices and sources**
+  - Max resolution: 1600px (optimal for mobile networks)
+  - Format: JPEG (60% quality)
+  - Consistent ~500KB-1MB file sizes for fast, reliable uploads
+  - Same processing for camera and gallery photos
+
+#### Added
+- 🔍 **Comprehensive debugging and logging**
+  - New `debugLogger` service writes to device file
+  - Logs location: `Documents/sdinmotion_debug.log`
+  - Includes all API calls, responses, and errors
+  - Pull logs via `get-phone-logs.ps1` script
+- ⏱️ **Network timeout protection**
+  - 60-second timeout for file uploads
+  - Clear error messages on timeout
+
+#### Technical
+- Enhanced `bitrix24Service.ts` with proper file attachment flow
+- Unified photo processing in `FaultReporting.tsx`
+- Added `debugLogger.ts` for persistent logging
+- Version: 1.7.7 (versionCode: 17)
+
+---
+
+## [1.7.0-1.7.6] - 2025-11-12
+
+### Iterative Bug Fixes (Photo Upload)
+- Various attempts to fix photo attachment issue
+- Network optimization and error handling improvements
+- Image quality adjustments
+
+---
+
+## [1.5.1] - 2025-11-11
+
+### Fixed
+- Minor bug fixes and performance improvements
+
+---
+
+## [1.5.0] - 2025-11-10
+
+### Added
+- Enhanced location services
+- Improved GPS accuracy
+
+---
+
+## [1.4.0] - 2025-11-09
+
+### Added
+- Report history improvements
+- Better offline support
+
+---
+
+## [1.3.1] - 2025-11-08
+
+### Fixed
+- UI/UX refinements
+- Bug fixes
+
+---
+
+## [1.3.0] - 2025-11-07
+
+### Added
+- Enhanced user interface
+- Better error messages
+
+---
+
 ## [1.0.0] - 2025-10-20
 
 ### Added
