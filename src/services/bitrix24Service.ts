@@ -86,9 +86,15 @@ class Bitrix24Service {
         const attachResult = await this.attachFileToTask(taskId, file);
         
         if (!attachResult.success) {
-          console.warn('⚠️ File attachment failed:', attachResult.error);
-          console.warn('Task created but without image');
-          // Don't fail the whole operation - task is still created
+          console.error('❌ File attachment failed:', attachResult.error);
+          console.error('Task created but without image');
+          
+          // Return error so user knows photo didn't upload
+          return {
+            success: false,
+            error: `Task created (ID: ${taskId}) but photo failed to upload: ${attachResult.error || 'Unknown error'}`,
+            taskId: taskId
+          };
         } else {
           console.log('✅ File attached successfully to task');
         }
