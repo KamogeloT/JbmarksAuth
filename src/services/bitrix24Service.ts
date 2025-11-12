@@ -133,117 +133,111 @@ class Bitrix24Service {
       
       const webhookUrl = this.getSanitizedWebhookUrl();
       
-      // Try Method 1: task.commentitem.add with UF_FORUM_MESSAGE_DOC (preferred)
-      console.log('🚀 Method 1: Trying disk upload + task.commentitem.add...');
+      // Try Method 1: Upload to task's group storage then attach (preferred)
+      console.log('🚀 Method 1: Trying task group storage upload...');
       
-      // First upload file to disk
-      const uploadParams = new URLSearchParams();
-      uploadParams.append('id', 'upload');
-      uploadParams.append('data[NAME]', file.name);
-      uploadParams.append('fileContent', base64Content);
-      
-      const uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: uploadParams.toString()
+      // Get task details to find group
+      const taskResponse = await fetch(`${webhookUrl}/tasks.task.get.json?taskId=${taskId}`, {
+        method: 'GET'
       });
       
-      console.log('📊 Method 1 upload status:', uploadResponse1.status);
+      const taskResult = await taskResponse.json();
+      const groupId = taskResult.result?.task?.groupId;
       
-      if (uploadResponse1.ok) {
-        const uploadResult1 = await uploadResponse1.json();
-        console.log('📥 Method 1 upload result:', uploadResult1);
+      if (groupId) {
+        console.log('👥 Task group ID:', groupId);
         
-        if (!uploadResult1.error && uploadResult1.result?.ID) {
-          const fileId = uploadResult1.result.ID;
-          console.log('✅ File uploaded, ID:', fileId);
+        // Get group's storage
+        const storageResponse = await fetch(`${webhookUrl}/disk.storage.getlist.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filter: {
+              ENTITY_TYPE: 'group',
+              ENTITY_ID: groupId
+            }
+          })
+        });
+        
+        const storageResult = await storageResponse.json();
+        console.log('📦 Group storage:', storageResult);
+        
+        if (storageResult.result && storageResult.result.length > 0) {
+          const storageId = storageResult.result[0].ID;
+          const folderId = storageResult.result[0].ROOT_OBJECT_ID;
+          console.log('📁 Storage ID:', storageId, 'Folder ID:', folderId);
           
-          // Now attach to task comment
-          const commentParams = new URLSearchParams();
-          commentParams.append('TASKID', taskId);
-          commentParams.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
-          commentParams.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
+          // Upload file to group's folder (not storage!)
+          const timestamp = Date.now();
+          const uniqueFileName = `${timestamp}_${file.name}`;
           
-          const commentResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+          const uploadParams = new URLSearchParams();
+          uploadParams.append('id', folderId);  // Use ROOT_OBJECT_ID!
+          uploadParams.append('data[NAME]', uniqueFileName);  // Unique filename
+          uploadParams.append('fileContent', base64Content);
+          uploadParams.append('generateUniqueName', '1');  // Auto-rename if exists
+          
+          const uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: commentParams.toString()
+            body: uploadParams.toString()
           });
           
-          if (commentResponse.ok) {
-            const commentResult = await commentResponse.json();
-            console.log('📥 Method 1 comment result:', commentResult);
+          console.log('📊 Method 1 upload status:', uploadResponse1.status);
+          
+          if (uploadResponse1.ok) {
+            const uploadResult1 = await uploadResponse1.json();
+            console.log('📥 Method 1 upload result:', uploadResult1);
             
-            if (!commentResult.error && commentResult.result) {
-              console.log('✅ File attached successfully via Method 1');
-              return { success: true };
+            if (!uploadResult1.error && uploadResult1.result?.ID) {
+              const diskId = uploadResult1.result.ID;
+              console.log('✅ File uploaded to group storage, Disk ID:', diskId);
+              
+              // Attach file to task using tasks.task.files.attach with DISK_ID
+              console.log('📎 Attaching file to task using tasks.task.files.attach...');
+              const attachParams = new URLSearchParams();
+              attachParams.append('taskId', taskId);
+              attachParams.append('fileId', diskId);  // Use DISK_ID (not FILE_ID!)
+              
+              const attachResponse = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: attachParams.toString()
+              });
+              
+              if (attachResponse.ok) {
+                const attachResult = await attachResponse.json();
+                console.log('📥 Attach result:', attachResult);
+                
+                if (!attachResult.error && attachResult.result) {
+                  console.log('✅ File attached successfully! Attachment ID:', attachResult.result.attachmentId);
+                  return { success: true };
+                } else {
+                  console.warn('⚠️ Attach returned error:', attachResult.error);
+                }
+              }
             }
+            
+            console.warn('⚠️ Method 1 failed, trying alternative...');
+          } else {
+            const errorText1 = await uploadResponse1.text();
+            console.warn(`⚠️ Method 1 HTTP error ${uploadResponse1.status}:`, errorText1);
+            console.log('Trying alternative method...');
           }
+        } else {
+          console.warn('⚠️ No group storage found for Method 1');
         }
-        
-        console.warn('⚠️ Method 1 failed, trying alternative...');
       } else {
-        const errorText1 = await uploadResponse1.text();
-        console.warn(`⚠️ Method 1 HTTP error ${uploadResponse1.status}:`, errorText1);
-        console.log('Trying alternative method...');
+        console.warn('⚠️ Task has no group ID');
       }
       
-      // Try Method 2: Different parameter format (alternative)
-      console.log('🚀 Method 2: Trying alternative upload format...');
-      
-      // Upload with different parameter format
-      const params2a = new URLSearchParams();
-      params2a.append('id', 'upload');
-      params2a.append('data[NAME]', file.name);
-      params2a.append('fileContent', base64Content);
-      
-      const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params2a.toString()
-      });
-      
-      console.log('📊 Method 2 upload response status:', uploadResponse.status);
-      
-      if (uploadResponse.ok) {
-        const uploadResult = await uploadResponse.json();
-        console.log('📥 Method 2 upload result:', uploadResult);
-        
-        if (!uploadResult.error && uploadResult.result?.ID) {
-          // Now attach via comment with file ID
-          const fileId = uploadResult.result.ID;
-          console.log('✅ File uploaded to disk, ID:', fileId);
-          
-          const params2b = new URLSearchParams();
-          params2b.append('TASKID', taskId);
-          params2b.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
-          params2b.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
-          
-          const attachResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: params2b.toString()
-          });
-          
-          if (attachResponse.ok) {
-            const attachResult = await attachResponse.json();
-            console.log('📥 Method 2 attach result:', attachResult);
-            
-            if (!attachResult.error && attachResult.result) {
-              console.log('✅ File attached successfully via disk upload (Method 2)');
-              return { success: true };
-            }
-          }
-        }
-      }
+      // Try Method 2: Simple fallback (just in case)
+      console.log('🚀 Method 2: Fallback method...');
+      console.warn('❌ No working upload method available');
       
       // Both methods failed
       console.error('❌ All attachment methods failed');

@@ -288,7 +288,8 @@
                     fields: {
                         TITLE: 'Test Upload Task',
                         DESCRIPTION: 'Auto-created for upload testing',
-                        RESPONSIBLE_ID: 1
+                        RESPONSIBLE_ID: 1,
+                        GROUP_ID: 5  // Water & Sanitation Department
                     }
                 })
             });
@@ -304,15 +305,56 @@
             return taskId;
         }
         
-        // Method 1: Upload to disk then attach (FIXED)
+        // Method 1: Upload to task's group storage then attach (FIXED)
         async function uploadMethod1(webhookUrl, taskId, file, base64Content) {
-            log('🚀 Method 1: disk.folder.uploadfile + UF_FORUM_MESSAGE_DOC', 'info');
+            log('🚀 Method 1: Upload to task group storage + UF_FORUM_MESSAGE_DOC', 'info');
             
-            // Step 1: Upload file to disk
+            // Step 1: Get task details to find its group
+            const taskResponse = await fetch(`${webhookUrl}/tasks.task.get.json?taskId=${taskId}`, {
+                method: 'GET'
+            });
+            
+            const taskResult = await taskResponse.json();
+            const groupId = taskResult.result?.task?.groupId;
+            
+            if (!groupId) {
+                throw new Error('Task has no group ID');
+            }
+            
+            log(`👥 Task group ID: ${groupId}`, 'info');
+            
+            // Step 2: Get group's storage
+            const storageResponse = await fetch(`${webhookUrl}/disk.storage.getlist.json`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filter: {
+                        ENTITY_TYPE: 'group',
+                        ENTITY_ID: groupId
+                    }
+                })
+            });
+            
+            const storageResult = await storageResponse.json();
+            log(`📦 Group storage: ${JSON.stringify(storageResult)}`, 'info');
+            
+            if (!storageResult.result || storageResult.result.length === 0) {
+                throw new Error('No storage found for group');
+            }
+            
+            const storageId = storageResult.result[0].ID;
+            const folderId = storageResult.result[0].ROOT_OBJECT_ID;
+            log(`📁 Storage ID: ${storageId}, Folder ID: ${folderId}`, 'success');
+            
+            // Step 3: Upload file to group folder (not storage!)
+            const timestamp = Date.now();
+            const uniqueFileName = `${timestamp}_${file.name}`;
+            
             const uploadParams = new URLSearchParams();
-            uploadParams.append('id', 'upload');
-            uploadParams.append('data[NAME]', file.name);
+            uploadParams.append('id', folderId);  // Use ROOT_OBJECT_ID, not storage ID!
+            uploadParams.append('data[NAME]', uniqueFileName);  // Unique filename
             uploadParams.append('fileContent', base64Content);
+            uploadParams.append('generateUniqueName', '1');  // Auto-rename if exists
             
             const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
                 method: 'POST',
@@ -329,26 +371,46 @@
                 throw new Error(`Method 1 upload failed: ${uploadResult.error?.error_description || 'No file ID'}`);
             }
             
-            const fileId = uploadResult.result.ID;
-            log(`✅ File uploaded to disk, ID: ${fileId}`, 'success');
+            const diskId = uploadResult.result.ID;
+            const fileId = uploadResult.result.FILE_ID;
+            log(`✅ File uploaded - Disk ID: ${diskId}, FILE_ID: ${fileId}`, 'success');
             
-            // Step 2: Attach to task via comment
-            const commentParams = new URLSearchParams();
-            commentParams.append('TASKID', taskId);
-            commentParams.append('FIELDS[POST_MESSAGE]', 'Photo attachment (test)');
-            commentParams.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
+            // Step 4: Try attaching with DISK_ID first, then FILE_ID
+            log('📎 Attempting to attach file to task (trying DISK_ID first)...', 'info');
             
-            const commentResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+            const attachParams = new URLSearchParams();
+            attachParams.append('taskId', taskId);
+            attachParams.append('fileId', diskId);  // Try DISK_ID first
+            
+            const attachResponse = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: commentParams.toString()
+                body: attachParams.toString()
             });
             
-            const commentResult = await commentResponse.json();
-            log(`📥 Attach result: ${JSON.stringify(commentResult)}`, commentResult.error ? 'error' : 'success');
+            const attachResult = await attachResponse.json();
+            log(`📥 Attach result (DISK_ID): ${JSON.stringify(attachResult)}`, 'info');
             
-            if (commentResult.error || !commentResult.result) {
-                throw new Error(`Method 1 attach failed: ${commentResult.error?.error_description || 'Unknown'}`);
+            if (attachResult.error) {
+                // DISK_ID failed, try FILE_ID
+                log('⚠️ DISK_ID failed, trying FILE_ID...', 'warn');
+                
+                const attachParams2 = new URLSearchParams();
+                attachParams2.append('taskId', taskId);
+                attachParams2.append('fileId', fileId);  // Try FILE_ID
+                
+                const attachResponse2 = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: attachParams2.toString()
+                });
+                
+                const attachResult2 = await attachResponse2.json();
+                log(`📥 Attach result (FILE_ID): ${JSON.stringify(attachResult2)}`, attachResult2.error ? 'error' : 'success');
+                
+                if (attachResult2.error || !attachResult2.result) {
+                    throw new Error(`Both DISK_ID and FILE_ID failed: ${attachResult2.error?.error_description || 'Unknown'}`);
+                }
             }
             
             return true;
@@ -364,7 +426,7 @@
             uploadParams.append('data[NAME]', file.name);
             uploadParams.append('fileContent[0]', base64Content);
             
-            const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
+            const uploadResponse = await fetch(`${webhookUrl}/disk.storage.uploadfile.json`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: uploadParams.toString()
