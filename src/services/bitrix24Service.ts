@@ -133,51 +133,73 @@ class Bitrix24Service {
       
       const webhookUrl = this.getSanitizedWebhookUrl();
       
-      // Try Method 1: task.commentitem.add (preferred)
-      console.log('🚀 Method 1: Trying task.commentitem.add...');
-      const params1 = new URLSearchParams();
-      params1.append('TASKID', taskId);
-      params1.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
-      params1.append('FIELDS[FILES][0][name]', file.name);
-      params1.append('FIELDS[FILES][0][content]', base64Content);
+      // Try Method 1: task.commentitem.add with UF_FORUM_MESSAGE_DOC (preferred)
+      console.log('🚀 Method 1: Trying disk upload + task.commentitem.add...');
       
-      const response1 = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+      // First upload file to disk
+      const uploadParams = new URLSearchParams();
+      uploadParams.append('id', 'upload');
+      uploadParams.append('data[NAME]', file.name);
+      uploadParams.append('fileContent', base64Content);
+      
+      const uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: params1.toString()
+        body: uploadParams.toString()
       });
       
-      console.log('📊 Method 1 response status:', response1.status);
+      console.log('📊 Method 1 upload status:', uploadResponse1.status);
       
-      if (response1.ok) {
-        const result1 = await response1.json();
-        console.log('📥 Method 1 result:', result1);
+      if (uploadResponse1.ok) {
+        const uploadResult1 = await uploadResponse1.json();
+        console.log('📥 Method 1 upload result:', uploadResult1);
         
-        if (!result1.error && result1.result) {
-          console.log('✅ File attached successfully via task.commentitem.add (Method 1)');
-          return { success: true };
+        if (!uploadResult1.error && uploadResult1.result?.ID) {
+          const fileId = uploadResult1.result.ID;
+          console.log('✅ File uploaded, ID:', fileId);
+          
+          // Now attach to task comment
+          const commentParams = new URLSearchParams();
+          commentParams.append('TASKID', taskId);
+          commentParams.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
+          commentParams.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
+          
+          const commentResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: commentParams.toString()
+          });
+          
+          if (commentResponse.ok) {
+            const commentResult = await commentResponse.json();
+            console.log('📥 Method 1 comment result:', commentResult);
+            
+            if (!commentResult.error && commentResult.result) {
+              console.log('✅ File attached successfully via Method 1');
+              return { success: true };
+            }
+          }
         }
         
-        if (result1.error) {
-          console.warn('⚠️ Method 1 failed:', result1.error);
-          console.log('Trying alternative method...');
-        }
+        console.warn('⚠️ Method 1 failed, trying alternative...');
       } else {
-        const errorText1 = await response1.text();
-        console.warn(`⚠️ Method 1 HTTP error ${response1.status}:`, errorText1);
+        const errorText1 = await uploadResponse1.text();
+        console.warn(`⚠️ Method 1 HTTP error ${uploadResponse1.status}:`, errorText1);
         console.log('Trying alternative method...');
       }
       
-      // Try Method 2: im.disk.file.commit (alternative for some Bitrix24 versions)
-      console.log('🚀 Method 2: Trying im.disk.file.commit...');
+      // Try Method 2: Different parameter format (alternative)
+      console.log('🚀 Method 2: Trying alternative upload format...');
       
-      // First upload to disk
+      // Upload with different parameter format
       const params2a = new URLSearchParams();
       params2a.append('id', 'upload');
       params2a.append('data[NAME]', file.name);
-      params2a.append('fileContent[0]', base64Content);
+      params2a.append('fileContent', base64Content);
       
       const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
         method: 'POST',
@@ -201,7 +223,7 @@ class Bitrix24Service {
           const params2b = new URLSearchParams();
           params2b.append('TASKID', taskId);
           params2b.append('FIELDS[POST_MESSAGE]', 'Photo attachment');
-          params2b.append('FIELDS[UF_FORUM_MESSAGE_DOC][0]', `n${fileId}`);
+          params2b.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
           
           const attachResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
             method: 'POST',

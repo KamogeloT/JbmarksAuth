@@ -304,33 +304,51 @@
             return taskId;
         }
         
-        // Method 1: Direct attachment
+        // Method 1: Upload to disk then attach (FIXED)
         async function uploadMethod1(webhookUrl, taskId, file, base64Content) {
-            log('🚀 Method 1: task.commentitem.add with FILES', 'info');
+            log('🚀 Method 1: disk.folder.uploadfile + UF_FORUM_MESSAGE_DOC', 'info');
             
-            const params = new URLSearchParams();
-            params.append('TASKID', taskId);
-            params.append('FIELDS[POST_MESSAGE]', 'Photo attachment (test)');
-            params.append('FIELDS[FILES][0][name]', file.name);
-            params.append('FIELDS[FILES][0][content]', base64Content);
+            // Step 1: Upload file to disk
+            const uploadParams = new URLSearchParams();
+            uploadParams.append('id', 'upload');
+            uploadParams.append('data[NAME]', file.name);
+            uploadParams.append('fileContent', base64Content);
             
-            const response = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+            const uploadResponse = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params.toString()
+                body: uploadParams.toString()
             });
             
-            log(`📊 Response status: ${response.status}`, response.ok ? 'success' : 'error');
+            log(`📊 Upload status: ${uploadResponse.status}`, uploadResponse.ok ? 'success' : 'error');
             
-            const result = await response.json();
-            log(`📥 Result: ${JSON.stringify(result)}`, result.error ? 'error' : 'success');
+            const uploadResult = await uploadResponse.json();
+            log(`📥 Upload result: ${JSON.stringify(uploadResult)}`, uploadResult.error ? 'error' : 'success');
             
-            if (result.error) {
-                throw new Error(`Method 1 failed: ${result.error.error_description || result.error.error}`);
+            if (uploadResult.error || !uploadResult.result?.ID) {
+                throw new Error(`Method 1 upload failed: ${uploadResult.error?.error_description || 'No file ID'}`);
             }
             
-            if (!result.result) {
-                throw new Error('Method 1: Unexpected response format');
+            const fileId = uploadResult.result.ID;
+            log(`✅ File uploaded to disk, ID: ${fileId}`, 'success');
+            
+            // Step 2: Attach to task via comment
+            const commentParams = new URLSearchParams();
+            commentParams.append('TASKID', taskId);
+            commentParams.append('FIELDS[POST_MESSAGE]', 'Photo attachment (test)');
+            commentParams.append('FIELDS[UF_FORUM_MESSAGE_DOC][]', fileId);
+            
+            const commentResponse = await fetch(`${webhookUrl}/task.commentitem.add.json`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: commentParams.toString()
+            });
+            
+            const commentResult = await commentResponse.json();
+            log(`📥 Attach result: ${JSON.stringify(commentResult)}`, commentResult.error ? 'error' : 'success');
+            
+            if (commentResult.error || !commentResult.result) {
+                throw new Error(`Method 1 attach failed: ${commentResult.error?.error_description || 'Unknown'}`);
             }
             
             return true;
