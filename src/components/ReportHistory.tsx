@@ -188,18 +188,14 @@ export const ReportHistory: React.FC = () => {
     setRetrying(true);
     
     try {
-      const taskResult = await bitrix24Service.createTaskFromFault(report);
+      // Pass file to createTaskFromFault (new approach)
+      const taskResult = await bitrix24Service.createTaskFromFault(report, report.photoFile);
       
       if (taskResult.success && taskResult.taskId) {
         report.taskId = taskResult.taskId;
         report.status = 'submitted';
         report.submittedAt = new Date().toISOString();
         report.error = undefined;
-
-        // Upload file if present
-        if (report.photoFile && taskResult.taskId) {
-          await bitrix24Service.uploadFile(report.photoFile, taskResult.taskId, report.formType);
-        }
 
         storageService.saveReport(report);
         loadReports();

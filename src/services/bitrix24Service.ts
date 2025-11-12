@@ -2,7 +2,7 @@
 // This service handles creating tasks in Bitrix24 when faults are reported
 
 import { config } from '../config';
-import { FaultReport, Bitrix24Task, SubmitResult, FileUploadResult } from '../types';
+import { FaultReport, Bitrix24Task, SubmitResult } from '../types';
 
 class Bitrix24Service {
   /**
@@ -15,12 +15,35 @@ class Bitrix24Service {
 
   /**
    * Create a task in Bitrix24 from a fault report
+   * If file is provided, uploads it FIRST then creates task with file attached
    */
-  async createTaskFromFault(faultReport: FaultReport): Promise<SubmitResult> {
+  async createTaskFromFault(faultReport: FaultReport, file?: File): Promise<SubmitResult> {
     try {
       const groupId = this.getGroupId(faultReport.formType);
       
       console.log(`Creating task for ${faultReport.formType} fault, Group ID: ${groupId}`);
+      
+      // Step 1: Upload file FIRST if provided (following official Bitrix24 docs)
+      let fileId: number | undefined;
+      
+      if (file) {
+        console.log('📤 Step 1: Uploading file BEFORE task creation...');
+        const uploadResult = await this.uploadFileToUploadFolder(file);
+        
+        if (!uploadResult.success) {
+          console.error('❌ File upload failed:', uploadResult.error);
+          return {
+            success: false,
+            error: `File upload failed: ${uploadResult.error}`
+          };
+        }
+        
+        fileId = uploadResult.fileId;
+        console.log('✅ File uploaded successfully, ID:', fileId);
+      }
+      
+      // Step 2: Create task with file attached (if fileId exists)
+      console.log('📝 Step 2: Creating task' + (fileId ? ' with attached file...' : '...'));
       
       const task: Bitrix24Task = {
         TITLE: this.generateTaskTitle(faultReport),
@@ -34,7 +57,12 @@ class Bitrix24Service {
         UF_CRM_TASK: faultReport.refNumber
       };
 
-      console.log('Sending task to Bitrix24:', JSON.stringify(task, null, 2));
+      // Add file to task if uploaded (official Bitrix24 way)
+      if (fileId) {
+        (task as any).UF_TASK_WEBDAV_FILES = [fileId];
+      }
+
+      console.log('Task payload:', JSON.stringify(task, null, 2));
 
       const webhookUrl = this.getSanitizedWebhookUrl();
       const response = await fetch(`${webhookUrl}/tasks.task.add.json`, {
@@ -48,26 +76,37 @@ class Bitrix24Service {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ HTTP error ${response.status}:`, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
       console.log('Bitrix24 response:', result);
 
+      if (result.error) {
+        console.error('❌ Bitrix24 error:', result.error);
+        return {
+          success: false,
+          error: result.error.error_description || result.error.error || 'Failed to create task'
+        };
+      }
+
       if (result.result?.task?.id) {
+        console.log('✅ Task created successfully, ID:', result.result.task.id);
         return {
           success: true,
           taskId: String(result.result.task.id)
         };
       } else {
-        console.error('Bitrix24 error details:', result.error);
+        console.error('❌ Unexpected response format:', result);
         return {
           success: false,
-          error: result.error?.error_description || result.error_description || 'Failed to create task'
+          error: 'Unexpected response format from Bitrix24'
         };
       }
     } catch (error) {
-      console.error('Bitrix24 API Error:', error);
+      console.error('❌ Bitrix24 API Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error occurred'
@@ -76,8 +115,120 @@ class Bitrix24Service {
   }
 
   /**
+   * Upload file to Bitrix24 "upload" folder
+   * Following official Bitrix24 documentation approach
+   * Returns file ID that can be used in ATTACHEDFILES or UF_TASK_WEBDAV_FILES
+   */
+  private async uploadFileToUploadFolder(file: File): Promise<{ success: boolean; fileId?: number; error?: string }> {
+    try {
+      console.log('📤 Uploading file to Bitrix24 upload folder...');
+      console.log('📄 File:', file.name, file.size, 'bytes', file.type);
+      
+      // Validate file
+      if (!file || file.size === 0) {
+        return {
+          success: false,
+          error: 'File is empty or invalid'
+        };
+      }
+      
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        return {
+          success: false,
+          error: `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`
+        };
+      }
+      
+      // Convert file to base64
+      const base64Content = await this.fileToBase64(file);
+      console.log('✅ File converted to base64, length:', base64Content.length);
+      
+      // Upload using disk.folder.uploadfile with id=upload (official method)
+      const webhookUrl = this.getSanitizedWebhookUrl();
+      const uploadUrl = `${webhookUrl}/disk.folder.uploadfile.json`;
+      
+      // Bitrix24 expects fileContent as an array element
+      const params = new URLSearchParams();
+      params.append('id', 'upload'); // Use default upload folder
+      params.append('data[NAME]', file.name);
+      params.append('fileContent[0]', base64Content); // Array format for base64
+      
+      console.log('🚀 Uploading to:', uploadUrl);
+      console.log('📦 Folder: upload (default)');
+      console.log('📄 Filename:', file.name);
+      console.log('📊 Base64 length:', base64Content.length, 'characters');
+      
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+      
+      console.log('📊 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Upload failed - HTTP ${response.status}:`, errorText);
+        
+        // Try to parse error as JSON for better error message
+        try {
+          const errorJson = JSON.parse(errorText);
+          const errorMsg = errorJson.error?.error_description || errorJson.error_description || errorText;
+          return {
+            success: false,
+            error: `Upload failed (${response.status}): ${errorMsg}`
+          };
+        } catch {
+          return {
+            success: false,
+            error: `Upload failed: HTTP ${response.status} - ${errorText.substring(0, 100)}`
+          };
+        }
+      }
+      
+      const result = await response.json();
+      console.log('📥 Upload result:', JSON.stringify(result, null, 2));
+      
+      if (result.error) {
+        console.error('❌ Bitrix24 error:', result.error);
+        const errorMsg = result.error.error_description || result.error.error || JSON.stringify(result.error);
+        return {
+          success: false,
+          error: `Bitrix24 error: ${errorMsg}`
+        };
+      }
+      
+      if (result.result?.ID) {
+        const fileId = parseInt(result.result.ID, 10);
+        console.log('✅ File uploaded successfully! File ID:', fileId);
+        return {
+          success: true,
+          fileId: fileId
+        };
+      } else {
+        console.error('❌ Unexpected response format:', result);
+        return {
+          success: false,
+          error: 'Unexpected response format from Bitrix24'
+        };
+      }
+      
+    } catch (error) {
+      console.error('❌ Upload exception:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Upload failed'
+      };
+    }
+  }
+
+  /**
    * Get workgroup storage ID from group ID
    * Each workgroup has a storage in Bitrix24 Drive
+   * @deprecated - No longer needed with new upload approach
    */
   async getWorkgroupStorageId(groupId: string): Promise<{ success: boolean; storageId?: string; error?: string }> {
     try {
@@ -158,66 +309,43 @@ class Bitrix24Service {
    */
   private async fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
-      console.log('🔄 Converting file to base64:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        isCamera: !!(file as any).__isCamera
-      });
+      console.log('🔄 Converting file to base64:', file.name, file.size, 'bytes');
       
-      // Check if this file has pre-stored base64 data (from camera)
+      // Check if file has pre-stored base64 data (from Capacitor Camera)
       if ((file as any).__base64Data) {
-        console.log('✅ Using pre-stored base64 data from camera (avoiding double conversion)');
-        const base64 = (file as any).__base64Data;
-        console.log('✅ Base64 data length:', base64.length);
-        resolve(base64);
+        console.log('✅ Using pre-stored base64 (no re-conversion needed)');
+        resolve((file as any).__base64Data);
         return;
       }
       
-      // For gallery images, read the file normally
-      console.log('📖 Reading file from gallery using FileReader');
+      // Read file using FileReader
+      console.log('📖 Reading file with FileReader...');
       const reader = new FileReader();
       
       reader.onload = () => {
-        try {
-          const result = reader.result as string;
-          
-          if (!result) {
-            throw new Error('FileReader returned empty result');
-          }
-          
-          // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-          const parts = result.split(',');
-          if (parts.length < 2) {
-            console.error('❌ Invalid data URL format:', result.substring(0, 100));
-            throw new Error('Invalid data URL format');
-          }
-          
-          const base64 = parts[1];
-          console.log('✅ Base64 conversion successful (gallery), length:', base64.length);
-          resolve(base64);
-        } catch (error) {
-          console.error('❌ Error in FileReader onload:', error);
-          reject(error);
+        const result = reader.result as string;
+        if (!result) {
+          reject(new Error('FileReader returned empty result'));
+          return;
         }
+        
+        // Extract base64 (remove data:image/xxx;base64, prefix)
+        const base64 = result.split(',')[1];
+        if (!base64) {
+          reject(new Error('Could not extract base64 data'));
+          return;
+        }
+        
+        console.log('✅ Conversion complete, length:', base64.length);
+        resolve(base64);
       };
       
-      reader.onerror = (error) => {
-        console.error('❌ FileReader error:', error);
-        reject(new Error(`FileReader failed: ${error}`));
+      reader.onerror = () => {
+        console.error('❌ FileReader error');
+        reject(new Error('FileReader failed'));
       };
       
-      reader.onabort = () => {
-        console.error('❌ FileReader aborted');
-        reject(new Error('FileReader was aborted'));
-      };
-      
-      try {
-        reader.readAsDataURL(file);
-      } catch (error) {
-        console.error('❌ Error starting FileReader:', error);
-        reject(error);
-      }
+      reader.readAsDataURL(file);
     });
   }
 
@@ -430,86 +558,16 @@ class Bitrix24Service {
   }
 
   /**
-   * Upload file to Bitrix24 and attach to task
-   * This version properly uploads to workgroup Drive first, then attaches to task
+   * @deprecated - No longer used. Files are now uploaded BEFORE task creation
+   * and attached using UF_TASK_WEBDAV_FILES field in tasks.task.add
+   * 
+   * New approach (following official Bitrix24 docs):
+   * 1. Upload file to "upload" folder using disk.folder.uploadfile
+   * 2. Get file ID from response
+   * 3. Create task with UF_TASK_WEBDAV_FILES: [fileId]
+   * 
+   * This is simpler, more reliable, and follows official documentation.
    */
-  async uploadFile(file: File, taskId: string, faultType: string): Promise<FileUploadResult> {
-    try {
-      console.log(`Processing file upload for task: ${taskId}`);
-      
-      // Step 1: Upload file to workgroup's Drive folder
-      const driveUpload = await this.uploadFileToDrive(file, faultType);
-      
-      if (!driveUpload.success || !driveUpload.fileId) {
-        return {
-          success: false,
-          error: driveUpload.error || 'Failed to upload file to Drive'
-        };
-      }
-
-      // Step 2: Attach the file to the task using tasks.task.files.attach
-      const webhookUrl = this.getSanitizedWebhookUrl();
-      const attachUrl = `${webhookUrl}/tasks.task.files.attach.json`;
-      
-      console.log('📎 STEP 2: Attaching file to task...');
-      console.log('🎯 Task ID:', taskId);
-      console.log('📄 File ID:', driveUpload.fileId);
-      console.log('🔗 Attach URL:', attachUrl);
-
-      const attachPayload = {
-        taskId: taskId,
-        fileId: driveUpload.fileId
-      };
-      console.log('📦 Attach payload:', JSON.stringify(attachPayload, null, 2));
-
-      const attachResponse = await fetch(attachUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(attachPayload)
-      });
-
-      console.log('📊 Attach response status:', attachResponse.status, attachResponse.statusText);
-
-      if (!attachResponse.ok) {
-        const errorText = await attachResponse.text();
-        console.error(`❌ File attach failed - HTTP ${attachResponse.status}:`, errorText);
-        
-        // File is uploaded to Drive, but attachment failed
-        return {
-          success: true,
-          fileId: driveUpload.fileId,
-          error: `File uploaded to Drive (ID: ${driveUpload.fileId}) but failed to attach to task. HTTP ${attachResponse.status}: ${errorText}`
-        };
-      }
-
-      const attachResult = await attachResponse.json();
-      console.log('📥 Attach result:', JSON.stringify(attachResult, null, 2));
-
-      if (attachResult.error) {
-        console.error('❌ Bitrix24 attach error:', attachResult.error);
-        // File is uploaded to Drive, but attachment failed
-        return {
-          success: true,
-          fileId: driveUpload.fileId,
-          error: `File uploaded to Drive (ID: ${driveUpload.fileId}) but Bitrix error during attachment: ${attachResult.error.error_description || attachResult.error.error || 'Unknown error'}`
-        };
-      }
-
-      console.log('✅✅ SUCCESS! File uploaded to Drive AND attached to task!');
-      return {
-        success: true,
-        fileId: driveUpload.fileId
-      };
-    } catch (error) {
-      console.error('File upload/attach error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'File upload failed'
-      };
-    }
-  }
 
   /**
    * Generate task title based on fault type
