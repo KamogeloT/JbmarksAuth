@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Kotlin
+.kotlin/
+
+# Documentation files (optional - remove if you want to include them)
+# BITRIX24_API_REFERENCE.md
+# IMPLEMENTATION_PLAN.md
+# PROJECT_ANALYSIS.md

@@ -1,0 +1,595 @@
+Building a Bitrix24-Like Android App (Without
+CRM) – Technical Guide
+Key Features of Bitrix24 Mobile App (Excluding CRM)
+The official Bitrix24 mobile app includes most of the web version’s tools . For our custom app, we will
+replicate the non-CRM modules and functionality. Key features/modules to implement include:
+Messenger (Chats & Calls) – Internal company chat for one-on-one and group messaging, with
+support for voice/video calls . This includes real-time text messaging (and optionally VoIP
+calls) within your organization’s portal.
+Channels – Company-wide announcement channels or interest-based group chats . Channels
+are used to broadcast important updates to teams or the whole company in a focused feed.
+Tasks & Projects – Full task management system for personal and team tasks, projects, and
+Scrum boards . Users can create tasks, assign responsibles, set deadlines, update status, and
+view task lists (including different views like list, deadline, Kanban, etc.).
+Calendar – Personal and shared calendars for scheduling meetings and events. The app should
+display events, allow creating/editing events, and sending invites (synchronizing with the Bitrix24
+calendar).
+Activity Feed (News Feed) – A social intranet feed showing company news, posts,
+announcements, likes and comments. This is the “Activity Stream” where employees post
+updates, polls, appreciations, etc. The mobile app should let users read the feed, publish new
+posts, and comment.
+Workflows & Approvals – Business process tasks and approval requests assigned to the user.
+The app can list workflow tasks (e.g. document approvals) for users to review and act upon.
+Inventory Management – Tools to scan/view inventory items and update stock data (if your
+Bitrix24 uses the Inventory module for warehousing).
+Knowledge Base Access – View company knowledge base pages (read documentation, policies,
+etc.). Likely this will be implemented via viewing wiki pages or knowledge base articles from
+Bitrix24.
+Employee Directory – Company employee list with profiles and contact details. The app should
+allow viewing the list of users/employees and their profiles, with options to call, message, or
+email them easily.
+By excluding CRM, we will not implement CRM entities like leads, deals, contacts, or any sales
+automation features. All other collaboration and productivity features above remain in scope . This
+ensures the app focuses on internal collaboration (chats, tasks, etc.) similar to the official app’s non-CRM
+aspects.
+Integrating with Bitrix24 REST APIs (Android)
+To build these features, the app will rely on Bitrix24’s REST API. Bitrix24 provides a comprehensive REST
+API that allows external applications to perform nearly all operations available in the web interface .
+The Android app will act as an OAuth2 client to the Bitrix24 API. Below are the steps and considerations
+for setting up API integration:
+1
+•
+1
+• 1
+•
+1
+•
+•
+•
+•
+•
+•
+1
+2
+1
+1. Registering a Bitrix24 Application (API Credentials)
+First, register your app in Bitrix24 to obtain OAuth2 credentials (Client ID and Client Secret). Since
+this app is for your own Bitrix24 instance, you can create a Local Application in your Bitrix24 portal’s
+integration settings:
+Open Developer Resources: In your Bitrix24 (web) left menu, go to Applications > Developer
+Resources (available to admins) . Under Common use cases > Other, select “Local
+Application” to create a new app .
+Fill App Details: Provide an application name and description. For an Android app, choose
+“Server” application type (since the app will operate outside Bitrix24’s UI). In the “Your handler
+path” or Redirect URI field, enter a custom URI or endpoint where the OAuth authorization
+code will be sent after login . (For mobile apps, this is typically a custom URL scheme or a
+deep link that the app can intercept, e.g. myapp://oauth_redirect .) Leave “Initial
+installation path” blank for server apps without embedded UI. Enable “No UI (Script only)” if
+offered, as our app doesn’t embed interface components in Bitrix24.
+Assign Permissions (Scopes): Select the Bitrix24 tool permissions your app needs. For example,
+enable tasks , calendar , im (for chat/messages), user (for employee info), disk (if file
+attachments or Drive access is needed), log or Content (for Activity Feed), bizproc (for
+workflows), etc. Only select CRM if you were accessing CRM data (we will omit CRM scope).
+Ensure the scopes cover all modules you plan to use (tasks, im (messenger), calendar, user, etc.).
+Save and Copy Credentials: After saving, Bitrix24 will generate a Client ID and Client Secret for
+your application . Copy these – they are required for OAuth2. (You can always find them later
+under Integrations > your app.)
+Bitrix24 “Developer Resources” menu where you add a Local Application .
+•
+3
+4
+•
+5
+•
+•
+6
+3
+2
+The Developer Resources interface – select “Other” and then “Local application” to register a new app .
+Configuring the local app: provide a name, Redirect URL (handler path), and select necessary scopes, then
+save to get Client ID/Secret .
+2. OAuth 2.0 Authentication & Authorization Flow
+Bitrix24 uses OAuth 2.0 for granting third-party apps access to user data without sharing passwords.
+Our Android app must implement the OAuth2 “authorization code” flow to obtain an access token
+from Bitrix24. The general process is:
+User Login via Browser: The app opens a web view or external browser to the Bitrix24
+authorization URL. The URL format is:
+https://<your-portal>.bitrix24.com/oauth/authorize/?
+ client_id=YOUR_CLIENT_ID
+ &response_type=code
+ &redirect_uri=YOUR_REDIRECT_URI
+4
+7
+•
+3
+For example, if your Bitrix24 domain is mycompany.bitrix24.com , you redirect the user to:
+https://mycompany.bitrix24.com/oauth/authorize?
+client_id=...&response_type=code&redirect_uri=myapp://oauth_redirect . The
+user will log in (if not already) and approve the permission scopes you requested.
+Receive Authorization Code: After the user grants access, Bitrix24 will redirect to the Redirect
+URI you specified (the custom scheme deep link). This redirect will carry an authorization code
+as a URL parameter (e.g. myapp://oauth_redirect?code=abcdef... ). The Android app
+should be set up to intercept this redirect (using an intent-filter for the custom scheme or a
+registered Callback URL) and extract the code .
+Exchange Code for Tokens: Next, the app back-end (or the app itself, if it can safely handle the
+secret) sends a POST request to the Bitrix24 Token endpoint to exchange the code for an access
+token and refresh token. The token endpoint is:
+https://<your-portal>.bitrix24.com/oauth/token/
+The app should POST a form or JSON with the following fields:
+grant_type=authorization_code , client_id=YOUR_CLIENT_ID ,
+client_secret=YOUR_CLIENT_SECRET , code=AUTH_CODE_HERE , and
+redirect_uri=YOUR_REDIRECT_URI . For example, using an HTTP client (illustrated in
+JavaScript for clarity):
+// Pseudo-code for token exchange
+POST https://mycompany.bitrix24.com/oauth/token/
+{
+grant_type: 'authorization_code',
+client_id: '<ID>',
+client_secret: '<Secret>',
+code: '<code_from_redirect>',
+redirect_uri: 'myapp://oauth_redirect'
+}
+Bitrix24 will respond with a JSON containing at least an access_token (usually valid for ~1 hour) and
+a refresh_token (for obtaining new tokens) . For example, a successful response might be:
+{
+"access_token": "<ACCESS_TOKEN>",
+"refresh_token": "<REFRESH_TOKEN>",
+"expires_in": 3600,
+"scope": "user,task,im,..." ,
+"user_id": 123,
+...
+}
+8
+•
+•
+9
+10
+4
+Store Tokens: The app should securely store the access_token (for API calls) and
+refresh_token (for future renewals). On Android, never store these in plaintext or insecure
+storage. Prefer using the Android Keystore or encrypted shared preferences for tokens. Treat
+them like passwords (they grant access to your Bitrix24 data) .
+Access Token Usage: The access_token must be sent with each API request to authenticate.
+Bitrix24 REST allows passing the token either by URL parameter auth=<ACCESS_TOKEN> or via
+an HTTP Authorization header ( Authorization: Bearer <ACCESS_TOKEN> ) . For
+simplicity, our examples will use the ?auth= query parameter approach.
+Automatic Token Refresh: When the access token expires (indicated by expires_in , typically
+3600 seconds), the app should use the refresh_token to get a new token without requiring
+the user to log in again. This is done by another POST to the token endpoint with
+grant_type=refresh_token , supplying the original refresh_token along with your
+client_id and client_secret . For example:
+POST https://mycompany.bitrix24.com/oauth/token/
+ {
+ grant_type: 'refresh_token',
+ client_id: '<ID>',
+ client_secret: '<Secret>',
+ refresh_token: '<REFRESH_TOKEN>'
+ }
+The response will contain a new access_token and usually a new refresh_token .
+Replace the old tokens with the new ones in your secure storage. (Bitrix24 expects the latest
+refresh token for the next renewal – the old one becomes invalid after use.) Implement the
+refresh logic such that whenever an API call returns an “unauthorized” error or upon nearing
+expiration, you obtain a fresh token automatically. This ensures a seamless experience without
+frequent logins .
+OAuth on Android Tip: Use a Custom Tab or external browser for the OAuth login to leverage saved
+cookies (so users might not need to enter credentials if already logged in to Bitrix24 in browser).
+Register an intent-filter in your app manifest for the custom scheme (e.g.
+myapp://oauth_redirect ) so that the authorization code redirect opens your app. This avoids
+needing an intermediate web server. If you prefer extra security and Bitrix24 supports it, you could
+implement PKCE (Proof Key for Code Exchange) to avoid embedding the client secret in the app –
+however, Bitrix24’s OAuth2 implementation primarily expects the client secret for token exchange, so
+protecting the secret (or using a backend to handle the exchange) is important. For initial development,
+embedding the secret in the app is simplest, but be aware of the risk if the app is distributed widely.
+3. Making Authenticated API Calls (REST)
+Once you have an access token, your Android app can call Bitrix24 REST endpoints to interact with each
+module’s data. Bitrix24’s REST API endpoints are typically structured as:
+•
+11
+•
+12
+•
+13
+13
+14
+5
+https://<your-portal>.bitrix24.com/rest/<method>.<format>?
+auth=<access_token>&<parameters>
+For example, to get the current user’s info:
+GET https://mycompany.bitrix24.com/rest/user.current.json?auth=<ACCESS_TOKEN>
+This would return JSON with user details .
+In the Android app, use an HTTP client (such as Retrofit or OkHttp in Java/Kotlin) to perform requests.
+The API is JSON-based: you send either GET queries or POST JSON bodies to the REST endpoints and
+receive JSON responses. You can parse these with a library like Gson or Moshi.
+Bitrix24 has a unified REST API for all modules . This means the same access token is used for tasks,
+messages, calendars, etc., and the methods are namespaced by module. Below, we outline core API
+methods for each key module and how to use them:
+Using Core Bitrix24 API Endpoints (Examples by Module)
+After authenticating, use the following Bitrix24 REST methods to implement each feature. These are the
+main endpoints (methods) for our targeted modules:
+Tasks API (Tasks & Projects)
+Bitrix24 tasks API allows creating and managing tasks. Important methods include:
+tasks.task.list – Retrieve a list of tasks (with filtering options for responsible, status, etc.).
+tasks.task.get – Get detailed information for a specific task by ID .
+tasks.task.add – Create a new task . You supply a JSON payload of task fields (e.g. TITLE,
+DESCRIPTION, RESPONSIBLE_ID, DEADLINE, etc.). The API returns the new task’s ID on success.
+tasks.task.update – Update an existing task’s fields (status, deadline, etc.) .
+tasks.task.delete – Delete a task by ID.
+Example: To list current user’s tasks, call:
+GET https://mycompany.bitrix24.com/rest/tasks.task.list.json?
+auth=<ACCESS_TOKEN>&filter[RESPONSIBLE_ID]=<USER_ID>
+The response will contain an array of task objects. To create a task, you would POST to
+tasks.task.add with a JSON body containing a “fields” object of task properties. The Bitrix24 API
+documentation provides a full list of task fields and options . The mobile app can use these methods
+to display task lists (e.g. My Tasks, Created by Me, etc.), task details (with subtasks, checklists, etc.), and
+to allow editing or adding tasks.
+Calendar API (Events)
+Bitrix24 calendar events are handled via the calendar.event.* set of methods . Key
+methods:
+15
+2
+•
+•
+• 16
+• 16
+• 16
+•
+16
+•
+17
+6
+calendar.event.get – Retrieve a list of calendar events (by default for the current user, or
+for a specified user or calendar) . You can provide filters like date range or owner.
+calendar.event.add – Add a new calendar event (meeting or appointment) . The fields
+include title, start/end datetime, location, attendees (invitees), etc.
+calendar.event.update – Modify an existing event’s details (time, participants, etc.) .
+calendar.event.delete – Remove an event.
+Example: To fetch the user’s upcoming events for the month, call:
+GET https://mycompany.bitrix24.com/rest/calendar.event.get.json?
+auth=<TOKEN>&filter[>FROM]=2026-01-01&filter[<FROM]=2026-02-01
+(The exact filtering parameters for date ranges are documented in Bitrix24 API.) The app can display
+events in a calendar view or list. Creating an event involves calling calendar.event.add with JSON
+fields like NAME (event title), DATE_FROM , DATE_TO , ATTENDEES (user IDs to invite), etc. .
+Messenger API (Chats & IM)
+Bitrix24’s instant messenger (IM) API methods have the prefix im. . They allow managing chats,
+messages, and notifications. Core methods:
+im.chat.add – Create a new chat (e.g. open a group chat with multiple users) . You provide
+a title and list of users. The API returns a chat ID.
+im.chat.get / im.chat.list – Retrieve information about a chat or list existing chats.
+There is also im.recent.get to get the current user’s recent conversations (with message
+previews) .
+im.message.add – Send a message to a chat or specific user . You specify the CHAT_ID
+or USER_ID and the message text (and optional attachments). This posts the message as the
+authorized user.
+im.message.delete , im.message.update – Remove or edit a message (if permissions
+allow).
+Realtime updates: For chat messages, the official app uses Bitrix24’s Push & Pull mechanism for
+instant updates. For our custom app, implementing real-time updates can be complex. Initially,
+you can poll for new messages (e.g. call im.recent.get periodically) or integrate Bitrix24’s
+push events. Bitrix24 can send push events for new messages via their Push server, but using it
+may require the app to register for push with Bitrix24 (which is primarily for official apps). A
+simpler approach is to use a timer or background service to fetch new messages or use an
+MQTT/WebSocket if provided. Bitrix24’s API also supports long polling for events via the pull
+API – which could be an advanced option to receive events like new messages or notifications in
+real time.
+Example: To send a chat message in a known chat, call:
+POST https://mycompany.bitrix24.com/rest/im.message.add.json
+ { "CHAT_ID": 12345, "MESSAGE": "Hello from mobile app!" } + auth token
+The API will return the message ID if successful . To get the list of recent chats (with unread
+counters), call im.recent.get which returns recent dialogs and their last messages . The app
+should use these APIs to power a chat interface (list conversations, send/receive messages, etc.).
+•
+18
+• 17
+• 19
+•
+17
+•
+• 20
+•
+21 22
+• 23
+•
+•
+24
+21
+7
+Activity Feed API (Social Intranet Feed)
+The “Feed” (a.k.a. News Feed or Activity Stream) APIs are under the log. namespace (referring
+to social network log). Useful methods:
+log.blogpost.get – Retrieve a list of feed posts (news, updates). This can fetch recent posts
+or a specific post by ID.
+log.blogpost.add – Add a new post to the feed on behalf of the current user . You
+provide fields like POST_MESSAGE (text content), and optionally POST_TITLE , attached files,
+or even a poll structure.
+log.blogpost.delete / log.blogpost.update – Remove or edit an existing feed post.
+log.blogcomment.add – Add a comment to a feed post . (And similarly
+log.blogcomment.delete to remove a comment.)
+log.blogpost.share – Share an existing feed post to specific recipients or add additional
+recipients to it .
+Example: To post a message in the feed:
+POST https://mycompany.bitrix24.com/rest/log.blogpost.add.json
+ { "POST_MESSAGE": "Hello, Bitrix24 from my app!" } + auth
+This will create a new feed entry (visible to the user’s colleagues) . To get the latest feed posts, call
+log.blogpost.get which can return posts with their text, author, timestamps, etc. The mobile app
+can display the feed and allow the user to compose new posts or comment via these methods.
+Notifications API
+Bitrix24 sends various notifications (for new tasks, @mentions, comments, etc.). In the official
+mobile app, these appear in the Notifications section. The relevant REST methods are under
+im.notify and user counters:
+im.notify.personal.add – (For completeness) Send a system notification to a specific user
+(as an admin or app) . This creates a notification in the user’s Bitrix24. While our app likely
+won’t send notifications, it might receive them.
+im.notify.history / im.notify.get – These can retrieve a list of notifications for the
+current user (the Bitrix24 API documentation suggests such methods, although they might not
+be well-documented on helpdesk). If not available, you can use counter APIs or events. For
+example, user.counter method returns counts of various unread items (including how many
+notifications, messages, tasks, etc., are unread for the user).
+im.notify.read – Mark notifications as read . You can mark a specific notification or all
+notifications up to a certain ID as read. For example, calling im.notify.read with no specific
+ID and ONLY_CURRENT: Y will mark all current notifications as read .
+Handling notifications in the app: To retrieve notifications, you may call an appropriate method (e.g.,
+if im.notify.get exists, use it to get unread notifications list). Bitrix24 might also allow using the
+Pull server to get realtime notification events. If a direct REST method for listing notifications is not
+documented, an alternative is to periodically check for changes: for instance, call user.counter to
+see if the notify counter changed, and if so, fetch new notifications via im.notify.history . The
+app can then display the notifications (new task assigned, new comment, etc.) in a list. When the user
+taps a notification, you could deep-link to the relevant module (e.g., open the task or chat). Also
+implement im.notify.read to clear notifications once seen .
+•
+•
+• 25
+•
+• 26
+•
+27
+25
+•
+•
+28
+•
+• 29
+29
+29
+8
+For push notifications (system notifications on the device): since this is a custom app, Bitrix24 will not
+automatically push notifications to it. You would need to integrate with Firebase Cloud Messaging (FCM)
+or another push service. One approach is to set up a small server that listens for Bitrix24 REST events
+(e.g., task added, message received) via webhooks or server application events, and then send FCM
+push notifications to the mobile app. This is an advanced step – initially, the app can rely on in-app
+notifications (the notifications screen within the app) and background fetch to update them.
+Official Documentation and SDK Resources
+While developing, it is highly recommended to refer to Bitrix24’s official developer resources for
+detailed API reference and examples:
+Bitrix24 REST API Reference: The Bitrix24 API documentation (available on the Bitrix24 website
+and helpdesk) lists all REST methods, their parameters, and return formats . The new
+apidocs platform provides organized sections for each module (e.g., tasks, calendar, etc.) and
+even example use-cases. Use this reference to understand required fields and possible filters for
+each method.
+Bitrix24 Developer Helpdesk Articles: Bitrix24’s helpdesk contains guides like “Create webhooks
+and apps”, “REST API overview”, and tutorials for typical integrations. These can be helpful for
+conceptual understanding and quick tips.
+SDKs and Sample Code: Bitrix24 provides sample SDK code in certain languages (for example, a
+PHP SDK called CRest, and a JavaScript SDK BX24.js for web apps) . While there is no official
+Android/Java SDK from Bitrix24, you can still learn from these examples. For instance, CRest
+(PHP) demonstrates how to handle token refresh and batch calls, and the BX24.js library shows
+how to invoke methods from a client. You may find community libraries for Bitrix24 in Java/Kotlin
+(e.g., on GitHub some unofficial SDKs exist), but using Retrofit/OkHttp directly with the REST API
+is straightforward given Bitrix24’s JSON responses.
+Bitrix24 Training Course: Bitrix24 offers a REST API training course on their website which
+covers everything from OAuth to building an application and handling real-time updates. This
+can be useful to deepen your understanding and follow best practices (especially sections on
+“REST API 3.0”, “Events”, and “Mass-market app considerations”).
+API Playground: Within your Bitrix24 portal, the Developer Resources section includes a “REST
+API request builder” tool . You can use this in a browser to experiment with different API calls
+and see the results. It even provides example code in multiple languages. This can speed up
+testing of endpoints as you develop the app.
+By leveraging these resources, you ensure your implementation is aligned with Bitrix24’s latest
+capabilities. Prioritize official documentation for accurate details on parameters and expected
+responses.
+Technical Architecture & Development Plan
+To wrap up, here is a proposed technical specification and architecture outline for the Android app:
+Architecture: This will be a client-side heavy app, with Android as the front-end directly
+communicating with Bitrix24 via REST. No separate app server is strictly required – the app can
+talk to Bitrix24’s cloud API over HTTPS. All data (tasks, messages, etc.) is fetched and updated
+through REST calls in real time or via periodic sync. The Client ID and Secret (for OAuth) will be
+embedded in the app; hence, to mitigate exposure, we might restrict distribution or use a less
+sensitive Bitrix24 account for the app. (For a more secure approach, a lightweight backend could
+•
+16 17
+•
+•
+30
+• 31
+•
+32
+•
+9
+be introduced to handle the OAuth token exchange and push notifications, keeping the secret
+off the client – this is an optional enhancement.) The app will use a modern Android stack (e.g.
+Android Jetpack libraries) for a responsive UI and possibly WorkManager or Services for
+background sync of messages/notifications.
+Core Modules/Features to Develop:
+Authentication Module – Handles login via OAuth2: launching the Bitrix24 login, capturing the
+authorization code, exchanging tokens, and securely storing the token. Also refreshes tokens
+when expired.
+Activity Feed Module – Displays the company news feed (list of posts), with ability to like and
+comment on posts, and create new posts. Uses log.blogpost.* APIs.
+Chat Module – Implements real-time messaging. Includes a chat list (recent chats), a chat view
+for messages, and the ability to send text (and possibly attachments). It will use
+im.recent.get for chat list, im.message.add for sending, etc. It should also handle
+incoming messages (via polling or push) to update the UI.
+Tasks Module – Shows task lists (e.g. “My Tasks”, “In Progress”, etc.), task details, and allows
+creating and editing tasks. Leverages tasks.task.* API methods. Possibly includes project/
+group filter or Scrum board view if needed.
+Calendar Module – Calendar view of events and meetings. Allows adding events and viewing
+event details/invitations. Uses calendar.event.* methods.
+Notifications Module – A section listing the user’s notifications (like new assignments,
+mentions, etc.). Tapping a notification opens the relevant item (task, chat, etc.). It will use either
+im.notify methods or be fed by the other modules (for example, if a new task arrives, show it
+here). Marking notifications read with im.notify.read is included.
+Workflows Module – (If needed) Displays any workflow tasks (like approval requests) assigned
+to the user. These usually appear in notifications as well, but we might create a separate list if the
+API ( bizproc.task.list in Bitrix24) allows listing them.
+Employee Directory Module – A company contact list with search and profile details. This uses
+user.get or user.search to list employees. Profile info can include phone, email, position,
+etc., and actions to message or call (integrating with the Chat module or phone dialer).
+Navigation & UI: Use a convenient navigation structure, e.g. a bottom tab bar or a side drawer
+to switch between Feed, Chats, Tasks, Calendar, Notifications, etc. The UI should be consistent
+with modern Android guidelines (Material Design), while reflecting Bitrix24’s structure. Each
+module’s screen fetches data via the REST API using the stored token. Implement proper loading
+states and error handling (e.g., token expired – trigger refresh, no internet – show a message).
+Authentication Flow:
+Launch -> Check token: On app start, check if an access token is already stored and valid. If not,
+present a Login screen.
+Login screen: Maybe just a button “Login to Bitrix24” – which triggers the OAuth web flow as
+described (custom tab to Bitrix24 OAuth URL).
+Redirect handling: The app catches the redirect with the auth code, exchanges it for tokens via an
+async HTTP call. Upon success, save tokens and proceed to the main app (perhaps a main
+Activity with the feature tabs).
+Token Refresh: Implement an interceptor or centralized logic such that any 401 Unauthorized
+response triggers a refresh_token flow automatically (and retries the failed request). This can be
+done with an OkHttp interceptor for example. Keep track of token expiry times to proactively
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+10
+refresh if possible.
+Logout: Provide a logout option that clears tokens and returns to login screen.
+Data Handling & Offline: Decide how much data to cache on the device. For instance, tasks and
+messages could be cached in an on-device database (Room or SQLite) for offline viewing, with
+periodic sync. Initially, you can fetch live data each time (Bitrix24 returns data on each call), but
+caching can improve responsiveness. The Bitrix24 API supports batch calls as well, which could
+fetch multiple datasets in one round-trip – this might be useful for initial data load (for example,
+using batch to get tasks, feed, and messages together).
+Example API Call Flows:
+Use Case: Viewing Tasks – When the user opens the Tasks screen, the app calls
+tasks.task.list with filter RESPONSIBLE_ID = currentUser and perhaps status filters.
+The JSON response with tasks is parsed and displayed in a list. If the user taps a task, the app
+calls tasks.task.get (or uses cached data from the list) to show full details (including
+description, subtasks, comments if any via a separate call). If the user marks a task complete, the
+app calls tasks.task.update with STATUS: 5 (completed) to update it. The UI updates
+accordingly.
+Use Case: Sending a Chat Message – User selects a chat from the chat list (previously loaded via
+im.recent.get ). The app opens the chat screen and might load the last 50 messages by calling an
+appropriate method (Bitrix24 may allow retrieving message history via im.dialog.messages.get or
+similar – if not, the recent list already includes the latest message). The user types a message and hits
+send – the app calls im.message.add with the chat ID and message text . On success, Bitrix24
+returns the new message ID, and the app can append the message to the chat UI. To receive new
+messages, the app could periodically call im.recent.get or use long-polling to listen for incoming
+message events, then update the chat screen with any new messages.
+Use Case: Creating an Event – In the Calendar screen, the user taps “Add Event”, enters details (title, time,
+participants). The app calls calendar.event.add with those fields. On success, the new event
+appears on the calendar (and Bitrix24 would send invites to participants automatically).
+Use Case: Scrolling the Feed – The app calls log.blogpost.get (perhaps with pagination parameters)
+to get the latest feed posts. It displays them in a scrollable list. As the user scrolls, it can lazy-load older
+posts by calling the API with an offset or last post ID. If the user likes or comments on a post, the app
+calls log.blogpost.update (to increment the like, although Bitrix24 might have a dedicated method
+for likes) or log.blogcomment.add for adding a comment. Those actions update the UI immediately
+(optimistically) and the backend via REST.
+Tools & SDKs:
+Use Retrofit for network calls to Bitrix24 REST (it can easily handle the JSON conversion), and an
+OAuth2 library if needed for structuring the flow (though the flow is simple enough to manage
+manually). For UI, Android Jetpack libraries like LiveData or Kotlin coroutines can help manage
+asynchronous calls (perform network calls off the main thread and update UI on completion).
+Utilize WorkManager for periodic background sync (e.g., check for new notifications every X
+minutes, or schedule a job to refresh token before expiry). If real-time updates are required,
+consider using Firebase Cloud Messaging or Bitrix24’s webhook events: for instance, register a
+Bitrix24 Outgoing Webhook for message or task creation events that calls a server (which then
+pings the device via push). Bitrix24’s documentation on events and the Pull server can guide this
+if needed . For now, the simplest approach is periodic polling and refresh within the app.
+•
+•
+23
+•
+33
+11
+In summary, the app will be a standalone Android application that uses Bitrix24’s REST API via OAuth2
+to replicate key intranet functionalities (excluding CRM). By following Bitrix24’s official API
+documentation for each module and adhering to OAuth2 best practices for mobile, you can build a
+secure and effective mobile client for your Bitrix24 portal. Make sure to test each module’s functionality
+thoroughly with sample data on your Bitrix24 instance, and refer to Bitrix24’s developer guides
+whenever unsure. With the above plan and Bitrix24’s robust API , you have a clear roadmap to
+developing your own Bitrix24-like Android app. Good luck, and happy coding!
+Sources: Bitrix24 Helpdesk and Developer Documentation (features and REST API)
+, Stack Overflow and community guides for OAuth flow insights . All API usage is based
+on official Bitrix24 REST capabilities as of the latest version.
+Bitrix24 mobile app
+https://helpdesk.bitrix24.com/open/21659550/
+REST API overview
+https://helpdesk.bitrix24.com/courses/index.php?COURSE_ID=268&LESSON_ID=25796&LESSON_PATH=25400.25996.25796
+Bitrix24 Single Sign-On (SSO) WordPress OAuth & OpenID Login
+https://plugins.miniorange.com/bitrix24-single-sign-on-wordpress-sso-oauth-openid-connect
+How to build a Bitrix24 CRM API integration
+https://rollout.com/integration-guides/bitrix24-crm/how-to-build-a-public-bitrix24-crm-integration-building-the-auth-flow
+Automatic Renewal of OAuth 2.0 Tokens - Bitrix24 REST API
+https://apidocs.bitrix24.com/settings/oauth/auto-renewal.html
+Setting Up and Using the REST API
+https://apidocs.bitrix24.com/settings/index.html
+Tasks: Overview of Methods - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/tasks/index.html
+Calendar: Overview of Methods - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/calendar/index.html
+Get Calendar Events List calendar.event.get - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/calendar/calendar-event/calendar-event-get.html
+Update Event calendar.event.update - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/calendar/calendar-event/calendar-event-update.html
+Create Chat im.chat.add - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/chats/im-chat-add.html
+Get a shortened list of recent chats im.recent.get | Bitrix24 REST API ...
+https://apidocs.bitrix24.com/api-reference/chats/im-recent-get.html
+About Chats in Bitrix24
+https://apidocs.bitrix24.com/api-reference/chats/index.html
+Add Message im.message.add - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/chats/messages/im-message-add.html
+Add a message to the News Feed on behalf of the current user log ...
+https://apidocs.bitrix24.com/api-reference/log/log-blogpost-add.html
+2 31
+1 3 9 16 24
+25 29 8 10
+1
+2
+3 4 5 6 7 9 15
+8 10 11 12
+13
+14
+16
+17
+18
+19
+20
+21
+22
+23 24
+25
+12
+Drive: Overview of Methods - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/disk/index.html
+Add Recipients to the News Feed Message log ... - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/log/log-blogpost-share.html
+Send Personal Notification im.notify.personal.add - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/chats/notifications/im-notify-personal-add.html
+Notifications in Chats: Overview of Methods - Bitrix24 REST API
+https://apidocs.bitrix24.com/api-reference/chats/notifications/index.html
+Mass-market review
+https://helpdesk.bitrix24.com/courses/index.php?
+COURSE_ID=268&LESSON_ID=25800&LESSON_PATH=25400.25996.26000.25800
+Create webhooks and apps in Bitrix24
+https://helpdesk.bitrix24.com/open/21133100/
+How Bitrix24 REST API can be used
+https://apidocs.bitrix24.com/developing-with-rest-api.html
+26
+27
+28
+29
+30 31
+32
+33
+13
