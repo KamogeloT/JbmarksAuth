@@ -4,7 +4,8 @@
   "description": "Root package for JBmarks project - BFF API is in azure-bff-api folder",
   "scripts": {
     "start": "cd azure-bff-api && node server.js",
-    "install": "cd azure-bff-api && npm install"
+    "install": "cd azure-bff-api && npm install && cp -r . ../wwwroot/ 2>/dev/null || xcopy /E /I /Y azure-bff-api\\* ..\\wwwroot\\ 2>nul || true",
+    "postinstall": "cd azure-bff-api && npm install"
   },
   "engines": {
     "node": ">=18"
