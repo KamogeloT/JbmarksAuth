@@ -1,0 +1,11 @@
+﻿{
+  "name": "jbmarks-root",
+  "version": "1.0.0",
+  "description": "Root package for JBmarks project",
+  "scripts": {
+    "postinstall": "cd azure-bff-api && npm install"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
