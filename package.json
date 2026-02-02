@@ -1,7 +1,6 @@
-﻿{
+{
   "name": "jbmarks-token-exchange",
   "version": "1.0.0",
-  "description": "Token exchange server for JBmarks Android app",
   "main": "server-simple.js",
   "scripts": {
     "start": "node server-simple.js"
@@ -11,8 +10,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "keywords": ["bitrix24", "oauth", "token-exchange"],
-  "author": "",
-  "license": "MIT"
+  }
 }
