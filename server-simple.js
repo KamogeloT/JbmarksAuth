@@ -85,7 +85,13 @@ app.post('/api/exchangetoken', async (req, res) => {
             });
         }
         
-        const tokenUrl = `https://${domain}/oauth/token/`;
+        // For local.* client IDs (Bitrix24 Box/on-prem), use oauth.bitrix.info
+        // For cloud apps, use the domain's OAuth endpoint
+        const useOAuthServer = clientId.startsWith('local.');
+        const tokenUrl = useOAuthServer 
+            ? 'https://oauth.bitrix.info/oauth/token/'
+            : `https://${domain}/oauth/token/`;
+        
         const postData = new URLSearchParams({
             grant_type: 'authorization_code',
             client_id: clientId,
