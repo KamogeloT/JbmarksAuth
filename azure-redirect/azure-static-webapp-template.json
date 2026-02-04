@@ -1,0 +1,106 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "subscriptionId": {
+            "type": "string",
+            "defaultValue": "[subscription().subscriptionId]",
+            "metadata": {
+                "description": "Azure subscription ID"
+            }
+        },
+        "resourceGroupName": {
+            "type": "string",
+            "defaultValue": "jbmarks-oauth-redirect-rg",
+            "metadata": {
+                "description": "Name of the resource group"
+            }
+        },
+        "staticWebAppName": {
+            "type": "string",
+            "defaultValue": "jbmarks-oauth-redirect",
+            "metadata": {
+                "description": "Name of the Static Web App"
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "eastus",
+            "allowedValues": [
+                "eastus",
+                "eastus2",
+                "westus",
+                "westus2",
+                "westeurope",
+                "northeurope",
+                "southeastasia",
+                "australiaeast"
+            ],
+            "metadata": {
+                "description": "Location for all resources"
+            }
+        },
+        "sku": {
+            "type": "string",
+            "defaultValue": "Free",
+            "allowedValues": [
+                "Free",
+                "Standard"
+            ],
+            "metadata": {
+                "description": "SKU tier for the Static Web App"
+            }
+        }
+    },
+    "variables": {
+        "staticSiteResourceId": "[resourceId('Microsoft.Web/staticSites', parameters('staticWebAppName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/staticSites",
+            "apiVersion": "2022-03-01",
+            "name": "[parameters('staticWebAppName')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "[parameters('sku')]",
+                "tier": "[parameters('sku')]"
+            },
+            "properties": {
+                "allowConfigFileUpdates": true,
+                "branch": "main",
+                "repositoryUrl": "",
+                "repositoryToken": "",
+                "buildProperties": {
+                    "appLocation": ".",
+                    "apiLocation": "",
+                    "outputLocation": "."
+                },
+                "stagingEnvironmentPolicy": "Enabled",
+                "enterpriseGradeCdnStatus": "Disabled"
+            },
+            "tags": {
+                "Environment": "Production",
+                "Project": "JBmarks",
+                "Purpose": "OAuth Redirect"
+            }
+        }
+    ],
+    "outputs": {
+        "staticWebAppName": {
+            "type": "string",
+            "value": "[parameters('staticWebAppName')]"
+        },
+        "staticWebAppUrl": {
+            "type": "string",
+            "value": "[concat('https://', reference(variables('staticSiteResourceId')).defaultHostname)]"
+        },
+        "redirectUrl": {
+            "type": "string",
+            "value": "[concat('https://', reference(variables('staticSiteResourceId')).defaultHostname, '/oauth_redirect')]"
+        },
+        "deploymentToken": {
+            "type": "string",
+            "value": "[listSecrets(variables('staticSiteResourceId'), '2022-03-01').properties.apiKey]"
+        }
+    }
+}

@@ -3,6 +3,10 @@ package com.example.jbmarks.network
 import android.content.Context
 import com.example.jbmarks.auth.data.TokenManager
 import com.example.jbmarks.config.Config
+import com.example.jbmarks.tasks.data.TasksListDeserializer
+import com.example.jbmarks.tasks.data.TasksListResponse
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -51,7 +55,7 @@ object RetrofitInstance {
         }
 
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
 
         val clientBuilder = OkHttpClient.Builder()
@@ -64,10 +68,15 @@ object RetrofitInstance {
             clientBuilder.addInterceptor(AuthInterceptor(ctx, tm))
         }
 
+        // Create Gson with custom deserializer for tasks list
+        val gson = GsonBuilder()
+            .registerTypeAdapter(TasksListResponse::class.java, TasksListDeserializer())
+            .create()
+
         retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(clientBuilder.build())
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
 
         bitrixApi = retrofit!!.create(BitrixApi::class.java)

@@ -3,34 +3,36 @@ package com.example.jbmarks.tasks.domain
 import com.example.jbmarks.tasks.data.Task as DataTask
 
 // This mapper converts the raw data task into our clean domain task.
-fun mapDataToDomain(dataTask: DataTask): Task {
-    // Safely convert the status string from the API into our enum.
-    val status = when (dataTask.status) {
-        "-1" -> TaskStatus.NEW // Bitrix24 uses -1 for new/pending in some contexts
-        "-2" -> TaskStatus.PENDING
-        "2" -> TaskStatus.PENDING
-        "3" -> TaskStatus.IN_PROGRESS
-        "4" -> TaskStatus.SUPPOSEDLY_COMPLETED
-        "5" -> TaskStatus.COMPLETED
-        "6" -> TaskStatus.DEFERRED
-        else -> TaskStatus.PENDING // Default to pending if unknown
+fun mapDataToDomain(dataTask: DataTask): Task? {
+    // Filter out tasks with invalid IDs - they can't be fetched or edited
+    val taskId = dataTask.id
+    if (taskId.isNullOrBlank() || taskId == "0") {
+        return null // Return null for invalid tasks - they will be filtered out
     }
+    
+    // Safely convert the status string from the API into our enum.
+    val status = TaskStatus.fromValue(dataTask.status)
 
     // Safely convert the priority string from the API into our enum.
-    val priority = when (dataTask.priority) {
-        "0" -> TaskPriority.LOW
-        "1" -> TaskPriority.NORMAL
-        "2" -> TaskPriority.HIGH
-        else -> TaskPriority.NORMAL
-    }
+    val priority = TaskPriority.fromValue(dataTask.priority)
 
     return Task(
-        id = dataTask.id ?: "0", // Use a safe default
+        id = taskId,
         title = dataTask.title ?: "No Title",
         description = dataTask.description ?: "",
-        responsibleId = dataTask.responsibleId ?: "",
-        deadline = dataTask.deadline,
         status = status,
-        priority = priority
+        priority = priority,
+        deadline = dataTask.deadline,
+        createdDate = null,
+        closedDate = null,
+        createdBy = dataTask.createdBy,
+        createdByName = null,
+        responsibleId = dataTask.responsibleId,
+        responsibleName = null,
+        groupId = dataTask.groupId,
+        groupName = null,
+        commentsCount = 0,
+        newCommentsCount = 0,
+        tags = emptyList()
     )
 }

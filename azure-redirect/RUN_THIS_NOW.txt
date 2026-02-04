@@ -1,0 +1,23 @@
+═══════════════════════════════════════════════════════════════════════════════
+  QUICK START - RUN THIS NOW
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Open PowerShell
+2. Navigate to the azure-redirect folder:
+   cd azure-redirect
+
+3. Run this command:
+   .\deploy-to-azure.ps1
+
+4. Wait for it to complete (will show your redirect URL)
+
+5. Copy the redirect URL and:
+   - Update Config.kt in your Android project
+   - Update Bitrix24 Local Application
+
+═══════════════════════════════════════════════════════════════════════════════
+
+If you get an error about running scripts, run this first:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+═══════════════════════════════════════════════════════════════════════════════

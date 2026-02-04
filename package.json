@@ -1,13 +1,19 @@
 ﻿{
-  "name": "jbmarks-root",
+  "name": "jbmarks-token-exchange",
   "version": "1.0.0",
-  "description": "Root package for JBmarks project - BFF API is in azure-bff-api folder",
+  "description": "Simple token exchange server for JBmarks Android app",
+  "main": "server-simple.js",
   "scripts": {
-    "start": "cd azure-bff-api && node server.js",
-    "build": "cd azure-bff-api && npm install",
-    "postinstall": "cd azure-bff-api && npm install"
+    "start": "node server-simple.js",
+    "dev": "node server-simple.js",
+    "test": "node server-simple.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "author": "",
+  "license": "ISC"
 }

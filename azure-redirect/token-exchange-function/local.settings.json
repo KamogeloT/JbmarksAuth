@@ -1,0 +1,14 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "BITRIX_CLIENT_ID": "local.69526f981da4a0.86875975",
+    "BITRIX_CLIENT_SECRET": "z415SRiZn3BPkBiP7AApWUWsM7f37oCzLz3wFdTO53r2alqKqU",
+    "BITRIX_REDIRECT_URI": "https://jbmarks-oauth-redirect-e9deetemhta3caef.southafricanorth-01.azurewebsites.net/oauth_redirect"
+  },
+  "Host": {
+    "LocalHttpPort": 7071,
+    "CORS": "*"
+  }
+}

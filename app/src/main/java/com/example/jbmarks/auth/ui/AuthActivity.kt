@@ -26,6 +26,20 @@ class AuthActivity : ComponentActivity() {
     private var lastAuthStartedAt: Long = 0 // Timestamp of last auth launch
     private var lastProcessedCode: String? = null // Last code we processed
     
+    // Shared error state that can trigger recomposition
+    private var sharedErrorMessage: String? = null
+        set(value) {
+            field = value
+            // Trigger recomposition when error is set
+            if (value != null) {
+                setContent {
+                    JBmarksTheme {
+                        AuthScreen(initialIntent = intent, errorMessageOverride = value)
+                    }
+                }
+            }
+        }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -91,19 +105,11 @@ class AuthActivity : ComponentActivity() {
                                 android.util.Log.e("AuthActivity", "Token exchange failed in onNewIntent", error)
                                 isProcessingOAuth = false
                                 isAuthInProgress = false // Allow retry
-                                // Show error in UI - need to pass error message
-                                val errorMsg = error.message ?: "Authentication failed"
-                                setContent {
-                                    JBmarksTheme {
-                                        LoginScreen(
-                                            onLoginClick = { portalUrl ->
-                                                // Will be handled by the screen
-                                            },
-                                            isLoading = false,
-                                            errorMessage = errorMsg
-                                        )
-                                    }
-                                }
+                                processedCode = null // Reset so user can retry with new code
+                                lastProcessedCode = null
+                                // Set error message to trigger recomposition
+                                val errorMsg = error.message ?: "Authentication failed. The authorization code may have expired. Please try signing in again."
+                                sharedErrorMessage = errorMsg
                             }
                         } catch (e: Exception) {
                             android.util.Log.e("AuthActivity", "Exception in onNewIntent token exchange", e)
@@ -169,6 +175,11 @@ class AuthActivity : ComponentActivity() {
                                 android.util.Log.e("AuthActivity", "Token exchange failed in onResume", error)
                                 isProcessingOAuth = false
                                 isAuthInProgress = false // Allow retry
+                                processedCode = null // Reset so user can retry with new code
+                                lastProcessedCode = null
+                                // Set error message to trigger recomposition
+                                val errorMsg = error.message ?: "Authentication failed. The authorization code may have expired. Please try signing in again."
+                                sharedErrorMessage = errorMsg
                             }
                         } catch (e: Exception) {
                             android.util.Log.e("AuthActivity", "Exception in onResume token exchange", e)
@@ -271,12 +282,20 @@ class AuthActivity : ComponentActivity() {
     @Composable
     private fun AuthScreen(
         initialIntent: Intent? = null, 
-        skipLaunchedEffect: Boolean = false
+        skipLaunchedEffect: Boolean = false,
+        errorMessageOverride: String? = null
     ) {
         val context = LocalContext.current
         var isLoading by remember { mutableStateOf(false) }
-        var errorMessage by remember { mutableStateOf<String?>(null) }
+        var errorMessage by remember { mutableStateOf<String?>(errorMessageOverride) }
         val scope = rememberCoroutineScope()
+        
+        // Update error message when override changes
+        LaunchedEffect(errorMessageOverride) {
+            if (errorMessageOverride != null) {
+                errorMessage = errorMessageOverride
+            }
+        }
         
         // Check if already authenticated
         LaunchedEffect(Unit) {
@@ -332,6 +351,7 @@ class AuthActivity : ComponentActivity() {
                 
                 // RESET ALL ERROR STATES to allow retry
                 errorMessage = null
+                sharedErrorMessage = null // Clear shared error state
                 processedCode = null
                 lastProcessedCode = null
                 isProcessingOAuth = false
@@ -442,7 +462,10 @@ class AuthActivity : ComponentActivity() {
                 android.util.Log.e("AuthActivity", "Token exchange failed", error)
                 setIsLoading(false)
                 setIsProcessing(false)
-                setErrorMessage("Failed to authenticate: ${error.message}")
+                val errorMsg = "Failed to authenticate: ${error.message ?: "Unknown error"}. The authorization code may have expired. Please try signing in again."
+                setErrorMessage(errorMsg)
+                // Also update shared error state for consistency
+                sharedErrorMessage = errorMsg
                 error.printStackTrace()
             }
         } catch (e: Exception) {

@@ -123,12 +123,14 @@ fun LoginScreen(
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
-                                    Text(
-                                        text = "Tap 'Sign In' to try again",
-                                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    if (!isLoading) {
+                                        Text(
+                                            text = "Tap 'Sign In' below to try again",
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -140,15 +142,26 @@ fun LoginScreen(
                                 .height(56.dp),
                             enabled = !isLoading && portalUrl.text.isNotBlank(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            // Make button more prominent when there's an error to retry
+                            colors = if (errorMessage != null && !isLoading) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    color = if (errorMessage != null) 
+                                        MaterialTheme.colorScheme.onError 
+                                    else 
+                                        MaterialTheme.colorScheme.onPrimary,
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -158,7 +171,7 @@ fun LoginScreen(
                                 )
                             } else {
                                 Text(
-                                    "Sign In",
+                                    if (errorMessage != null) "Try Again" else "Sign In",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold
                                 )

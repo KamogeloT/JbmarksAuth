@@ -1,0 +1,64 @@
+================================================================================
+EXACT COMMANDS TO CREATE AZURE STATIC WEB APP FOR OAUTH REDIRECT
+================================================================================
+
+PREREQUISITES:
+1. Install Azure CLI: https://aka.ms/installazurecliwindows
+2. Open PowerShell as Administrator
+3. Login: az login
+
+================================================================================
+STEP 1: Create Resource Group
+================================================================================
+az group create --name "jbmarks-oauth-redirect-rg" --location "eastus"
+
+================================================================================
+STEP 2: Create Static Web App
+================================================================================
+# Runtime Stack: NONE (this is static HTML, no backend needed!)
+az staticwebapp create --name "jbmarks-oauth-redirect" --resource-group "jbmarks-oauth-redirect-rg" --location "eastus" --sku Free --login-with-github false
+
+NOTE: If name is taken, add random suffix:
+$random = -join ((48..57) + (97..122) | Get-Random -Count 6 | % {[char]$_})
+az staticwebapp create --name "jbmarks-redirect-$random" --resource-group "jbmarks-oauth-redirect-rg" --location "eastus" --sku Free
+
+================================================================================
+STEP 3: Get Deployment Token
+================================================================================
+az staticwebapp secrets list --name "jbmarks-oauth-redirect" --resource-group "jbmarks-oauth-redirect-rg" --query properties.apiKey -o tsv
+
+COPY THIS TOKEN - You'll need it for deployment!
+
+================================================================================
+STEP 4: Deploy HTML File
+================================================================================
+# Set your deployment token from Step 3
+$DEPLOYMENT_TOKEN = "YOUR_TOKEN_FROM_STEP_3"
+
+# Create deployment folder structure
+$tempDir = "$env:TEMP\jbmarks-deploy"
+Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path "$tempDir\oauth_redirect" -Force | Out-Null
+Copy-Item "index.html" -Destination "$tempDir\oauth_redirect\index.html" -Force
+
+# Deploy
+az staticwebapp deploy --name "jbmarks-oauth-redirect" --resource-group "jbmarks-oauth-redirect-rg" --deployment-token $DEPLOYMENT_TOKEN --app-location "." --output-location "." --source $tempDir
+
+# Cleanup
+Remove-Item $tempDir -Recurse -Force
+
+================================================================================
+STEP 5: Get Your App URL
+================================================================================
+az staticwebapp show --name "jbmarks-oauth-redirect" --resource-group "jbmarks-oauth-redirect-rg" --query defaultHostname -o tsv
+
+Your redirect URL will be: https://[HOSTNAME]/oauth_redirect
+
+================================================================================
+NEXT: Update Your App Configuration
+================================================================================
+1. Edit: app/src/main/java/com/example/jbmarks/config/Config.kt
+2. Replace BITRIX_REDIRECT_URI_HTTPS with your URL from Step 5
+3. Update Bitrix24 Local Application with the same URL
+
+================================================================================

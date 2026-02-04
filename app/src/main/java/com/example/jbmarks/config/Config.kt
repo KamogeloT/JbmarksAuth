@@ -55,6 +55,9 @@ object Config {
     // Deployed to Railway - no auth key required, works reliably!
     const val TOKEN_EXCHANGE_URL = "https://jbmarksauth-production.up.railway.app/api/exchangetoken"
     
+    // OAuth Scopes - permissions requested from Bitrix24
+    const val OAUTH_SCOPES = "crm,task,tasks_extended,calendar,user,user_brief,user_basic,sonet_group,bizproc,log,placement,entity,disk,mailservice,lists,calendarmobile,tasks,tasksmobile,im"
+    
     /**
      * Build the authorization URL for OAuth flow
      * Uses the HTTPS redirect URI (intermediate server) that Bitrix24 requires
@@ -64,7 +67,8 @@ object Config {
         val authUrl = "$portalUrl$OAUTH_AUTHORIZE_PATH?" +
                 "client_id=${clientId}&" +
                 "response_type=code&" +
-                "redirect_uri=$encodedRedirectUri"
+                "redirect_uri=$encodedRedirectUri&" +
+                "scope=$OAUTH_SCOPES"
         
         // Log for debugging redirect_uri matching
         android.util.Log.d("Config", "=== Authorization URL ===")
