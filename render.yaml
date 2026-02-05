@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: jbmarks-token-exchange
+    env: node
+    buildCommand: npm install
+    startCommand: node server-simple.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BITRIX_CLIENT_ID
+        sync: false
+      - key: BITRIX_CLIENT_SECRET
+        sync: false
+      - key: BITRIX_REDIRECT_URI
+        sync: false

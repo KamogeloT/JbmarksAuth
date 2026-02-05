@@ -20,8 +20,12 @@ class ActivityFeedViewModel : ViewModel() {
 
     private val repository = ActivityFeedRepository()
 
-    private val _uiState = MutableStateFlow<ActivityFeedUiState>(ActivityFeedUiState.Success(emptyList()))
+    private val _uiState = MutableStateFlow<ActivityFeedUiState>(ActivityFeedUiState.Loading)
     val uiState: StateFlow<ActivityFeedUiState> = _uiState
+
+    init {
+        loadFeed()
+    }
 
     fun loadFeed() {
         viewModelScope.launch {

@@ -1,0 +1,82 @@
+# Azure DevOps Pipeline for Azure Static Web App Deployment
+# This pipeline deploys the OAuth redirect page to Azure Static Web Apps
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    include:
+      - azure-redirect/**
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: 'Azure-Static-Web-App'  # Variable group with deployment token
+  # OR use individual variable:
+  # - name: AZURE_STATIC_WEB_APPS_API_TOKEN
+  #   value: $(AZURE_STATIC_WEB_APPS_API_TOKEN)
+
+stages:
+- stage: DeployStaticWebApp
+  displayName: 'Deploy OAuth Redirect Page'
+  condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  jobs:
+  - job: DeployStaticWebApp
+    displayName: 'Deploy OAuth Redirect Page'
+    condition: contains(variables['Build.SourcesDirectory'], 'azure-redirect')
+    steps:
+    
+    - task: NodeTool@0
+      displayName: 'Use Node.js'
+      inputs:
+        versionSpec: '18.x'
+    
+    - task: AzureStaticWebApp@0
+      displayName: 'Deploy to Azure Static Web Apps'
+      inputs:
+        app_location: 'azure-redirect/oauth_redirect'
+        output_location: '.'
+        azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN)
+        skip_app_build: true
+
+- stage: DeployBFFAPI
+  displayName: 'Deploy BFF API to Azure App Service'
+  condition: or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  jobs:
+  - deployment: DeployBFFAPI
+    displayName: 'Deploy BFF API'
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js 20'
+            inputs:
+              versionSpec: '20.x'
+          
+          - task: ArchiveFiles@2
+            displayName: 'Create deployment package'
+            inputs:
+              rootFolderOrFile: '$(System.DefaultWorkingDirectory)/azure-bff-api'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/bff-api.zip'
+              replaceExistingArchive: true
+          
+          - task: AzureWebApp@1
+            displayName: 'Deploy to Azure App Service'
+            inputs:
+              azureSubscription: 'Azure subscription 1'  # Update with your service connection name
+              appName: 'jbmarks-bff-api'
+              package: '$(Build.ArtifactStagingDirectory)/bff-api.zip'
+              deploymentMethod: 'zipDeploy'

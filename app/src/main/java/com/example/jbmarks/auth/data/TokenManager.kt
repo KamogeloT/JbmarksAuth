@@ -50,7 +50,27 @@ class TokenManager(context: Context) {
             remove("ACCESS_TOKEN")
             remove("REFRESH_TOKEN")
             remove("PORTAL_URL")
+            remove("TOKEN_EXPIRY_TIME")
             apply()
         }
+    }
+    
+    fun saveTokenExpiry(expiresIn: Int) {
+        val expiryTime = System.currentTimeMillis() + (expiresIn * 1000L)
+        with(sharedPreferences.edit()) {
+            putLong("TOKEN_EXPIRY_TIME", expiryTime)
+            apply()
+        }
+    }
+    
+    fun getTokenExpiry(): Long? {
+        val expiryTime = sharedPreferences.getLong("TOKEN_EXPIRY_TIME", -1)
+        return if (expiryTime > 0) expiryTime else null
+    }
+    
+    fun isTokenExpired(): Boolean {
+        val expiryTime = getTokenExpiry() ?: return true
+        // Consider token expired if it expires in less than 5 minutes
+        return System.currentTimeMillis() >= (expiryTime - (5 * 60 * 1000))
     }
 }

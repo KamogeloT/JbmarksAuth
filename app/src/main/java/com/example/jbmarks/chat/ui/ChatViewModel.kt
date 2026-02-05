@@ -20,8 +20,12 @@ class ChatViewModel : ViewModel() {
 
     private val repository = ChatRepository()
 
-    private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Success(emptyList()))
+    private val _uiState = MutableStateFlow<ChatUiState>(ChatUiState.Loading)
     val uiState: StateFlow<ChatUiState> = _uiState
+
+    init {
+        loadRecentChats()
+    }
 
     fun loadRecentChats() {
         viewModelScope.launch {

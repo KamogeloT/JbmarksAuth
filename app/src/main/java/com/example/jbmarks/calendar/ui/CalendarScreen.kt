@@ -3,12 +3,15 @@ package com.example.jbmarks.calendar.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -46,11 +49,14 @@ fun CalendarScreen() {
 
         is CalendarUiState.Success -> {
             if (state.events.isEmpty()) {
-                EmptyState(onLoadClick = { viewModel.loadCalendarEvents() })
+                EmptyState()
             } else {
                 LazyColumn(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
                 ) {
                     items(state.events) { event ->
                         EventItem(event)
@@ -66,30 +72,82 @@ fun CalendarScreen() {
 }
 
 @Composable
-fun EmptyState(onLoadClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "No Events Found", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+fun EmptyState() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "📅",
+                style = MaterialTheme.typography.displayLarge
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "Press the button to load your calendar events.", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onLoadClick) {
-                Text("Load Events")
-            }
+            Text(
+                text = "No Events Scheduled",
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Your calendar is clear!\nUpcoming meetings and events\nwill appear here.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
 fun ErrorState(errorMessage: String, onRetryClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "An Error Occurred", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = errorMessage, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onRetryClick) {
-                Text("Retry")
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "An Error Occurred",
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.SemiBold
+            )
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            Button(
+                onClick = onRetryClick,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                modifier = Modifier.height(48.dp)
+            ) {
+                Text(
+                    "Retry",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
@@ -98,20 +156,56 @@ fun ErrorState(errorMessage: String, onRetryClick: () -> Unit) {
 @Composable
 fun EventItem(event: CalendarEvent) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 2.dp,
+            pressedElevation = 4.dp
+        ),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = Icons.Default.DateRange, contentDescription = "Event")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.DateRange,
+                contentDescription = "Event",
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
 
-            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                Text(text = event.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "From: ${event.fromDate}", style = MaterialTheme.typography.bodySmall)
-                Text(text = "To: ${event.toDate}", style = MaterialTheme.typography.bodySmall)
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = event.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "From: ${event.fromDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "To: ${event.toDate}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (event.location != null) {
-                    Text(text = "Location: ${event.location}", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Location: ${event.location}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

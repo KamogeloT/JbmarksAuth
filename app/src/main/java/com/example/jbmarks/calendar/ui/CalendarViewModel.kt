@@ -20,8 +20,12 @@ class CalendarViewModel : ViewModel() {
 
     private val repository = CalendarRepository()
 
-    private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Success(emptyList()))
+    private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
+
+    init {
+        loadCalendarEvents()
+    }
 
     fun loadCalendarEvents() {
         viewModelScope.launch {
