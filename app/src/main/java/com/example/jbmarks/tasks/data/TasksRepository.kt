@@ -361,9 +361,31 @@ class TasksRepository(private val context: Context? = null) {
                 val commentsListResponse = response.body()!!
                 val commentsList = commentsListResponse.result ?: emptyList()
                 
+                // Collect unique author IDs
+                val authorIds = commentsList.mapNotNull { it.authorId }.distinct()
+                
+                // Fetch user information for all authors
+                val userMap = mutableMapOf<String, String>()
+                authorIds.forEach { authorId ->
+                    try {
+                        val userResponse = api.getUser(authorId)
+                        if (userResponse.result?.isNotEmpty() == true) {
+                            val user = userResponse.result!![0]
+                            userMap[authorId] = user.fullName
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to fetch user info for author $authorId: ${e.message}")
+                    }
+                }
+                
                 val comments = commentsList.mapNotNull { comment ->
                     try {
-                        mapCommentToDomain(comment)
+                        // Get author name from map or from comment's author object
+                        val authorName = comment.getAuthorName() 
+                            ?: userMap[comment.authorId]
+                            ?: null
+                        
+                        mapCommentToDomain(comment, authorName)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error mapping comment", e)
                         null
@@ -519,12 +541,12 @@ class TasksRepository(private val context: Context? = null) {
     /**
      * Map Comment data model to domain model
      */
-    private fun mapCommentToDomain(comment: Comment): DomainComment {
+    private fun mapCommentToDomain(comment: Comment, authorName: String? = null): DomainComment {
         return DomainComment(
             id = comment.id ?: "",
             taskId = comment.taskId ?: "",
             authorId = comment.authorId ?: "",
-            authorName = null, // Will be populated if we fetch user info
+            authorName = authorName,
             text = comment.text ?: "",
             createdDate = comment.createdDate ?: comment.postDate ?: "",
             files = comment.files?.mapNotNull { file ->

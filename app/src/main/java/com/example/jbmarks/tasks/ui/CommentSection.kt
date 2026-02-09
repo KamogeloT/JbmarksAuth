@@ -1,5 +1,6 @@
 package com.example.jbmarks.tasks.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -138,20 +139,57 @@ fun CommentItem(comment: Comment) {
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
-            // Author and Date
+            // Author and Date Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = comment.authorName ?: "User ${comment.authorId}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                // Author Name with Icon
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Avatar Circle
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(16.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (comment.authorName?.firstOrNull()?.uppercaseChar()?.toString() 
+                                ?: comment.authorId.firstOrNull()?.toString() 
+                                ?: "?"),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    
+                    Column {
+                        Text(
+                            text = comment.authorName ?: "User ${comment.authorId}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (comment.authorId.isNotEmpty()) {
+                            Text(
+                                text = "ID: ${comment.authorId}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                
+                // Date
                 Text(
                     text = formatCommentDate(comment.createdDate),
                     style = MaterialTheme.typography.bodySmall,
@@ -159,20 +197,32 @@ fun CommentItem(comment: Comment) {
                 )
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             // Comment Text
             Text(
-                text = comment.text,
+                text = comment.text.ifEmpty { "No message" },
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
             )
             
             // Files
             if (comment.files.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                comment.files.forEach { file ->
-                    FileAttachmentChip(file = file)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Attachments:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    comment.files.forEach { file ->
+                        FileAttachmentChip(file = file)
+                    }
                 }
             }
         }

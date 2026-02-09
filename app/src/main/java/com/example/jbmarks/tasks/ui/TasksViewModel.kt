@@ -64,7 +64,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = TasksUiState.Success(filtered)
         }
     }
-    
+
     fun loadTasks() {
         viewModelScope.launch {
             _uiState.value = TasksUiState.Loading
@@ -118,6 +118,31 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         _selectedStatus.value = null
         _selectedPriority.value = null
         applyFilters()
+    }
+    
+    /**
+     * Change task status
+     */
+    fun changeTaskStatus(taskId: String, newStatus: TaskStatus) {
+        viewModelScope.launch {
+            val result = when (newStatus) {
+                TaskStatus.IN_PROGRESS -> repository.startTask(taskId)
+                TaskStatus.COMPLETED -> repository.completeTask(taskId)
+                TaskStatus.DEFERRED -> repository.deferTask(taskId)
+                TaskStatus.NEW -> repository.renewTask(taskId)
+                TaskStatus.SUPPOSEDLY_COMPLETED -> {
+                    // For supposedly completed, we complete it first
+                    repository.completeTask(taskId)
+                }
+            }
+            
+            result.onSuccess {
+                // Refresh task list to show updated status
+                loadTasks()
+            }.onFailure { throwable ->
+                android.util.Log.e("TasksViewModel", "Failed to change task status", throwable)
+            }
+        }
     }
 }
 

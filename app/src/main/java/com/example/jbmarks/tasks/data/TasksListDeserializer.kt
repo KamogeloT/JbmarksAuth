@@ -48,14 +48,8 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
                     if (taskElement.isJsonObject) {
                         val taskObj = taskElement.asJsonObject
                         Log.d(TAG, "Task[$index] keys: ${taskObj.keySet()}")
-                        // Try to manually parse if deserialization fails
-                        val task = try {
-                            context?.deserialize<Task>(taskElement, Task::class.java)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to deserialize task[$index]", e)
-                            // Try manual parsing
-                            parseTaskManually(taskObj)
-                        }
+                        // Always use manual parsing to handle inconsistent API responses
+                        val task = parseTaskManually(taskObj)
                         task?.let { tasks.add(it) }
                     }
                 }
@@ -69,12 +63,8 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
                     if (taskElement.isJsonObject) {
                         val taskObj = taskElement.asJsonObject
                         Log.d(TAG, "Task[${entry.key}] keys: ${taskObj.keySet()}")
-                        val task = try {
-                            context?.deserialize<Task>(taskElement, Task::class.java)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to deserialize task[${entry.key}]", e)
-                            parseTaskManually(taskObj)
-                        }
+                        // Always use manual parsing to handle inconsistent API responses
+                        val task = parseTaskManually(taskObj)
                         task?.let { tasks.add(it) }
                     }
                 }
@@ -115,18 +105,109 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
                 }
             }
             
+            // Parse nested responsible object
+            val responsibleElement = jsonObject.get("responsible")
+            val responsible = when {
+                responsibleElement == null || responsibleElement.isJsonNull -> null
+                responsibleElement.isJsonObject -> {
+                    val obj = responsibleElement.asJsonObject
+                    com.example.jbmarks.tasks.data.TaskUser(
+                        id = obj.get("id")?.takeIf { !it.isJsonNull }?.asString,
+                        name = obj.get("name")?.takeIf { !it.isJsonNull }?.asString,
+                        link = obj.get("link")?.takeIf { !it.isJsonNull }?.asString,
+                        icon = obj.get("icon")?.takeIf { !it.isJsonNull }?.asString,
+                        workPosition = obj.get("workPosition")?.takeIf { !it.isJsonNull }?.asString
+                    )
+                }
+                else -> null
+            }
+            
+            // Parse nested creator object
+            val creatorElement = jsonObject.get("creator")
+            val creator = when {
+                creatorElement == null || creatorElement.isJsonNull -> null
+                creatorElement.isJsonObject -> {
+                    val obj = creatorElement.asJsonObject
+                    com.example.jbmarks.tasks.data.TaskUser(
+                        id = obj.get("id")?.takeIf { !it.isJsonNull }?.asString,
+                        name = obj.get("name")?.takeIf { !it.isJsonNull }?.asString,
+                        link = obj.get("link")?.takeIf { !it.isJsonNull }?.asString,
+                        icon = obj.get("icon")?.takeIf { !it.isJsonNull }?.asString,
+                        workPosition = obj.get("workPosition")?.takeIf { !it.isJsonNull }?.asString
+                    )
+                }
+                else -> null
+            }
+            
+            // Parse nested group object (can be object, array, or null)
+            val groupElement = jsonObject.get("group")
+            val group = when {
+                groupElement == null || groupElement.isJsonNull -> null
+                groupElement.isJsonObject -> {
+                    val groupObj = groupElement.asJsonObject
+                    com.example.jbmarks.tasks.data.TaskGroup(
+                        id = groupObj.get("id")?.takeIf { !it.isJsonNull }?.asString,
+                        name = groupObj.get("name")?.takeIf { !it.isJsonNull }?.asString,
+                        opened = groupObj.get("opened")?.takeIf { !it.isJsonNull }?.asBoolean,
+                        membersCount = groupObj.get("membersCount")?.takeIf { !it.isJsonNull }?.asInt
+                    )
+                }
+                groupElement.isJsonArray -> {
+                    // If group is an array, take the first element
+                    val groupArray = groupElement.asJsonArray
+                    if (groupArray.size() > 0 && groupArray[0].isJsonObject) {
+                        val groupObj = groupArray[0].asJsonObject
+                        com.example.jbmarks.tasks.data.TaskGroup(
+                            id = groupObj.get("id")?.takeIf { !it.isJsonNull }?.asString,
+                            name = groupObj.get("name")?.takeIf { !it.isJsonNull }?.asString,
+                            opened = groupObj.get("opened")?.takeIf { !it.isJsonNull }?.asBoolean,
+                            membersCount = groupObj.get("membersCount")?.takeIf { !it.isJsonNull }?.asInt
+                        )
+                    } else {
+                        null
+                    }
+                }
+                else -> null
+            }
+            
+            // Helper function to safely get string from JsonElement
+            fun getStringOrNull(element: JsonElement?): String? {
+                return when {
+                    element == null -> null
+                    element.isJsonNull -> null
+                    element.isJsonPrimitive && element.asJsonPrimitive.isString -> element.asString
+                    else -> null
+                }
+            }
+            
+            // Helper function to safely get int from JsonElement
+            fun getIntOrNull(element: JsonElement?): Int? {
+                return when {
+                    element == null -> null
+                    element.isJsonNull -> null
+                    element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> element.asInt
+                    element.isJsonPrimitive && element.asJsonPrimitive.isString -> element.asString.toIntOrNull()
+                    else -> null
+                }
+            }
+            
             Task(
                 id = id,
-                title = jsonObject.get("title")?.asString ?: "No Title",
-                description = jsonObject.get("description")?.asString ?: "",
-                responsibleId = jsonObject.get("responsibleId")?.asString,
-                createdBy = jsonObject.get("createdBy")?.asString,
+                title = getStringOrNull(jsonObject.get("title")) ?: "No Title",
+                description = getStringOrNull(jsonObject.get("description")) ?: "",
+                responsibleId = getStringOrNull(jsonObject.get("responsibleId")),
+                createdBy = getStringOrNull(jsonObject.get("createdBy")),
                 accomplices = accomplicesList,
                 auditors = auditorsList,
-                deadline = jsonObject.get("deadline")?.asString,
-                status = jsonObject.get("status")?.asString,
-                priority = jsonObject.get("priority")?.asString,
-                groupId = jsonObject.get("groupId")?.asString
+                deadline = getStringOrNull(jsonObject.get("deadline")),
+                status = getStringOrNull(jsonObject.get("status")),
+                priority = getStringOrNull(jsonObject.get("priority")),
+                groupId = getStringOrNull(jsonObject.get("groupId")),
+                responsible = responsible,
+                creator = creator,
+                group = group,
+                commentsCount = getStringOrNull(jsonObject.get("commentsCount")),
+                newCommentsCount = getIntOrNull(jsonObject.get("newCommentsCount"))
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error in manual task parsing", e)
