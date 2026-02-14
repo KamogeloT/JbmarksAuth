@@ -26,13 +26,13 @@ fun mapDataToDomain(dataTask: DataTask): Task? {
         createdDate = null,
         closedDate = null,
         createdBy = dataTask.createdBy,
-        createdByName = null,
+        createdByName = dataTask.creator?.name,
         responsibleId = dataTask.responsibleId,
-        responsibleName = null,
+        responsibleName = dataTask.responsible?.name,
         groupId = dataTask.groupId,
-        groupName = null,
-        commentsCount = 0,
-        newCommentsCount = 0,
+        groupName = dataTask.group?.name,
+        commentsCount = dataTask.commentsCount?.toIntOrNull() ?: 0,
+        newCommentsCount = dataTask.newCommentsCount ?: 0,
         tags = emptyList()
     )
 }

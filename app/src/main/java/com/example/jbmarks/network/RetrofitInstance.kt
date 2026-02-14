@@ -3,6 +3,8 @@ package com.example.jbmarks.network
 import android.content.Context
 import com.example.jbmarks.auth.data.TokenManager
 import com.example.jbmarks.config.Config
+import com.example.jbmarks.tasks.data.TaskDto
+import com.example.jbmarks.tasks.data.TaskDtoDeserializer
 import com.example.jbmarks.tasks.data.TasksListDeserializer
 import com.example.jbmarks.tasks.data.TasksListResponse
 import com.google.gson.Gson
@@ -68,9 +70,10 @@ object RetrofitInstance {
             clientBuilder.addInterceptor(AuthInterceptor(ctx, tm))
         }
 
-        // Create Gson with custom deserializer for tasks list
+        // Create Gson with custom deserializers for tasks
         val gson = GsonBuilder()
             .registerTypeAdapter(TasksListResponse::class.java, TasksListDeserializer())
+            .registerTypeAdapter(TaskDto::class.java, TaskDtoDeserializer())
             .create()
 
         retrofit = Retrofit.Builder()

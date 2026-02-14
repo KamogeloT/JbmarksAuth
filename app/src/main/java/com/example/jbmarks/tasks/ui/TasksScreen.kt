@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,8 +23,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -32,6 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -46,6 +52,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -117,21 +126,25 @@ fun TasksScreen(
                         )
                         
                         // Tasks List
-                        if (state.tasks.isEmpty() && !isRefreshing) {
+                    if (state.tasks.isEmpty() && !isRefreshing) {
                             EmptyState()
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                items(state.tasks) { task ->
-                                    TaskItem(
-                                        task = task,
-                                        onClick = { onTaskClick(task.id) }
-                                    )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            items(state.tasks) { task ->
+                                android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
+                                TaskItem(
+                                    task = task,
+                                        onClick = { onTaskClick(task.id) },
+                                        onStatusChange = { newStatus ->
+                                            viewModel.changeTaskStatus(task.id, newStatus)
+                                        }
+                                )
                                 }
                             }
                         }
@@ -229,7 +242,13 @@ fun ErrorState(errorMessage: String, onRetryClick: () -> Unit) {
 }
 
 @Composable
-fun TaskItem(task: Task, onClick: () -> Unit) {
+fun TaskItem(
+    task: Task,
+    onClick: () -> Unit,
+    onStatusChange: ((TaskStatus) -> Unit)? = null
+) {
+    var showStatusDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val statusColor = when (task.status) {
         TaskStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer
         TaskStatus.IN_PROGRESS -> MaterialTheme.colorScheme.primaryContainer
@@ -251,11 +270,30 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
         TaskPriority.LOW -> MaterialTheme.colorScheme.surfaceVariant
     }
     
+    // Status Color Bar on Left Edge
+    Row(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Colored Status Bar
+        Box(
+            modifier = Modifier
+                .width(6.dp)
+                .heightIn(min = 100.dp)
+                .background(
+                    color = statusColor,
+                    shape = RoundedCornerShape(
+                        topStart = 20.dp,
+                        bottomStart = 20.dp,
+                        topEnd = 0.dp,
+                        bottomEnd = 0.dp
+                    )
+                )
+        )
+    
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp)
-            .clickable(onClick = onClick),
+                .weight(1f)
+                .padding(horizontal = 4.dp, vertical = 6.dp),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 4.dp,
             pressedElevation = 8.dp
@@ -268,13 +306,72 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onClick)
                 .padding(20.dp)
         ) {
+            // Top Row: Status Badge and Menu
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AssistChip(
+                    onClick = { /* Status is informational */ },
+                    label = { 
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        ) 
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = statusColor,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                
+                // Menu Button for Status Change
+                if (onStatusChange != null) {
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "More options",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Change Status") },
+                                onClick = {
+                                    showMenu = false
+                                    showStatusDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Info, contentDescription = null)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Main Content Row: Status Icon + Title/Description
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                // Status Indicator Circle
+                // Status Indicator Circle with Icon
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -285,10 +382,13 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (task.status == TaskStatus.COMPLETED) 
-                            Icons.Default.CheckCircle 
-                        else 
-                            Icons.Default.Warning,
+                        imageVector = when (task.status) {
+                            TaskStatus.COMPLETED -> Icons.Default.CheckCircle
+                            TaskStatus.IN_PROGRESS -> Icons.Default.PlayArrow
+                            TaskStatus.DEFERRED -> Icons.Default.DateRange
+                            TaskStatus.NEW -> Icons.Default.Star
+                            TaskStatus.SUPPOSEDLY_COMPLETED -> Icons.Default.CheckCircle
+                        },
                         contentDescription = "Status",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
@@ -297,34 +397,45 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    // Title
+                // Title and Description Column
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    // Title - Always show, even if empty
                     Text(
                         text = task.title.ifEmpty { "No Title" },
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        minLines = 1
                     )
-                    
-                    // Description
-                    if (task.description.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = task.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    
+                
+                    // Description - Always show
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = task.description.ifEmpty { "No description" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        minLines = 1
+                    )
+                
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+                
                     // Assigned To
                     if (task.responsibleName != null || task.responsibleId != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -336,16 +447,21 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
                             Text(
                                 text = "Assigned to: ${task.responsibleName ?: "User ${task.responsibleId}"}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                    
+                
                     // Created By
                     if (task.createdByName != null || task.createdBy != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Info,
@@ -357,7 +473,10 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
                             Text(
                                 text = "Created by: ${task.createdByName ?: "User ${task.createdBy}"}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -366,45 +485,22 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Status, Priority, and Deadline Row
+            // Priority, Deadline Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Status Badge
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = statusColor,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                
                 // Priority Badge
-                Box(
-                    modifier = Modifier
-                        .background(
-                            color = priorityColor,
-                            shape = RoundedCornerShape(8.dp)
-                        )
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = task.priority.displayName,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                AssistChip(
+                    onClick = { /* Priority is informational */ },
+                    label = { Text(task.priority.displayName) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = priorityColor,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                )
                 
                 Spacer(modifier = Modifier.weight(1f))
                 
@@ -458,6 +554,18 @@ fun TaskItem(task: Task, onClick: () -> Unit) {
                 }
             }
         }
+    }
+    }
+    
+    // Status Change Dialog
+    if (showStatusDialog && onStatusChange != null) {
+        StatusChangeDialog(
+            currentStatus = task.status,
+            onStatusSelected = { newStatus ->
+                onStatusChange(newStatus)
+            },
+            onDismiss = { showStatusDialog = false }
+        )
     }
 }
 
@@ -517,7 +625,11 @@ fun SearchAndFilterSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 4.dp)
                 )
-                TaskStatus.values().forEach { status ->
+                listOf(
+                    TaskStatus.NEW,
+                    TaskStatus.IN_PROGRESS,
+                    TaskStatus.COMPLETED
+                ).forEach { status ->
                     TaskFilterChip(
                         label = status.displayName,
                         selected = selectedStatus == status,
@@ -540,7 +652,11 @@ fun SearchAndFilterSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 4.dp)
                 )
-                TaskPriority.values().forEach { priority ->
+                listOf(
+                    TaskPriority.LOW,
+                    TaskPriority.NORMAL,
+                    TaskPriority.HIGH
+                ).forEach { priority ->
                     TaskFilterChip(
                         label = priority.displayName,
                         selected = selectedPriority == priority,

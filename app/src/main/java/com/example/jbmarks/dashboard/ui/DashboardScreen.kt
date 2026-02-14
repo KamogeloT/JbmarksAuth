@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,18 +19,42 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.app.Application
 import com.example.jbmarks.activity_feed.domain.BlogPost
 import com.example.jbmarks.dashboard.data.DashboardStats
+import com.example.jbmarks.tasks.domain.Task
 import com.example.jbmarks.user.ui.UserProfileHeader
 
 @Composable
 fun DashboardScreen(
     onNavigateTo: (String) -> Unit = {}
 ) {
-    val viewModel: DashboardViewModel = viewModel()
+    val context = LocalContext.current
+    val viewModel: DashboardViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return DashboardViewModel(context.applicationContext as Application) as T
+            }
+        }
+    )
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Refresh dashboard when screen is composed/resumed
+    LaunchedEffect(Unit) {
+        viewModel.loadDashboard()
+    }
+    
+    // Also refresh when returning to this screen
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        viewModel.loadDashboard()
+    }
     
     when (val state = uiState) {
         is DashboardUiState.Loading -> {
@@ -42,6 +67,9 @@ fun DashboardScreen(
         }
         
         is DashboardUiState.Success -> {
+            // Log the stats to verify they're being passed
+            android.util.Log.d("DashboardScreen", "Displaying stats: activeTasks=${state.stats.activeTasks}, completedToday=${state.stats.completedToday}, unreadMessages=${state.stats.unreadMessages}, upcomingEvents=${state.stats.upcomingEvents}")
+            
             DashboardContent(
                 stats = state.stats,
                 recentActivity = state.recentActivity,
@@ -67,11 +95,11 @@ fun DashboardContent(
     onNavigateTo: (String) -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(vertical = 16.dp)
-    ) {
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
         // User Profile Header (Name, Surname, Groups)
         item {
             UserProfileHeader()
@@ -143,6 +171,15 @@ fun DashboardContent(
 
 @Composable
 fun StatsGrid(stats: DashboardStats, onNavigateTo: (String) -> Unit) {
+    android.util.Log.d("StatsGrid", "Rendering stats: activeTasks=${stats.activeTasks}, completedToday=${stats.completedToday}, unreadMessages=${stats.unreadMessages}, upcomingEvents=${stats.upcomingEvents}")
+    android.util.Log.d("StatsGrid", "Recent active tasks count: ${stats.recentActiveTasks.size}, Recent completed tasks count: ${stats.recentCompletedTasks.size}")
+    if (stats.recentActiveTasks.isNotEmpty()) {
+        android.util.Log.d("StatsGrid", "First active task: id=${stats.recentActiveTasks[0].id}, title='${stats.recentActiveTasks[0].title}', description='${stats.recentActiveTasks[0].description}'")
+    }
+    if (stats.recentCompletedTasks.isNotEmpty()) {
+        android.util.Log.d("StatsGrid", "First completed task: id=${stats.recentCompletedTasks[0].id}, title='${stats.recentCompletedTasks[0].title}', description='${stats.recentCompletedTasks[0].description}'")
+    }
+    
     Column(
         modifier = Modifier.padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -151,25 +188,55 @@ fun StatsGrid(stats: DashboardStats, onNavigateTo: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            StatCard(
-                title = "Active Tasks",
-                value = stats.activeTasks.toString(),
-                icon = Icons.Default.List,
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateTo("tasks") }
-            )
-            StatCard(
-                title = "Completed",
-                value = stats.completedToday.toString(),
-                subtitle = "Today",
-                icon = Icons.Default.CheckCircle,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateTo("tasks") }
-            )
+            // Active Tasks Tile - Show task details if available
+            if (stats.recentActiveTasks.isNotEmpty()) {
+                TaskStatCard(
+                    task = stats.recentActiveTasks[0],
+                    count = stats.activeTasks,
+                    title = "Active Tasks",
+                    icon = Icons.Default.List,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateTo("tasks") }
+                )
+            } else {
+                StatCard(
+                    title = "Active Tasks",
+                    value = stats.activeTasks.toString(),
+                    icon = Icons.Default.List,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateTo("tasks") }
+                )
+            }
+            
+            // Completed Tasks Tile - Show task details if available
+            if (stats.recentCompletedTasks.isNotEmpty()) {
+                TaskStatCard(
+                    task = stats.recentCompletedTasks[0],
+                    count = stats.completedToday,
+                    title = "Completed",
+                    subtitle = "Today",
+                    icon = Icons.Default.CheckCircle,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateTo("tasks") }
+                )
+            } else {
+                StatCard(
+                    title = "Completed",
+                    value = stats.completedToday.toString(),
+                    subtitle = "Today",
+                    icon = Icons.Default.CheckCircle,
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateTo("tasks") }
+                )
+            }
         }
         
         Row(
@@ -226,30 +293,38 @@ fun StatCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Icon at top
             Icon(
                 imageVector = icon,
                 contentDescription = title,
                 tint = contentColor,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(36.dp)
             )
             
-            Column {
+            // Value and title at bottom
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = value,
+                    text = value.ifEmpty { "0" },
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
-                    color = contentColor
+                    color = contentColor,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = contentColor.copy(alpha = 0.8f)
+                    fontWeight = FontWeight.Medium,
+                    color = contentColor.copy(alpha = 0.9f),
+                    modifier = Modifier.fillMaxWidth()
                 )
                 if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = contentColor.copy(alpha = 0.6f)
+                        color = contentColor.copy(alpha = 0.7f),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -388,6 +463,98 @@ fun CompactBlogPostItem(post: BlogPost) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun TaskStatCard(
+    task: Task,
+    count: Int,
+    title: String,
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    onClick: () -> Unit = {}
+) {
+    Card(
+        modifier = modifier
+            .height(140.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Icon and count at top
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = contentColor,
+                    modifier = Modifier.size(32.dp)
+                )
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor
+                )
+            }
+            
+            // Task details at bottom
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Always show task title
+                Text(
+                    text = task.title.ifEmpty { "No Title" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 1
+                )
+                // Always show description (or placeholder)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = task.description.ifEmpty { "No description" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor.copy(alpha = 0.8f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 1
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = contentColor.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }

@@ -105,6 +105,12 @@ interface BitrixApi {
     @GET("user.current.json")
     suspend fun getCurrentUser(): BitrixResponse<User>
     
+    /**
+     * Get user information by ID
+     */
+    @GET("user.get.json")
+    suspend fun getUser(@Query("ID") userId: String): BitrixResponse<List<User>>
+    
     @GET("sonet_group.user.groups.json")
     suspend fun getUserWorkgroups(): BitrixResponse<List<Workgroup>>
     

@@ -23,7 +23,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val uiState: StateFlow<DashboardUiState> = _uiState
     
     init {
-        loadDashboard()
+        // Don't auto-load in init - let the screen trigger it
     }
     
     fun loadDashboard() {
@@ -31,19 +31,36 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.value = DashboardUiState.Loading
             
             try {
+                android.util.Log.d("DashboardViewModel", "Loading dashboard stats...")
+                
                 // Fetch dashboard stats
                 val statsResult = dashboardRepository.getDashboardStats()
+                
+                if (statsResult.isFailure) {
+                    android.util.Log.e("DashboardViewModel", "Failed to get stats: ${statsResult.exceptionOrNull()}")
+                }
+                
                 val stats = statsResult.getOrNull() ?: DashboardStats()
                 
+                android.util.Log.d("DashboardViewModel", "Loaded stats: activeTasks=${stats.activeTasks}, completedToday=${stats.completedToday}, unreadMessages=${stats.unreadMessages}, upcomingEvents=${stats.upcomingEvents}")
+                
                 // Fetch recent activity
-                val recentPosts = activityFeedRepository.getFeed().take(5)
+                val recentPosts = try {
+                    activityFeedRepository.getFeed().take(5)
+                } catch (e: Exception) {
+                    android.util.Log.w("DashboardViewModel", "Failed to load activity feed", e)
+                    emptyList()
+                }
                 
                 _uiState.value = DashboardUiState.Success(
                     stats = stats,
                     recentActivity = recentPosts
                 )
+                
+                android.util.Log.d("DashboardViewModel", "Dashboard loaded successfully")
             } catch (e: Exception) {
                 android.util.Log.e("DashboardViewModel", "Failed to load dashboard", e)
+                e.printStackTrace()
                 _uiState.value = DashboardUiState.Error(
                     e.message ?: "Failed to load dashboard"
                 )

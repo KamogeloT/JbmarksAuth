@@ -13,8 +13,40 @@ data class Comment(
     @SerializedName("postMessage") val text: String?,
     @SerializedName("createdDate") val createdDate: String?,
     @SerializedName("postDate") val postDate: String?,
-    @SerializedName("files") val files: List<CommentFile>?
-)
+    @SerializedName("files") val files: List<CommentFile>?,
+    // Author information (may be nested object)
+    @SerializedName("author") val author: CommentAuthor?,
+    @SerializedName("AUTHOR") val authorUpper: CommentAuthor? = null
+) {
+    fun getAuthorName(): String? {
+        return author?.getAuthorDisplayName() ?: authorUpper?.getAuthorDisplayName()
+    }
+}
+
+/**
+ * Author information in comment response
+ */
+data class CommentAuthor(
+    @SerializedName("id") val authorId: String?,
+    @SerializedName("name") val authorFirstName: String?,
+    @SerializedName("lastName") val authorLastName: String?,
+    @SerializedName("fullName") val authorFullName: String?,
+    // Also support uppercase
+    @SerializedName("ID") val authorIdUpper: String? = null,
+    @SerializedName("NAME") val authorFirstNameUpper: String? = null,
+    @SerializedName("LAST_NAME") val authorLastNameUpper: String? = null,
+    @SerializedName("FULL_NAME") val authorFullNameUpper: String? = null
+) {
+    fun getAuthorDisplayName(): String? {
+        return authorFullName ?: authorFullNameUpper ?: run {
+            val first = authorFirstName ?: authorFirstNameUpper ?: ""
+            val last = authorLastName ?: authorLastNameUpper ?: ""
+            if (first.isNotEmpty() || last.isNotEmpty()) {
+                "$first $last".trim()
+            } else null
+        }
+    }
+}
 
 /**
  * Comment file attachment

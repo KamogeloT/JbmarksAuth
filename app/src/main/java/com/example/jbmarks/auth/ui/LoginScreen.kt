@@ -124,12 +124,12 @@ fun LoginScreen(
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     if (!isLoading) {
-                                        Text(
+                                    Text(
                                             text = "Tap 'Sign In' below to try again",
-                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                     }
                                 }
                             }
@@ -150,9 +150,9 @@ fun LoginScreen(
                                 )
                             } else {
                                 ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
                             }
                         ) {
                             if (isLoading) {

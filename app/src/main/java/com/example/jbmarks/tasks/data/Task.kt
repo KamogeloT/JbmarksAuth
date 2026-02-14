@@ -17,5 +17,12 @@ data class Task(
     // Added the missing priority field
     @SerializedName("priority") val priority: String?,
     // Group/Project ID for workgroup filtering
-    @SerializedName("groupId") val groupId: String?
+    @SerializedName("groupId") val groupId: String?,
+    // Nested objects for user and group details
+    // Note: TaskUser and TaskGroup are top-level classes in TaskDto.kt (same package)
+    @SerializedName("responsible") val responsible: com.example.jbmarks.tasks.data.TaskUser?,
+    @SerializedName("creator") val creator: com.example.jbmarks.tasks.data.TaskUser?,
+    @SerializedName("group") val group: com.example.jbmarks.tasks.data.TaskGroup?,
+    @SerializedName("commentsCount") val commentsCount: String?,
+    @SerializedName("newCommentsCount") val newCommentsCount: Int?
 )

@@ -3,20 +3,28 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- JB Marks Logo - Modern "JB" monogram -->
+    <!-- Modern JB Marks Icon - Checkmark with "JB" -->
     
-    <!-- Letter "J" - simplified -->
+    <!-- Main checkmark shape (modern, rounded) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M25,20 L25,70 L40,70 L40,55 L35,55 L35,35 L40,35 L40,20 Z" />
+        android:pathData="M20,54 L38,72 L88,22 L88,32 L38,82 L20,64 Z" />
     
-    <!-- Letter "B" - simplified -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M50,20 L50,70 L68,70 Q78,70 78,60 L78,50 Q78,45 73,45 L78,45 Q83,45 83,40 L83,30 Q83,25 78,25 L68,20 Z M60,35 L68,35 Q73,35 73,30 L73,25 Q73,25 68,25 L60,25 Z M60,45 L73,45 Q78,45 78,40 L78,35 Q78,35 73,35 L60,35 Z M60,55 L68,55 Q73,55 73,50 L73,45 Q73,45 68,45 L60,45 Z" />
+    <!-- "JB" text in modern style -->
+    <group>
+        <!-- Letter "J" -->
+        <path
+            android:fillColor="#F9A825"
+            android:pathData="M25,25 L25,60 L35,60 L35,50 L30,50 L30,35 L35,35 L35,25 Z" />
+        
+        <!-- Letter "B" -->
+        <path
+            android:fillColor="#F9A825"
+            android:pathData="M42,25 L42,60 L55,60 Q62,60 62,55 L62,50 Q62,48 60,48 L62,48 Q65,48 65,45 L65,40 Q65,37 62,37 L55,25 Z M50,35 L55,35 Q60,35 60,40 L60,45 Q60,50 55,50 L50,50 Z M50,25 L55,25 Q60,25 60,30 L60,35 Q60,35 55,35 L50,35 Z" />
+    </group>
     
-    <!-- Gold accent line at bottom -->
+    <!-- Decorative gold accent circle -->
     <path
         android:fillColor="#F9A825"
-        android:pathData="M20,80 L88,80 L88,85 L20,85 Z" />
+        android:pathData="M75,20 A5,5 0 1,1 75,30 A5,5 0 1,1 75,20 Z" />
 </vector>
