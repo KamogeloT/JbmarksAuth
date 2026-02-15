@@ -39,13 +39,30 @@ class MessageViewModel(
     
     private fun loadCurrentUserId() {
         viewModelScope.launch {
-            userRepository.getCurrentUser()
-                .onSuccess { user ->
-                    _currentUserId.value = user.id
-                }
-                .onFailure {
-                    android.util.Log.e("MessageViewModel", "Failed to get current user ID", it)
-                }
+            try {
+                userRepository.getCurrentUser()
+                    .onSuccess { user ->
+                        _currentUserId.value = user.id
+                    }
+                    .onFailure { e ->
+                        if (e is java.net.SocketTimeoutException) {
+                            android.util.Log.w("MessageViewModel", "Timeout getting current user ID, will retry", e)
+                            // Retry once after a short delay
+                            kotlinx.coroutines.delay(1000)
+                            userRepository.getCurrentUser()
+                                .onSuccess { user ->
+                                    _currentUserId.value = user.id
+                                }
+                                .onFailure {
+                                    android.util.Log.e("MessageViewModel", "Failed to get current user ID after retry", it)
+                                }
+                        } else {
+                            android.util.Log.e("MessageViewModel", "Failed to get current user ID", e)
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("MessageViewModel", "Error getting current user ID", e)
+            }
         }
     }
     
@@ -112,12 +129,13 @@ class MessageViewModel(
 }
 
 class MessageViewModelFactory(
-    private val dialogId: String
+    private val dialogId: String,
+    private val application: Application
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MessageViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return MessageViewModel(dialogId, android.app.Application()) as T
+            return MessageViewModel(dialogId, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

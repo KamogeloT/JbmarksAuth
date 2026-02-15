@@ -1,25 +1,7 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Modern JB Marks Icon - Clean Checkmark with "JB" Monogram -->
-    
-    <!-- Large checkmark (primary element) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M20,52 L38,70 L88,20 L88,28 L38,78 L20,60 Z" />
-    
-    <!-- "JB" monogram in gold at top -->
-    <group>
-        <!-- Letter "J" -->
-        <path
-            android:fillColor="#F9A825"
-            android:pathData="M24,24 L24,48 L30,48 L30,42 L27,42 L27,30 L30,30 L30,24 Z" />
-        
-        <!-- Letter "B" -->
-        <path
-            android:fillColor="#F9A825"
-            android:pathData="M35,24 L35,48 L44,48 Q49,48 49,44 L49,41 Q49,39 47,39 L49,39 Q51,39 51,37 L51,35 Q51,33 49,33 L44,24 Z M41,30 L44,30 Q47,30 47,33 L47,35 Q47,38 44,38 L41,38 Z M41,38 L44,38 Q47,38 47,41 L47,44 Q47,48 44,48 L41,48 Z" />
-    </group>
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/jbmarksapplogo"
+    android:insetLeft="18dp"
+    android:insetTop="18dp"
+    android:insetRight="18dp"
+    android:insetBottom="18dp" />

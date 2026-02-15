@@ -2,6 +2,7 @@ package com.example.jbmarks.network
 
 import com.example.jbmarks.activity_feed.data.BlogFeedResponse
 import com.example.jbmarks.calendar.data.CalendarEventsResponse
+import com.example.jbmarks.calendar.data.CalendarEventsRequest
 import com.example.jbmarks.chat.data.ChatRecentResponse
 import com.example.jbmarks.chat.data.ChatMessagesResponse
 import com.example.jbmarks.chat.data.SendMessageRequest
@@ -20,7 +21,7 @@ import com.example.jbmarks.tasks.data.CommentsListResponse
 import com.example.jbmarks.tasks.data.ElapsedTimeItem
 import com.example.jbmarks.tasks.data.ElapsedTimeResponse
 import com.example.jbmarks.tasks.data.FileOperationResponse
-import com.example.jbmarks.tasks.data.FileUploadRequest
+import com.example.jbmarks.tasks.data.FileDetails
 import com.example.jbmarks.tasks.data.FileUploadResponse
 import com.example.jbmarks.tasks.data.TaskCreateRequest
 import com.example.jbmarks.tasks.data.TaskDto
@@ -33,6 +34,7 @@ import com.example.jbmarks.user.data.User
 import com.example.jbmarks.user.data.Workgroup
 import retrofit2.Response
 import retrofit2.http.*
+import com.example.jbmarks.tasks.data.FileUploadRequest
 
 interface BitrixApi {
 
@@ -80,7 +82,7 @@ interface BitrixApi {
     suspend fun markMessagesAsRead(
         @Query("DIALOG_ID") dialogId: String,
         @Query("MESSAGE_ID") messageId: String? = null
-    ): Response<BitrixResponse<Boolean>>
+    ): Response<BitrixResponse<Any>>
 
     /**
      * Get tasks with optional filters and pagination
@@ -99,8 +101,10 @@ interface BitrixApi {
         @Query("select[]") select: List<String>? = null // Fields to return
     ): TasksListResponse
 
-    @GET("calendar.event.get.json")
-    suspend fun getCalendarEvents(): CalendarEventsResponse
+    @POST("calendar.event.get.json")
+    suspend fun getCalendarEvents(
+        @Body request: CalendarEventsRequest
+    ): Response<CalendarEventsResponse>
     
     @GET("user.current.json")
     suspend fun getCurrentUser(): BitrixResponse<User>
@@ -120,7 +124,10 @@ interface BitrixApi {
      * Get a single task by ID
      */
     @GET("tasks.task.get.json")
-    suspend fun getTask(@Query("taskId") taskId: String): Response<TaskResponse>
+    suspend fun getTask(
+        @Query("taskId") taskId: String,
+        @Query("select[]") select: List<String>? = listOf("*", "UF_*")
+    ): Response<TaskResponse>
     
     /**
      * Create a new task
@@ -271,6 +278,7 @@ interface BitrixApi {
     /**
      * Upload file to Bitrix24 Drive
      * Bitrix24 API: disk.storage.uploadfile
+     * Uploads file to the root folder (ID = 1)
      */
     @POST("disk.storage.uploadfile.json")
     suspend fun uploadFile(
@@ -285,4 +293,13 @@ interface BitrixApi {
     suspend fun attachFileToTask(
         @Body request: AttachFileRequest
     ): Response<FileOperationResponse>
+    
+    /**
+     * Get file details by ID
+     * Returns file metadata including DOWNLOAD_URL (which already includes auth)
+     */
+    @GET("disk.file.get.json")
+    suspend fun getFileDetails(
+        @Query("id") fileId: String
+    ): Response<BitrixResponse<FileDetails>>
 }

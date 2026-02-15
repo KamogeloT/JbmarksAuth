@@ -100,12 +100,6 @@ fun DashboardContent(
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-        // User Profile Header (Name, Surname, Groups)
-        item {
-            UserProfileHeader()
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-        
         // Stats Cards
         item {
             Text(
@@ -304,7 +298,7 @@ fun StatCard(
             // Value and title at bottom
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = value.ifEmpty { "0" },
+                    text = value,
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,

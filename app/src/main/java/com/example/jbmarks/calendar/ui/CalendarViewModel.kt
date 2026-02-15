@@ -32,8 +32,10 @@ class CalendarViewModel : ViewModel() {
             _uiState.value = CalendarUiState.Loading
             try {
                 val events = repository.getCalendarEvents()
+                android.util.Log.d("CalendarViewModel", "Loaded ${events.size} calendar events")
                 _uiState.value = CalendarUiState.Success(events)
             } catch (t: Throwable) {
+                android.util.Log.e("CalendarViewModel", "Error loading calendar events", t)
                 _uiState.value = CalendarUiState.Error(t.message ?: "An unexpected error occurred")
             }
         }

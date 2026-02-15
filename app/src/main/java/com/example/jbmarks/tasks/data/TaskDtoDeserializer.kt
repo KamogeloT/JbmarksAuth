@@ -179,7 +179,16 @@ class TaskDtoDeserializer : JsonDeserializer<TaskDto> {
             newCommentsCount = getIntOrNull(jsonObject.get("newCommentsCount")),
             forumTopicId = getStringOrNull(jsonObject.get("forumTopicId")),
             tags = tagsList,
-            files = null, // Files parsing can be added later if needed
+            // Parse files - can be in ufTaskWebdavFiles, FILES, or files field
+            files = jsonObject.get("ufTaskWebdavFiles")?.let { 
+                if (it.isJsonNull) null else it
+            },
+            filesUpper = jsonObject.get("FILES")?.let { 
+                if (it.isJsonNull) null else it
+            },
+            filesLower = jsonObject.get("files")?.let { 
+                if (it.isJsonNull) null else it
+            },
             group = group,
             creator = creator,
             responsible = responsible

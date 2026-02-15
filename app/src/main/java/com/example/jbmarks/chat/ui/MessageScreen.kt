@@ -18,10 +18,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.app.Application
 import com.example.jbmarks.chat.domain.Message
 import com.example.jbmarks.user.data.UserRepository
 import android.content.Intent
@@ -31,23 +34,24 @@ import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import java.io.FileOutputStream
 import java.util.*
+import java.util.regex.Pattern
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessageScreen(
     dialogId: String,
     chatName: String,
-    onNavigateBack: () -> Unit,
-    viewModel: MessageViewModel = viewModel(factory = MessageViewModelFactory(dialogId))
+    onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val application = context.applicationContext as Application
+    val viewModel: MessageViewModel = viewModel(factory = MessageViewModelFactory(dialogId, application))
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-    
-    val context = LocalContext.current
     
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -123,7 +127,13 @@ fun MessageScreen(
                     IconButton(onClick = { /* TODO: Chat info */ }) {
                         Icon(Icons.Default.Info, contentDescription = "Chat Info")
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -131,6 +141,7 @@ fun MessageScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(Color(0xFFECE5DD)) // WhatsApp-like background
         ) {
             // Messages List
             if (isLoading && messages.isEmpty()) {
@@ -143,8 +154,13 @@ fun MessageScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(
+                        start = 8.dp,
+                        end = 8.dp,
+                        top = 8.dp,  // Add top padding to prevent overlap with top bar
+                        bottom = 4.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                     reverseLayout = true
                 ) {
                     items(messages.reversed()) { message ->
@@ -178,94 +194,73 @@ fun MessageBubble(
     val isSent = message.senderId == currentUserId
     
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start
     ) {
-        if (!isSent) {
-            // Avatar for received messages
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = message.senderName.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-        }
         
         Column(
             modifier = Modifier.widthIn(max = 280.dp),
             horizontalAlignment = if (isSent) Alignment.End else Alignment.Start
         ) {
-            if (!isSent) {
-                Text(
-                    text = message.senderName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-            }
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSent) 
-                        MaterialTheme.colorScheme.primary 
-                    else 
-                        MaterialTheme.colorScheme.surfaceVariant
-                ),
-                shape = RoundedCornerShape(16.dp)
+            // WhatsApp-style bubble with tail
+            Box(
+                modifier = Modifier
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 8.dp,
+                            topEnd = 8.dp,
+                            bottomStart = if (isSent) 8.dp else 2.dp,
+                            bottomEnd = if (isSent) 2.dp else 8.dp
+                        )
+                    )
+                    .background(
+                        color = if (isSent) Color(0xFFDCF8C6) else Color.White // WhatsApp green for sent, white for received
+                    )
             ) {
                 Column(
-                    modifier = Modifier.padding(12.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isSent) 
-                            MaterialTheme.colorScheme.onPrimary 
-                        else 
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        text = cleanMessageText(message.text),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp
+                        ),
+                        color = Color(0xFF111B21) // WhatsApp text color
                     )
                     
                     // File attachments
                     if (message.files.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         message.files.forEach { file ->
                             FileAttachmentChip(file = file)
                         }
                     }
                     
-                    // Timestamp and read indicator
+                    // Timestamp and read indicator (WhatsApp style - bottom right)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.Bottom
                     ) {
                         Text(
                             text = message.getFormattedTime(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isSent) 
-                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = Color(0xFF667781).copy(alpha = 0.8f), // WhatsApp timestamp color
+                            modifier = Modifier.padding(start = 4.dp)
                         )
                         if (isSent) {
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Icon(
                                 if (message.isRead) Icons.Default.CheckCircle else Icons.Default.Done,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(14.dp),
                                 tint = if (message.isRead) 
-                                    MaterialTheme.colorScheme.onPrimary 
+                                    Color(0xFF53BDEB) // Blue for read (WhatsApp style)
                                 else 
-                                    MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                                    Color(0xFF667781) // Gray for sent
                             )
                         }
                     }
@@ -274,7 +269,7 @@ fun MessageBubble(
         }
         
         if (isSent) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
         }
     }
 }
@@ -305,49 +300,91 @@ fun MessageInputBar(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shadowElevation = 8.dp
+        color = Color(0xFFF0F2F5), // WhatsApp input bar color
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onAttachClick) {
+            // Attachment button
+            IconButton(
+                onClick = onAttachClick,
+                modifier = Modifier.size(40.dp)
+            ) {
                 Text("📎", style = MaterialTheme.typography.bodyLarge)
             }
             
+            // Input field (WhatsApp style - rounded, filled)
             OutlinedTextField(
                 value = messageText,
                 onValueChange = onMessageTextChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Type a message...") },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp, max = 100.dp),
+                placeholder = { 
+                    Text(
+                        "Type a message...",
+                        color = Color(0xFF667781).copy(alpha = 0.6f)
+                    ) 
+                },
                 maxLines = 4,
                 shape = RoundedCornerShape(24.dp),
-                enabled = !isSending
+                enabled = !isSending,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                ),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp)
             )
             
-            IconButton(
-                onClick = onSendClick,
-                enabled = messageText.isNotBlank() && !isSending
-            ) {
-                if (isSending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
+            // Send button (WhatsApp style - circular when active)
+            if (messageText.isNotBlank() && !isSending) {
+                FloatingActionButton(
+                    onClick = onSendClick,
+                    modifier = Modifier.size(40.dp),
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White
+                ) {
                     Icon(
                         Icons.Default.Send,
                         contentDescription = "Send",
-                        tint = if (messageText.isNotBlank()) 
-                            MaterialTheme.colorScheme.primary 
-                        else 
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+            } else if (isSending) {
+                Box(
+                    modifier = Modifier.size(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                // Empty space when no text
+                Spacer(modifier = Modifier.size(40.dp))
             }
         }
     }
+}
+
+/**
+ * Clean message text by removing [USER=...] tags and keeping only the names
+ */
+fun cleanMessageText(text: String): String {
+    // Pattern to match [USER=ID REPLACE]Name[/USER] or [USER=ID]Name[/USER] or [USER=ID REPLACE][/USER] (empty tags)
+    // First, remove empty USER tags: [USER=ID REPLACE][/USER] or [USER=ID][/USER]
+    var cleaned = Pattern.compile("\\[USER=\\d+(?:\\s+REPLACE)?]\\[/USER]").matcher(text).replaceAll("")
+    // Then, extract names from non-empty USER tags: [USER=ID REPLACE]Name[/USER] or [USER=ID]Name[/USER]
+    cleaned = Pattern.compile("\\[USER=\\d+(?:\\s+REPLACE)?]([^\\[]+)\\[/USER]").matcher(cleaned).replaceAll("$1")
+    return cleaned
 }

@@ -14,6 +14,7 @@ import com.example.jbmarks.tasks.domain.TaskFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 sealed interface TaskDetailUiState {
     object Loading : TaskDetailUiState
@@ -24,7 +25,7 @@ sealed interface TaskDetailUiState {
 
 class TaskDetailViewModel(
     private val taskId: String,
-    private val repository: TasksRepository = TasksRepository(),
+    private val repository: TasksRepository,
     private val application: Application? = null
 ) : ViewModel() {
     
@@ -52,8 +53,9 @@ class TaskDetailViewModel(
             repository.getTask(taskId)
                 .onSuccess { task ->
                     _uiState.value = TaskDetailUiState.Success(task)
-                    // Load comments when task is loaded
+                    // Load comments and files when task is loaded
                     loadComments()
+                    loadFiles()
                 }
                 .onFailure { throwable ->
                     _uiState.value = TaskDetailUiState.Error(
@@ -79,13 +81,15 @@ class TaskDetailViewModel(
         }
     }
     
-    fun addComment(text: String) {
+    fun addComment(text: String, fileIds: List<String> = emptyList()) {
         viewModelScope.launch {
-            repository.addComment(taskId, text)
+            repository.addComment(taskId, text, fileIds)
                 .onSuccess { comment ->
-                    // Add new comment to list
+                    // Add new comment to list optimistically
                     _comments.value = _comments.value + comment
-                    // Reload comments to get full details
+                    
+                    // Wait a moment for Bitrix24 to process the comment, then reload to get full details
+                    delay(500) // 500ms delay to ensure Bitrix24 has processed the comment
                     loadComments()
                     
                     // Create notification for comment (if not from current user)
@@ -104,6 +108,22 @@ class TaskDetailViewModel(
                 }
                 .onFailure { throwable ->
                     android.util.Log.e("TaskDetailViewModel", "Failed to add comment", throwable)
+                }
+        }
+    }
+    
+    fun uploadPhotoAndAddComment(photoPath: String, fileName: String) {
+        viewModelScope.launch {
+            _isUploadingFile.value = true
+            repository.uploadFile(photoPath, fileName)
+                .onSuccess { uploadedFile ->
+                    // Add comment with the uploaded photo attached
+                    addComment("📷 Photo attached", listOf(uploadedFile.id))
+                    _isUploadingFile.value = false
+                }
+                .onFailure { throwable ->
+                    _isUploadingFile.value = false
+                    android.util.Log.e("TaskDetailViewModel", "Failed to upload photo", throwable)
                 }
         }
     }
@@ -237,7 +257,9 @@ class TaskDetailViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(TaskDetailViewModel::class.java)) {
-            return TaskDetailViewModel(taskId, application = application) as T
+            val context = application?.applicationContext
+            val repository = TasksRepository(context)
+            return TaskDetailViewModel(taskId, repository, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

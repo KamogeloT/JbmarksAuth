@@ -42,16 +42,12 @@ class AuthInterceptor(
         }
         
         // Execute request
-        var response = chain.proceed(newRequest)
+        val response = chain.proceed(newRequest)
         
-        // If we get 401 Unauthorized, try to refresh token and retry
-        // Note: We can't use suspend functions in interceptors, so token refresh
-        // will need to be handled at a higher level (ViewModel/Repository)
-        // For now, the 401 response will be returned and handled upstream
-        if (response.code == 401 && accessToken != null) {
-            // Token refresh will be handled by the calling code
-            response.close()
-        }
+        // If we get 401 Unauthorized, return the response as-is
+        // Token refresh will be handled at a higher level (ViewModel/Repository)
+        // DO NOT close the response - Retrofit needs to read the body
+        // The calling code will handle the 401 error appropriately
         
         return response
     }
