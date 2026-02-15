@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,12 +17,14 @@ import androidx.compose.ui.unit.dp
 import com.example.jbmarks.tasks.domain.Comment
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.regex.Pattern
 
 @Composable
 fun CommentSection(
     comments: List<Comment>,
     isLoading: Boolean,
-    onAddComment: (String) -> Unit
+    onAddComment: (String) -> Unit,
+    onTakePhoto: () -> Unit = {}
 ) {
     var commentText by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
@@ -86,15 +89,42 @@ fun CommentSection(
                     placeholder = { Text("Add a comment...") },
                     maxLines = 4,
                     enabled = !isSubmitting,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    trailingIcon = {
+                        IconButton(
+                            onClick = onTakePhoto,
+                            enabled = !isSubmitting
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Take Photo",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Camera button on the left
+                    IconButton(
+                        onClick = onTakePhoto,
+                        enabled = !isSubmitting,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Take Photo",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    // Send button on the right
                     Button(
                         onClick = {
                             if (commentText.isNotBlank()) {
@@ -163,9 +193,7 @@ fun CommentItem(comment: Comment) {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = (comment.authorName?.firstOrNull()?.uppercaseChar()?.toString() 
-                                ?: comment.authorId.firstOrNull()?.toString() 
-                                ?: "?"),
+                            text = comment.authorName?.firstOrNull()?.uppercaseChar()?.toString() ?: "",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -174,18 +202,12 @@ fun CommentItem(comment: Comment) {
                     
                     Column {
                         Text(
-                            text = comment.authorName ?: "User ${comment.authorId}",
+                            text = comment.authorName?.takeIf { it.isNotBlank() } 
+                                ?: "Unknown User",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        if (comment.authorId.isNotEmpty()) {
-                            Text(
-                                text = "ID: ${comment.authorId}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
                 
@@ -201,7 +223,7 @@ fun CommentItem(comment: Comment) {
             
             // Comment Text
             Text(
-                text = comment.text.ifEmpty { "No message" },
+                text = cleanCommentText(comment.text.ifEmpty { "No message" }),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth()
@@ -255,4 +277,14 @@ fun formatCommentDate(dateString: String): String {
         // If parsing fails, return as-is
         dateString
     }
+}
+
+/**
+ * Clean comment text by removing [USER=...] tags and keeping only the names
+ */
+fun cleanCommentText(text: String): String {
+    // Pattern to match [USER=ID REPLACE]Name[/USER] or [USER=ID]Name[/USER]
+    val pattern = Pattern.compile("\\[USER=\\d+(?:\\s+REPLACE)?]([^\\[]+)\\[/USER]")
+    val matcher = pattern.matcher(text)
+    return matcher.replaceAll("$1")
 }

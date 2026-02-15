@@ -43,8 +43,10 @@ data class TaskDto(
     @SerializedName("forumTopicId") val forumTopicId: String?,
     @SerializedName("tags") val tags: List<String>?,
     
-    // Files
-    @SerializedName("ufTaskWebdavFiles") val files: List<Any>?,
+    // Files - can be List or Map
+    @SerializedName("ufTaskWebdavFiles") val files: Any?,
+    @SerializedName("FILES") val filesUpper: Any?,
+    @SerializedName("files") val filesLower: Any?,
     
     // Nested Objects
     @SerializedName("group") val group: TaskGroup?,
@@ -82,7 +84,8 @@ data class TaskFields(
     @SerializedName("PRIORITY") val priority: String?,
     @SerializedName("GROUP_ID") val groupId: String?,
     @SerializedName("PARENT_ID") val parentId: String?,
-    @SerializedName("TAGS") val tags: List<String>?
+    @SerializedName("TAGS") val tags: List<String>?,
+    @SerializedName("UF_TASK_WEBDAV_FILES") val ufTaskWebdavFiles: List<String>? = null
 )
 
 /**

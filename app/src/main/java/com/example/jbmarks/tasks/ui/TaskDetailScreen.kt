@@ -31,16 +31,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import android.content.Intent
 import android.net.Uri
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.ImageLoader
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.example.jbmarks.tasks.ui.isImageFile
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.provider.MediaStore
+import android.content.ContentValues
+import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import android.content.ContentUris
 import android.database.Cursor
 import android.provider.DocumentsContract
-import android.provider.MediaStore
-import android.os.Build
 import android.os.Environment
 import com.example.jbmarks.tasks.domain.Task
 import com.example.jbmarks.tasks.domain.TaskPriority
@@ -112,6 +122,195 @@ fun TaskDetailScreen(
                     val files by viewModel.files.collectAsState()
                     val isUploadingFile by viewModel.isUploadingFile.collectAsState()
                     
+                    // State for image viewer dialog
+                    var showImageDialog by remember { mutableStateOf<String?>(null) }
+                    
+                    // Camera launcher for taking photos
+                    var photoUri by remember { mutableStateOf<Uri?>(null) }
+                    val cameraLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.TakePicture()
+                    ) { success ->
+                        if (success && photoUri != null) {
+                            // Photo was taken successfully, upload and attach to comment
+                            photoUri?.let { uri ->
+                                try {
+                                    // Get file name from URI
+                                    var fileName: String? = null
+                                    if (uri.scheme == "content") {
+                                        val cursor: android.database.Cursor? = context.contentResolver.query(uri, null, null, null, null)
+                                        cursor?.use {
+                                            if (it.moveToFirst()) {
+                                                val nameIndex = it.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                                                if (nameIndex >= 0) {
+                                                    fileName = it.getString(nameIndex)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (fileName == null) {
+                                        fileName = "photo_${System.currentTimeMillis()}.jpg"
+                                    }
+                                    
+                                    // Copy file to app's cache directory
+                                    val cacheDir = java.io.File(context.cacheDir, "uploads")
+                                    cacheDir.mkdirs()
+                                    val tempFile = java.io.File(cacheDir, fileName)
+                                    
+                                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                        java.io.FileOutputStream(tempFile).use { outputStream ->
+                                            inputStream.copyTo(outputStream)
+                                        }
+                                    }
+                                    
+                                    // Upload photo and attach to comment
+                                    viewModel.uploadPhotoAndAddComment(tempFile.absolutePath, fileName)
+                                    
+                                    // Clean up temp file after upload
+                                    tempFile.delete()
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TaskDetailScreen", "Error handling photo", e)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Error processing photo: ${e.message}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Create photo URI
+                    val photoUriLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        if (isGranted) {
+                            try {
+                                // Create a file URI for the photo
+                                val picturesDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+                                    ?: context.filesDir
+                                picturesDir.mkdirs()
+                                val photoFile = java.io.File(picturesDir, "photo_${System.currentTimeMillis()}.jpg")
+                                val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                                    FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        photoFile
+                                    )
+                                } else {
+                                    Uri.fromFile(photoFile)
+                                }
+                                photoUri = uri
+                                cameraLauncher.launch(uri)
+                            } catch (e: Exception) {
+                                android.util.Log.e("TaskDetailScreen", "Error creating photo file", e)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Error setting up camera: ${e.message}",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Camera permission is required to take photos",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                    
+                    // Camera launcher for file attachments (separate from comment camera)
+                    var attachmentPhotoUri by remember { mutableStateOf<Uri?>(null) }
+                    val attachmentCameraLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.TakePicture()
+                    ) { success ->
+                        if (success && attachmentPhotoUri != null) {
+                            // Photo was taken successfully, upload and attach to task
+                            attachmentPhotoUri?.let { uri ->
+                                try {
+                                    // Get file name from URI
+                                    var fileName: String? = null
+                                    if (uri.scheme == "content") {
+                                        val cursor: android.database.Cursor? = context.contentResolver.query(uri, null, null, null, null)
+                                        cursor?.use {
+                                            if (it.moveToFirst()) {
+                                                val nameIndex = it.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                                                if (nameIndex >= 0) {
+                                                    fileName = it.getString(nameIndex)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (fileName == null) {
+                                        fileName = "photo_${System.currentTimeMillis()}.jpg"
+                                    }
+                                    
+                                    // Copy file to app's cache directory
+                                    val cacheDir = java.io.File(context.cacheDir, "uploads")
+                                    cacheDir.mkdirs()
+                                    val tempFile = java.io.File(cacheDir, fileName)
+                                    
+                                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                        java.io.FileOutputStream(tempFile).use { outputStream ->
+                                            inputStream.copyTo(outputStream)
+                                        }
+                                    }
+                                    
+                                    // Upload photo and attach to task (not comment)
+                                    viewModel.uploadAndAttachFile(tempFile.absolutePath, fileName)
+                                    
+                                    // Clean up temp file after upload
+                                    tempFile.delete()
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TaskDetailScreen", "Error handling attachment photo", e)
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Error processing photo: ${e.message}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Permission launcher for attachment camera
+                    val attachmentPhotoUriLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        if (isGranted) {
+                            try {
+                                // Create a file URI for the photo
+                                val picturesDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+                                    ?: context.filesDir
+                                picturesDir.mkdirs()
+                                val photoFile = java.io.File(picturesDir, "attachment_photo_${System.currentTimeMillis()}.jpg")
+                                val uri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                                    FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        photoFile
+                                    )
+                                } else {
+                                    Uri.fromFile(photoFile)
+                                }
+                                attachmentPhotoUri = uri
+                                attachmentCameraLauncher.launch(uri)
+                            } catch (e: Exception) {
+                                android.util.Log.e("TaskDetailScreen", "Error creating attachment photo file", e)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Error setting up camera: ${e.message}",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Camera permission is required to take photos",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                    
                     // File picker launcher
                     val filePickerLauncher = rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.GetContent()
@@ -174,15 +373,78 @@ fun TaskDetailScreen(
                         onRenewTask = { viewModel.renewTask() },
                         onDeleteTask = { viewModel.deleteTask(onNavigateBack) },
                         onAddComment = { viewModel.addComment(it) },
+                        onTakePhoto = {
+                            // Request camera permission and launch camera for comments
+                            photoUriLauncher.launch(android.Manifest.permission.CAMERA)
+                        },
+                        onTakePhotoForAttachment = {
+                            // Request camera permission and launch camera for file attachments
+                            attachmentPhotoUriLauncher.launch(android.Manifest.permission.CAMERA)
+                        },
                         onUploadFileClick = { filePickerLauncher.launch("*/*") },
                         onFileClick = { file -> 
-                            // Open file in browser or download
-                            file.downloadUrl?.let { url ->
-                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                                context.startActivity(intent)
+                            // For images, ALWAYS show in-app viewer; for other files, try to open/download
+                            android.util.Log.d("TaskDetailScreen", "File clicked: name=${file.name}, type=${file.type}, downloadUrl=${file.downloadUrl}, isImage=${isImageFile(file.type)}")
+                            
+                            // Check if it's an image by type OR by file extension
+                            val isImage = isImageFile(file.type) || 
+                                         file.name.endsWith(".jpg", ignoreCase = true) ||
+                                         file.name.endsWith(".jpeg", ignoreCase = true) ||
+                                         file.name.endsWith(".png", ignoreCase = true) ||
+                                         file.name.endsWith(".gif", ignoreCase = true) ||
+                                         file.name.endsWith(".webp", ignoreCase = true) ||
+                                         file.name.endsWith(".bmp", ignoreCase = true)
+                            
+                            if (isImage && file.downloadUrl != null) {
+                                // Show image in full screen viewer - ALWAYS for images
+                                android.util.Log.d("TaskDetailScreen", "Showing image in dialog: ${file.downloadUrl}")
+                                showImageDialog = file.downloadUrl
+                            } else {
+                                android.util.Log.d("TaskDetailScreen", "Not showing image dialog - isImage: $isImage, hasUrl: ${file.downloadUrl != null}")
+                                // For non-images, try to open in browser or download
+                                file.downloadUrl?.let { url ->
+                                    try {
+                                        // Check if URL is a valid HTTP/HTTPS URL (not a REST API endpoint)
+                                        if (url.startsWith("http://") || url.startsWith("https://")) {
+                                            // Check if it's a REST API endpoint (contains /rest/ and method name)
+                                            if (url.contains("/rest/") && (url.contains(".json") || url.contains("?"))) {
+                                                // This is a REST API endpoint, not a direct download URL
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "File download URL is not available. Please try again later.",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            } else {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                                context.startActivity(intent)
+                                            }
+                                        } else {
+                                            // If it's not a valid URL, show error
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "Cannot open file: Invalid URL format",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Cannot open file: ${e.message}",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
                             }
                         }
                     )
+                    
+                    // Show image viewer dialog if image URL is set
+                    showImageDialog?.let { imageUrl ->
+                        ImageViewerDialog(
+                            imageUrl = imageUrl,
+                            onDismiss = { showImageDialog = null }
+                        )
+                    }
                 }
 
                 is TaskDetailUiState.Error -> {
@@ -198,6 +460,7 @@ fun TaskDetailScreen(
                     }
                 }
             }
+            
         }
     }
 }
@@ -216,7 +479,9 @@ fun TaskDetailContent(
     onDeleteTask: () -> Unit,
     onAddComment: (String) -> Unit,
     onUploadFileClick: () -> Unit,
-    onFileClick: (com.example.jbmarks.tasks.domain.TaskFile) -> Unit
+    onFileClick: (com.example.jbmarks.tasks.domain.TaskFile) -> Unit,
+    onTakePhoto: () -> Unit = {},
+    onTakePhotoForAttachment: () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -313,7 +578,8 @@ fun TaskDetailContent(
         FileAttachmentSection(
             files = files,
             onUploadFile = onUploadFileClick,
-            onFileClick = onFileClick
+            onFileClick = onFileClick,
+            onTakePhoto = onTakePhotoForAttachment
         )
         
         if (isUploadingFile) {
@@ -337,7 +603,8 @@ fun TaskDetailContent(
         CommentSection(
             comments = comments,
             isLoading = isLoadingComments,
-            onAddComment = onAddComment
+            onAddComment = onAddComment,
+            onTakePhoto = onTakePhoto
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -765,5 +1032,77 @@ fun formatDate(dateString: String): String {
         date.format(outputFormat)
     } catch (e: Exception) {
         dateString
+    }
+}
+
+@Composable
+fun ImageViewerDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+        ) {
+            // Close button
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            
+            // Image with authenticated ImageLoader
+            val context = LocalContext.current
+            val imageLoader = remember {
+                // Create OkHttpClient with AuthInterceptor for authenticated image requests
+                val tokenManager = com.example.jbmarks.auth.data.TokenManager(context)
+                val logging = okhttp3.logging.HttpLoggingInterceptor().apply {
+                    level = okhttp3.logging.HttpLoggingInterceptor.Level.BASIC
+                }
+                val okHttpClient = okhttp3.OkHttpClient.Builder()
+                    .addInterceptor(com.example.jbmarks.network.AuthInterceptor(context, tokenManager))
+                    .addInterceptor(logging)
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                
+                coil.ImageLoader.Builder(context)
+                    .okHttpClient(okHttpClient)
+                    .build()
+            }
+            
+            val imageRequest = remember(imageUrl) {
+                ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .crossfade(true)
+                    .build()
+            }
+            
+            AsyncImage(
+                model = imageRequest,
+                imageLoader = imageLoader,
+                contentDescription = "Full size image",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
     }
 }

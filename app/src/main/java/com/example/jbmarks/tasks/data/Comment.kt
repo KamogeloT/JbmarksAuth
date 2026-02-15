@@ -8,18 +8,38 @@ import com.google.gson.annotations.SerializedName
  */
 data class Comment(
     @SerializedName("id") val id: String?,
+    @SerializedName("ID") val idUpper: String? = null,
     @SerializedName("taskId") val taskId: String?,
     @SerializedName("authorId") val authorId: String?,
+    @SerializedName("AUTHOR_ID") val authorIdUpper: String? = null,
     @SerializedName("postMessage") val text: String?,
+    @SerializedName("POST_MESSAGE") val textUpper: String? = null,
     @SerializedName("createdDate") val createdDate: String?,
     @SerializedName("postDate") val postDate: String?,
+    @SerializedName("POST_DATE") val postDateUpper: String? = null,
     @SerializedName("files") val files: List<CommentFile>?,
     // Author information (may be nested object)
     @SerializedName("author") val author: CommentAuthor?,
     @SerializedName("AUTHOR") val authorUpper: CommentAuthor? = null
 ) {
+    fun getAuthorIdValue(): String? {
+        return authorId ?: authorIdUpper ?: author?.authorId ?: author?.authorIdUpper ?: authorUpper?.authorId ?: authorUpper?.authorIdUpper
+    }
+    
     fun getAuthorName(): String? {
         return author?.getAuthorDisplayName() ?: authorUpper?.getAuthorDisplayName()
+    }
+    
+    fun getTextValue(): String? {
+        return text ?: textUpper
+    }
+    
+    fun getDateValue(): String? {
+        return createdDate ?: postDate ?: postDateUpper
+    }
+    
+    fun getIdValue(): String? {
+        return id ?: idUpper
     }
 }
 
@@ -64,9 +84,14 @@ data class CommentFile(
 /**
  * Request body for adding a comment
  * Updated to use task.commentitem.add (recommended) instead of deprecated tasks.task.comment.add
+ * Bitrix24 expects arFields as an array containing the comment fields
  */
 data class AddCommentRequest(
-    @SerializedName("TASK_ID") val taskId: String,
+    @SerializedName("arFields") val arFields: List<CommentFields>
+)
+
+data class CommentFields(
+    @SerializedName("TASK_ID") val taskId: Int, // Bitrix24 expects integer, not string
     @SerializedName("POST_MESSAGE") val text: String,
     @SerializedName("FILES") val files: List<String>? = null,
     @SerializedName("AUTHOR_ID") val authorId: String? = null // Optional, defaults to current user

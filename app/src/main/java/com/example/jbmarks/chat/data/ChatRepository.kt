@@ -9,6 +9,7 @@ import com.example.jbmarks.chat.domain.Message
 import com.example.jbmarks.chat.domain.MessageFile
 import com.example.jbmarks.network.RetrofitInstance
 import com.example.jbmarks.user.data.BitrixResponse
+import com.example.jbmarks.user.data.User
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import retrofit2.Response
@@ -51,10 +52,69 @@ class ChatRepository(private val context: Context? = null) {
             val response = api.getChatMessages(dialogId, limit, lastId)
             if (response.isSuccessful && response.body()?.result?.messages != null) {
                 val messages = response.body()!!.result!!.messages!!
-                messages.map { mapMessageDtoToDomain(it, dialogId) }
+                
+                // Collect unique sender IDs
+                val senderIds = messages.mapNotNull { it.authorId }.filter { it.isNotBlank() }.distinct()
+                
+                // Fetch user information for all senders
+                val userMap = mutableMapOf<String, String>()
+                for (senderId in senderIds) {
+                    try {
+                        val userResponse = api.getUser(senderId)
+                        if (userResponse.result?.isNotEmpty() == true) {
+                            val user = userResponse.result!![0]
+                            userMap[senderId] = user.fullName
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to fetch user info for sender $senderId: ${e.message}")
+                    }
+                }
+                
+                // Map messages with sender names
+                messages.map { dto ->
+                    val senderName = userMap[dto.authorId ?: ""] ?: ""
+                    mapMessageDtoToDomain(dto, dialogId, senderName)
+                }
             } else {
                 val error = response.errorBody()?.string() ?: "Unknown error"
                 Log.e(TAG, "Failed to get messages: $error")
+                emptyList()
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.w(TAG, "Timeout fetching messages for dialog $dialogId, retrying...", e)
+            // Retry once on timeout
+            return try {
+                val retryResponse = api.getChatMessages(dialogId, limit, lastId)
+                if (retryResponse.isSuccessful && retryResponse.body()?.result?.messages != null) {
+                    val messages = retryResponse.body()!!.result!!.messages!!
+                    
+                    // Collect unique sender IDs
+                    val senderIds = messages.mapNotNull { it.authorId }.filter { it.isNotBlank() }.distinct()
+                    
+                    // Fetch user information for all senders
+                    val userMap = mutableMapOf<String, String>()
+                    for (senderId in senderIds) {
+                        try {
+                            val userResponse = api.getUser(senderId)
+                            if (userResponse.result?.isNotEmpty() == true) {
+                                val user = userResponse.result!![0]
+                                userMap[senderId] = user.fullName
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to fetch user info for sender $senderId: ${e.message}")
+                        }
+                    }
+                    
+                    // Map messages with sender names
+                    messages.map { dto ->
+                        val senderName = userMap[dto.authorId ?: ""] ?: ""
+                        mapMessageDtoToDomain(dto, dialogId, senderName)
+                    }
+                } else {
+                    emptyList()
+                }
+            } catch (retryException: Exception) {
+                Log.e(TAG, "Error fetching messages after retry", retryException)
                 emptyList()
             }
         } catch (e: Exception) {
@@ -169,14 +229,14 @@ class ChatRepository(private val context: Context? = null) {
     /**
      * Map message DTO to domain model
      */
-    private fun mapMessageDtoToDomain(dto: MessageDto, dialogId: String): Message {
+    private fun mapMessageDtoToDomain(dto: MessageDto, dialogId: String, senderName: String = ""): Message {
         val timestamp = parseDate(dto.date) ?: System.currentTimeMillis()
         return Message(
             id = dto.id ?: "",
             chatId = extractChatId(dialogId),
             dialogId = dialogId,
             senderId = dto.authorId ?: "",
-            senderName = "", // Will be populated by fetching user details
+            senderName = senderName,
             text = dto.text ?: "",
             timestamp = timestamp,
             isRead = dto.unread != "Y",

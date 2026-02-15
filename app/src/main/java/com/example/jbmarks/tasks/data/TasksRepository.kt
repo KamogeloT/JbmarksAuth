@@ -9,11 +9,28 @@ import com.example.jbmarks.tasks.domain.Task
 import com.example.jbmarks.tasks.domain.TaskFile as DomainTaskFile
 import com.example.jbmarks.tasks.domain.TaskPriority
 import com.example.jbmarks.tasks.domain.TaskStatus
+import com.example.jbmarks.tasks.data.TaskFileDto
+import com.example.jbmarks.tasks.data.FileDetails
+import com.example.jbmarks.tasks.data.AttachedObject
+import com.example.jbmarks.tasks.data.AttachedObjectResponse
+import com.example.jbmarks.config.Config
+import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.example.jbmarks.tasks.domain.mapDataToDomain
 import com.example.jbmarks.user.data.UserRepository
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.FormBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import java.io.File
 import java.util.*
+import java.util.concurrent.TimeUnit
 import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class TasksRepository(private val context: Context? = null) {
 
@@ -165,7 +182,8 @@ class TasksRepository(private val context: Context? = null) {
         deadline: String? = null,
         priority: TaskPriority = TaskPriority.NORMAL,
         responsibleId: String? = null,
-        groupId: String? = null
+        groupId: String? = null,
+        fileIds: List<String> = emptyList()
     ): Result<Task> {
         return try {
             val request = TaskCreateRequest(
@@ -177,7 +195,8 @@ class TasksRepository(private val context: Context? = null) {
                     responsibleId = responsibleId,
                     groupId = groupId,
                     parentId = null,
-                    tags = null
+                    tags = null,
+                    ufTaskWebdavFiles = if (fileIds.isNotEmpty()) fileIds else null
                 )
             )
             
@@ -207,7 +226,8 @@ class TasksRepository(private val context: Context? = null) {
         description: String? = null,
         deadline: String? = null,
         priority: TaskPriority = TaskPriority.NORMAL,
-        responsibleId: String? = null
+        responsibleId: String? = null,
+        fileIds: List<String> = emptyList()
     ): Result<Task> {
         return try {
             val request = TaskCreateRequest(
@@ -219,7 +239,8 @@ class TasksRepository(private val context: Context? = null) {
                     responsibleId = responsibleId,
                     groupId = null,
                     parentId = null,
-                    tags = null
+                    tags = null,
+                    ufTaskWebdavFiles = if (fileIds.isNotEmpty()) fileIds else null
                 )
             )
             
@@ -361,8 +382,10 @@ class TasksRepository(private val context: Context? = null) {
                 val commentsListResponse = response.body()!!
                 val commentsList = commentsListResponse.result ?: emptyList()
                 
-                // Collect unique author IDs
-                val authorIds = commentsList.mapNotNull { it.authorId }.distinct()
+                // Collect unique author IDs (using the helper method that handles both cases)
+                val authorIds = commentsList.mapNotNull { it.getAuthorIdValue() }.distinct()
+                
+                Log.d(TAG, "Found ${authorIds.size} unique author IDs: $authorIds")
                 
                 // Fetch user information for all authors
                 val userMap = mutableMapOf<String, String>()
@@ -372,20 +395,26 @@ class TasksRepository(private val context: Context? = null) {
                         if (userResponse.result?.isNotEmpty() == true) {
                             val user = userResponse.result!![0]
                             userMap[authorId] = user.fullName
+                            Log.d(TAG, "Fetched user info for $authorId: ${user.fullName}")
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to fetch user info for author $authorId: ${e.message}")
                     }
                 }
                 
+                Log.d(TAG, "User map contains ${userMap.size} entries")
+                
                 val comments = commentsList.mapNotNull { comment ->
                     try {
+                        val commentAuthorId = comment.getAuthorIdValue()
                         // Get author name from map or from comment's author object
                         val authorName = comment.getAuthorName() 
-                            ?: userMap[comment.authorId]
+                            ?: (commentAuthorId?.let { userMap[it] })
                             ?: null
                         
-                        mapCommentToDomain(comment, authorName)
+                        Log.d(TAG, "Comment ID: ${comment.getIdValue()}, Author ID: $commentAuthorId, Author Name: $authorName")
+                        
+                        mapCommentToDomain(comment, authorName, commentAuthorId)
                     } catch (e: Exception) {
                         Log.e(TAG, "Error mapping comment", e)
                         null
@@ -407,18 +436,21 @@ class TasksRepository(private val context: Context? = null) {
     
     /**
      * Add a comment to a task
+     * Uses OAuth authentication so the comment is posted as the logged-in user
      */
-    suspend fun addComment(taskId: String, text: String): Result<DomainComment> {
+    suspend fun addComment(taskId: String, text: String, fileIds: List<String> = emptyList()): Result<DomainComment> {
         return try {
-            val request = AddCommentRequest(
-                taskId = taskId,
-                text = text
-            )
-            val response = api.addTaskComment(request)
+            // Convert taskId string to integer as Bitrix24 API requires
+            val taskIdInt = taskId.toIntOrNull()
+            if (taskIdInt == null) {
+                Log.e(TAG, "Invalid taskId: $taskId (cannot convert to integer)")
+                return Result.failure(Exception("Invalid task ID: $taskId"))
+            }
             
-            if (response.isSuccessful && response.body()?.result?.id != null) {
-                val commentId = response.body()!!.result!!.id!!
-                Log.d(TAG, "Comment added successfully: $commentId")
+            // Use OAuth authentication (not webhook) so comment is posted as logged-in user
+            val commentId = addCommentWithOAuth(taskIdInt, text, fileIds)
+            if (commentId != null) {
+                Log.d(TAG, "Comment added successfully via OAuth: $commentId")
                 
                 // Fetch the newly created comment to get full details
                 val commentsResult = getTaskComments(taskId)
@@ -442,13 +474,261 @@ class TasksRepository(private val context: Context? = null) {
                     )
                 )
             } else {
-                val error = response.errorBody()?.string() ?: "Unknown error"
-                Log.e(TAG, "Failed to add comment: $error")
-                Result.failure(Exception("Failed to add comment: $error"))
+                Log.e(TAG, "Failed to add comment via OAuth")
+                Result.failure(Exception("Failed to add comment via OAuth"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error adding comment", e)
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Add comment using OAuth authentication (logged-in user)
+     * Uses the same JSON array format but with OAuth token instead of webhook
+     */
+    private suspend fun addCommentWithOAuth(taskId: Int, text: String, fileIds: List<String>): String? {
+        return try {
+            // Get portal URL
+            val portalUrl = if (context != null) {
+                com.example.jbmarks.auth.data.TokenManager(context).getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
+            } else {
+                Config.DEFAULT_PORTAL_URL
+            }
+            
+            // Get OAuth access token
+            val tokenManager = if (context != null) {
+                com.example.jbmarks.auth.data.TokenManager(context)
+            } else {
+                Log.w(TAG, "Context not available, cannot get OAuth token")
+                return null
+            }
+            
+            val accessToken = tokenManager.getAccessToken()
+            if (accessToken == null) {
+                Log.w(TAG, "OAuth token not available, cannot add comment")
+                return null
+            }
+            
+            // Construct OAuth API URL: /rest/task.commentitem.add.json?auth=<token>
+            val oauthUrl = "$portalUrl/rest/task.commentitem.add.json?auth=$accessToken"
+            Log.d(TAG, "Calling task.commentitem.add with OAuth: $oauthUrl")
+            
+            // Build JSON array request body (same format as webhook)
+            // Bitrix24 expects: [taskId, {"POST_MESSAGE": "text", "FILES": [...]}]
+            val commentFields = mutableMapOf<String, Any>(
+                "POST_MESSAGE" to text
+            )
+            
+            // Add files if provided
+            if (fileIds.isNotEmpty()) {
+                commentFields["FILES"] = fileIds
+            }
+            
+            // Create JSON array: [taskId, {fields}]
+            val jsonArray = JsonArray()
+            jsonArray.add(taskId) // Index 0: task ID
+            jsonArray.add(Gson().toJsonTree(commentFields)) // Index 1: comment fields object
+            
+            val jsonBody = Gson().toJson(jsonArray)
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBodyObj = jsonBody.toRequestBody(mediaType)
+            
+            Log.d(TAG, "Request body (JSON array with OAuth): $jsonBody")
+            
+            // Make HTTP call using OkHttpClient with OAuth token in URL
+            val response = withContext(Dispatchers.IO) {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .build()
+                
+                val request = Request.Builder()
+                    .url(oauthUrl)
+                    .post(requestBodyObj)
+                    .addHeader("Content-Type", "application/json; charset=utf-8")
+                    .build()
+                
+                client.newCall(request).execute()
+            }
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                if (responseBody != null) {
+                    Log.d(TAG, "Response from task.commentitem.add (OAuth): $responseBody")
+                    val gson = Gson()
+                    
+                    // Parse response (same as webhook - result can be number or object)
+                    try {
+                        val jsonObject = gson.fromJson(responseBody, JsonObject::class.java)
+                        val resultElement = jsonObject.get("result")
+                        
+                        if (resultElement != null && !resultElement.isJsonNull) {
+                            val commentId = when {
+                                resultElement.isJsonPrimitive -> {
+                                    val primitive = resultElement.asJsonPrimitive
+                                    if (primitive.isNumber) {
+                                        primitive.asInt.toString()
+                                    } else {
+                                        primitive.asString
+                                    }
+                                }
+                                resultElement.isJsonObject -> {
+                                    resultElement.asJsonObject.get("ID")?.asString
+                                        ?: resultElement.asJsonObject.get("id")?.asString
+                                }
+                                else -> null
+                            }
+                            
+                            if (commentId != null) {
+                                Log.d(TAG, "Successfully parsed comment ID: $commentId")
+                                return commentId
+                            }
+                        }
+                        
+                        Log.e(TAG, "No comment ID found in response: $responseBody")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing comment response: ${e.message}", e)
+                    }
+                }
+            } else {
+                val errorBody = response.body?.string()
+                Log.e(TAG, "Failed to add comment via OAuth: HTTP ${response.code}, error: $errorBody")
+            }
+            
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding comment with OAuth: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * Add comment using webhook authentication (user 1) - DEPRECATED
+     * Kept for reference but not used anymore
+     * Uses format: /rest/1/<webhook_token>/task.commentitem.add.json
+     * This is separate from OAuth2 authentication
+     */
+    private suspend fun addCommentWithWebhook(taskId: Int, text: String, fileIds: List<String>): String? {
+        return try {
+            // Get portal URL
+            val portalUrl = if (context != null) {
+                com.example.jbmarks.auth.data.TokenManager(context).getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
+            } else {
+                Config.DEFAULT_PORTAL_URL
+            }
+            
+            val webhookToken = getWebhookToken()
+            if (webhookToken == null) {
+                Log.w(TAG, "Webhook token not available, cannot add comment")
+                return null
+            }
+            
+            // Construct webhook URL: /rest/1/<token>/task.commentitem.add.json
+            // Bitrix24 webhook expects task.commentitem.add.json (matches Retrofit interface)
+            val webhookUrl = "$portalUrl/rest/${Config.WEBHOOK_USER_ID}/$webhookToken/task.commentitem.add.json"
+            Log.d(TAG, "Calling task.commentitem.add with webhook: $webhookUrl")
+            
+            // Build JSON array request body
+            // Bitrix24 expects: [taskId, {"POST_MESSAGE": "text", "AUTHOR_ID": "userId", "FILES": [...]}]
+            // Format: [6, {"POST_MESSAGE": "comment text", "AUTHOR_ID": "123"}]
+            val commentFields = mutableMapOf<String, Any>(
+                "POST_MESSAGE" to text
+            )
+            
+            // Add current user ID as author
+            val currentUserId = getCurrentUserId()
+            if (currentUserId != null) {
+                commentFields["AUTHOR_ID"] = currentUserId
+                Log.d(TAG, "Adding comment with author ID: $currentUserId")
+            } else {
+                Log.w(TAG, "Could not get current user ID, comment will use webhook user as author")
+            }
+            
+            // Add files if provided
+            if (fileIds.isNotEmpty()) {
+                commentFields["FILES"] = fileIds
+            }
+            
+            // Create JSON array: [taskId, {fields}]
+            val jsonArray = JsonArray()
+            jsonArray.add(taskId) // Index 0: task ID
+            jsonArray.add(Gson().toJsonTree(commentFields)) // Index 1: comment fields object
+            
+            val jsonBody = Gson().toJson(jsonArray)
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBodyObj = jsonBody.toRequestBody(mediaType)
+            
+            Log.d(TAG, "Request body (JSON array): $jsonBody")
+            
+            // Make direct HTTP call using OkHttpClient (no OAuth interceptor)
+            // Use withContext to run blocking call on IO dispatcher
+            val response = withContext(Dispatchers.IO) {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .build()
+                
+                val request = Request.Builder()
+                    .url(webhookUrl)
+                    .post(requestBodyObj)
+                    .addHeader("Content-Type", "application/json; charset=utf-8")
+                    .build()
+                
+                client.newCall(request).execute()
+            }
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                if (responseBody != null) {
+                    Log.d(TAG, "Response from task.commentitem.add: $responseBody")
+                    val gson = Gson()
+                    
+                    // Bitrix24 webhook returns result as a number directly: {"result":31,...}
+                    // Not as an object: {"result":{"ID":"31"}}
+                    try {
+                        val jsonObject = gson.fromJson(responseBody, com.google.gson.JsonObject::class.java)
+                        val resultElement = jsonObject.get("result")
+                        
+                        if (resultElement != null && !resultElement.isJsonNull) {
+                            // result can be a number or string
+                            val commentId = when {
+                                resultElement.isJsonPrimitive -> {
+                                    val primitive = resultElement.asJsonPrimitive
+                                    if (primitive.isNumber) {
+                                        primitive.asInt.toString()
+                                    } else {
+                                        primitive.asString
+                                    }
+                                }
+                                resultElement.isJsonObject -> {
+                                    // Fallback: if it's an object, try to get ID field
+                                    resultElement.asJsonObject.get("ID")?.asString
+                                        ?: resultElement.asJsonObject.get("id")?.asString
+                                }
+                                else -> null
+                            }
+                            
+                            if (commentId != null) {
+                                Log.d(TAG, "Successfully parsed comment ID: $commentId")
+                                return commentId
+                            }
+                        }
+                        
+                        Log.e(TAG, "No comment ID found in response: $responseBody")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing comment response: ${e.message}", e)
+                    }
+                }
+            } else {
+                val errorBody = response.body?.string()
+                Log.e(TAG, "Failed to add comment via webhook: HTTP ${response.code}, error: $errorBody")
+            }
+            
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding comment with webhook: ${e.message}", e)
+            null
         }
     }
     
@@ -466,24 +746,58 @@ class TasksRepository(private val context: Context? = null) {
             val fileBytes = file.readBytes()
             val base64Content = Base64.encodeToString(fileBytes, Base64.NO_WRAP)
             
+            // Upload to Bitrix24 root folder using disk.storage.uploadfile
             val request = com.example.jbmarks.tasks.data.FileUploadRequest(
-                folderId = 1, // Default to root folder
+                folderId = 1, // Root folder
                 data = com.example.jbmarks.tasks.data.FileData(name = fileName),
                 fileContent = base64Content
             )
-            
             val response = api.uploadFile(request)
             
             if (response.isSuccessful && response.body()?.result != null) {
                 val uploadResult = response.body()!!.result!!
-                val taskFile = DomainTaskFile(
-                    id = uploadResult.id ?: "",
-                    name = uploadResult.name ?: fileName,
-                    size = uploadResult.size?.toLongOrNull() ?: fileBytes.size.toLong(),
-                    type = uploadResult.type ?: "application/octet-stream",
-                    downloadUrl = uploadResult.downloadUrl ?: uploadResult.url
-                )
-                Log.d(TAG, "File uploaded successfully: ${taskFile.id}")
+                val fileId = uploadResult.id ?: ""
+                
+                if (fileId.isBlank()) {
+                    Log.e(TAG, "Upload response missing file ID")
+                    return Result.failure(Exception("Upload response missing file ID"))
+                }
+                
+                Log.d(TAG, "File uploaded successfully, ID: $fileId")
+                
+                // Fetch file details to get authenticated DOWNLOAD_URL
+                // The upload response might not include a proper authenticated download URL
+                val fileDetails = fetchFileDetails(fileId)
+                
+                val taskFile = if (fileDetails != null) {
+                    // Use the authenticated download URL from disk.file.get
+                    Log.d(TAG, "Using authenticated download URL from disk.file.get: ${fileDetails.downloadUrl}")
+                    fileDetails
+                } else {
+                    // Fallback: use download URL from upload response or construct one
+                    val downloadUrl = uploadResult.downloadUrl ?: uploadResult.url
+                    if (downloadUrl.isNullOrBlank()) {
+                        // Construct download URL - disk.file.download includes auth via interceptor
+                        val constructedUrl = "https://jbmarks.sdinmotion.co.za/rest/disk.file.download?ID=$fileId"
+                        Log.d(TAG, "Constructed download URL: $constructedUrl")
+                        DomainTaskFile(
+                            id = fileId,
+                            name = uploadResult.name ?: fileName,
+                            size = uploadResult.size?.toLongOrNull() ?: fileBytes.size.toLong(),
+                            type = uploadResult.type ?: "application/octet-stream",
+                            downloadUrl = constructedUrl
+                        )
+                    } else {
+                        DomainTaskFile(
+                            id = fileId,
+                            name = uploadResult.name ?: fileName,
+                            size = uploadResult.size?.toLongOrNull() ?: fileBytes.size.toLong(),
+                            type = uploadResult.type ?: "application/octet-stream",
+                            downloadUrl = downloadUrl
+                        )
+                    }
+                }
+                
                 Result.success(taskFile)
             } else {
                 val error = response.errorBody()?.string() ?: "Unknown error"
@@ -528,10 +842,29 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun getTaskFiles(taskId: String): Result<List<DomainTaskFile>> {
         return try {
-            // For now, return empty list as files need to be extracted from TaskDto
-            // This will be enhanced when we parse files from task response
-            // Files are typically in ufTaskWebdavFiles field
-            Result.success(emptyList())
+            // Get task details which includes files
+            val response = api.getTask(taskId)
+            if (response.isSuccessful && response.body()?.result?.task != null) {
+                val taskDto = response.body()!!.result!!.task!!
+                
+                // Try multiple possible file fields
+                val filesData = taskDto.files ?: taskDto.filesUpper ?: taskDto.filesLower
+                Log.d(TAG, "Task DTO - files: ${taskDto.files}, filesUpper: ${taskDto.filesUpper}, filesLower: ${taskDto.filesLower}")
+                Log.d(TAG, "Using filesData: $filesData, type: ${filesData?.javaClass?.simpleName}")
+                
+                val files = parseFilesFromDto(filesData, taskId)
+                Log.d(TAG, "Found ${files.size} files for task $taskId")
+                if (files.isNotEmpty()) {
+                    files.forEach { file ->
+                        Log.d(TAG, "  - File: ${file.name} (${file.type}), URL: ${file.downloadUrl}")
+                    }
+                }
+                Result.success(files)
+            } else {
+                val error = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Failed to get task files: $error")
+                Result.failure(Exception("Failed to get task files: $error"))
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error getting task files", e)
             Result.failure(e)
@@ -539,16 +872,331 @@ class TasksRepository(private val context: Context? = null) {
     }
     
     /**
+     * Parse files from TaskDto.ufTaskWebdavFiles
+     * Files can be objects, file IDs, a List, JsonArray, or a Map
+     */
+    private suspend fun parseFilesFromDto(files: Any?, taskId: String? = null): List<DomainTaskFile> {
+        if (files == null) {
+            Log.d(TAG, "Files field is null")
+            return emptyList()
+        }
+        
+        Log.d(TAG, "Parsing files, type: ${files::class.simpleName}, value: $files")
+        
+        val parsedFiles = mutableListOf<DomainTaskFile>()
+        val fileItems: List<Any> = when (files) {
+            is List<*> -> {
+                @Suppress("UNCHECKED_CAST")
+                files as List<Any>
+            }
+            is JsonArray -> {
+                // Gson JsonArray - convert to list, handle both numbers and strings
+                files.mapNotNull { element ->
+                    when {
+                        element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> {
+                            element.asInt.toString()
+                        }
+                        element.isJsonPrimitive && element.asJsonPrimitive.isString -> {
+                            element.asString
+                        }
+                        else -> null
+                    }
+                }
+            }
+            is Map<*, *> -> {
+                // Files are in a map, extract values
+                @Suppress("UNCHECKED_CAST")
+                (files as Map<String, Any>).values.toList()
+            }
+            else -> {
+                Log.w(TAG, "Files field is unexpected type: ${files::class.simpleName}")
+                return emptyList()
+            }
+        }
+        
+        if (fileItems.isEmpty()) {
+            Log.d(TAG, "No file items found")
+            return emptyList()
+        }
+        
+        Log.d(TAG, "Processing ${fileItems.size} file items")
+        
+        for (fileItem in fileItems) {
+            try {
+                when {
+                    fileItem is Map<*, *> -> {
+                        // File is an object with properties
+                        @Suppress("UNCHECKED_CAST")
+                        val fileMap = fileItem as Map<String, Any?>
+                        val fileDto = TaskFileDto(
+                            id = fileMap["ID"] as? String ?: fileMap["id"] as? String,
+                            idLower = fileMap["id"] as? String,
+                            name = fileMap["NAME"] as? String ?: fileMap["name"] as? String,
+                            nameLower = fileMap["name"] as? String,
+                            size = fileMap["SIZE"] as? String ?: fileMap["size"] as? String,
+                            sizeLower = fileMap["size"] as? String,
+                            type = fileMap["TYPE"] as? String ?: fileMap["type"] as? String,
+                            typeLower = fileMap["type"] as? String,
+                            downloadUrl = fileMap["DOWNLOAD_URL"] as? String ?: fileMap["downloadUrl"] as? String,
+                            downloadUrlLower = fileMap["downloadUrl"] as? String,
+                            url = fileMap["URL"] as? String ?: fileMap["url"] as? String,
+                            urlLower = fileMap["url"] as? String
+                        )
+                        
+                        val fileId = fileDto.getIdValue()
+                        if (fileId == null) {
+                            Log.w(TAG, "File item missing ID, skipping: $fileMap")
+                            continue
+                        }
+                        
+                        val fileName = fileDto.getNameValue() ?: "Unknown"
+                        val fileSize = fileDto.getSizeValue()?.toLongOrNull() ?: 0L
+                        val fileType = fileDto.getTypeValue() ?: "application/octet-stream"
+                        var downloadUrl = fileDto.getDownloadUrlValue()
+                        
+                        // If download URL is missing, construct it from file ID
+                        if (downloadUrl.isNullOrBlank()) {
+                            // Try to construct download URL from file ID
+                            // Bitrix24 file download URL format: /rest/disk.file.get?ID={fileId}
+                            downloadUrl = "https://jbmarks.sdinmotion.co.za/rest/disk.file.get?ID=$fileId"
+                            Log.d(TAG, "Constructed download URL for file $fileId: $downloadUrl")
+                        }
+                        
+                        Log.d(TAG, "Parsed file: id=$fileId, name=$fileName, type=$fileType, url=$downloadUrl")
+                        
+                        parsedFiles.add(
+                            DomainTaskFile(
+                                id = fileId,
+                                name = fileName,
+                                size = fileSize,
+                                type = fileType,
+                                downloadUrl = downloadUrl
+                            )
+                        )
+                    }
+                    fileItem is String || fileItem is Number -> {
+                        // File is just an ID - these are attachment IDs from UF_TASK_WEBDAV_FILES
+                        // Try disk.attachedObject.get with webhook auth first (user 1)
+                        val attachmentId = fileItem.toString()
+                        Log.d(TAG, "File item is ID only: $attachmentId, trying disk.attachedObject.get with webhook auth")
+                        
+                        try {
+                            val attachedFile = fetchAttachedObjectWithWebhook(attachmentId)
+                            if (attachedFile != null) {
+                                parsedFiles.add(attachedFile)
+                                Log.d(TAG, "Successfully fetched attached object for ID $attachmentId: ${attachedFile.name}, URL: ${attachedFile.downloadUrl}")
+                            } else {
+                                Log.w(TAG, "disk.attachedObject.get failed for ID $attachmentId, file will not be displayed")
+                                // Don't add file if webhook method fails - we only use webhook for attachments
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error fetching attached object for ID $attachmentId: ${e.message}", e)
+                            // Don't add file if webhook method fails
+                        }
+                    }
+                    else -> {
+                        Log.w(TAG, "Unknown file item type: ${fileItem::class.simpleName}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing file item: ${e.message}", e)
+            }
+        }
+        
+        Log.d(TAG, "Parsed ${parsedFiles.size} files from task")
+        return parsedFiles
+    }
+    
+    /**
+     * Fetch attached object using webhook authentication (user 1)
+     * Uses format: /rest/1/<webhook_token>/disk.attachedObject.get.json?objectId=<attachmentId>
+     * This is separate from OAuth2 authentication
+     */
+    private suspend fun fetchAttachedObjectWithWebhook(attachmentId: String): DomainTaskFile? {
+        return try {
+            // Get portal URL
+            val portalUrl = if (context != null) {
+                com.example.jbmarks.auth.data.TokenManager(context).getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
+            } else {
+                Config.DEFAULT_PORTAL_URL
+            }
+            
+            val webhookToken = getWebhookToken()
+            if (webhookToken == null) {
+                Log.w(TAG, "Webhook token not available, skipping disk.attachedObject.get")
+                return null
+            }
+            
+            // Construct webhook URL: /rest/1/<token>/disk.attachedObject.get.json?id=<id>
+            val webhookUrl = "$portalUrl/rest/${Config.WEBHOOK_USER_ID}/$webhookToken/disk.attachedObject.get.json?id=$attachmentId"
+            Log.d(TAG, "Calling disk.attachedObject.get with webhook: $webhookUrl")
+            
+            // Make direct HTTP call using OkHttpClient (no OAuth interceptor)
+            // Use withContext to run blocking call on IO dispatcher
+            val response = withContext(Dispatchers.IO) {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .readTimeout(60, TimeUnit.SECONDS)
+                    .build()
+                
+                val request = Request.Builder()
+                    .url(webhookUrl)
+                    .get()
+                    .build()
+                
+                client.newCall(request).execute()
+            }
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                if (responseBody != null) {
+                    val gson = Gson()
+                    val attachedResponse = gson.fromJson(responseBody, AttachedObjectResponse::class.java)
+                    
+                    if (attachedResponse.error != null) {
+                        Log.e(TAG, "Error from disk.attachedObject.get: ${attachedResponse.error} - ${attachedResponse.errorDescription}")
+                        return null
+                    }
+                    
+                    if (attachedResponse.result != null) {
+                        val attachedData = attachedResponse.result!!
+                        val fileName = attachedData.getNameValue() ?: "Unknown"
+                        val fileSize = attachedData.getSizeValue()?.toLongOrNull() ?: 0L
+                        var fileType = attachedData.getTypeValue() ?: "application/octet-stream"
+                        
+                        // If MIME type is generic, try to infer from filename
+                        if (fileType == "application/octet-stream" || fileType.isEmpty()) {
+                            fileType = inferMimeTypeFromFileName(fileName)
+                            Log.d(TAG, "Inferred MIME type from filename: $fileName -> $fileType")
+                        }
+                        
+                        val downloadUrl = attachedData.getDownloadableUrlValue()
+                        
+                        if (downloadUrl.isNullOrBlank()) {
+                            Log.w(TAG, "No downloadableUrl returned for attachment ID $attachmentId")
+                            return null
+                        }
+                        
+                        Log.d(TAG, "Successfully fetched attached object: id=$attachmentId, name=$fileName, type=$fileType, url=$downloadUrl")
+                        
+                        return DomainTaskFile(
+                            id = attachmentId,
+                            name = fileName,
+                            size = fileSize,
+                            type = fileType,
+                            downloadUrl = downloadUrl
+                        )
+                    }
+                }
+            } else {
+                val errorBody = response.body?.string()
+                Log.e(TAG, "Failed to get attached object for ID $attachmentId: HTTP ${response.code}, error: $errorBody")
+            }
+            
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching attached object with webhook for ID $attachmentId: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * Get webhook token for user 1
+     * Uses the webhook token from Config
+     */
+    private fun getWebhookToken(): String? {
+        val token = Config.WEBHOOK_TOKEN
+        Log.d(TAG, "getWebhookToken() called, token from Config: ${if (token != null) "***${token.takeLast(4)}" else "null"}")
+        return token
+    }
+    
+    /**
+     * Fetch file details from Bitrix24 API using file ID
+     * Calls disk.file.get to get DOWNLOAD_URL (which already includes auth token)
+     * If this fails, use disk.file.download?ID={fileId} URL directly (auth added by interceptor)
+     */
+    private suspend fun fetchFileDetails(fileId: String): DomainTaskFile? {
+        return try {
+            Log.d(TAG, "Calling disk.file.get.json for file ID: $fileId")
+            val response = api.getFileDetails(fileId)
+            
+            Log.d(TAG, "disk.file.get response - isSuccessful: ${response.isSuccessful}, code: ${response.code()}")
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body()
+                Log.d(TAG, "Response body is null: ${responseBody == null}")
+                
+                if (responseBody?.result != null) {
+                    val fileData = responseBody.result!!
+                    Log.d(TAG, "File data received: id=${fileData.getIdValue()}, name=${fileData.getNameValue()}")
+                    
+                    val fileDetails = FileDetails(
+                        id = fileData.id,
+                        idLower = fileData.idLower,
+                        name = fileData.name,
+                        nameLower = fileData.nameLower,
+                        size = fileData.size,
+                        sizeLower = fileData.sizeLower,
+                        type = fileData.type,
+                        typeLower = fileData.typeLower,
+                        downloadUrl = fileData.downloadUrl,
+                        downloadUrlLower = fileData.downloadUrlLower,
+                        url = fileData.url,
+                        urlLower = fileData.urlLower
+                    )
+                    
+                    val fileName = fileDetails.getNameValue() ?: "Unknown"
+                    val fileSize = fileDetails.getSizeValue()?.toLongOrNull() ?: 0L
+                    val fileType = fileDetails.getTypeValue() ?: "application/octet-stream"
+                    val downloadUrl = fileDetails.getDownloadUrlValue()
+                    
+                    Log.d(TAG, "Parsed file details - name: $fileName, type: $fileType, downloadUrl: ${if (downloadUrl.isNullOrBlank()) "MISSING" else "PRESENT"}")
+                    
+                    // DOWNLOAD_URL from disk.file.get already includes auth token
+                    if (downloadUrl.isNullOrBlank()) {
+                        Log.w(TAG, "No DOWNLOAD_URL returned for file ID $fileId")
+                        return null
+                    }
+                    
+                    Log.d(TAG, "Successfully fetched file details: id=$fileId, name=$fileName, type=$fileType")
+                    
+                    DomainTaskFile(
+                        id = fileId,
+                        name = fileName,
+                        size = fileSize,
+                        type = fileType,
+                        downloadUrl = downloadUrl // This URL already includes auth
+                    )
+                } else {
+                    Log.w(TAG, "Response body result is null for file ID $fileId")
+                    val responseString = responseBody?.toString() ?: "null"
+                    Log.d(TAG, "Response body content: $responseString")
+                    null
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "API call failed for file ID $fileId - HTTP ${response.code()}: $errorBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception fetching file details for ID $fileId: ${e.message}", e)
+            Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
      * Map Comment data model to domain model
      */
-    private fun mapCommentToDomain(comment: Comment, authorName: String? = null): DomainComment {
+    private fun mapCommentToDomain(comment: Comment, authorName: String? = null, authorId: String? = null): DomainComment {
         return DomainComment(
-            id = comment.id ?: "",
+            id = comment.getIdValue() ?: "",
             taskId = comment.taskId ?: "",
-            authorId = comment.authorId ?: "",
+            authorId = authorId ?: comment.getAuthorIdValue() ?: "",
             authorName = authorName,
-            text = comment.text ?: "",
-            createdDate = comment.createdDate ?: comment.postDate ?: "",
+            text = comment.getTextValue() ?: "",
+            createdDate = comment.getDateValue() ?: "",
             files = comment.files?.mapNotNull { file ->
                 try {
                     DomainCommentFile(
@@ -588,5 +1236,25 @@ class TasksRepository(private val context: Context? = null) {
             newCommentsCount = dto.newCommentsCount ?: 0,
             tags = dto.tags ?: emptyList()
         )
+    }
+    
+    /**
+     * Infer MIME type from file extension
+     */
+    private fun inferMimeTypeFromFileName(fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "svg" -> "image/svg+xml"
+            "pdf" -> "application/pdf"
+            "doc", "docx" -> "application/msword"
+            "xls", "xlsx" -> "application/vnd.ms-excel"
+            "txt" -> "text/plain"
+            else -> "application/octet-stream"
+        }
     }
 }

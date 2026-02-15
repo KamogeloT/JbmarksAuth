@@ -58,6 +58,10 @@ object Config {
     // OAuth Scopes - permissions requested from Bitrix24
     const val OAUTH_SCOPES = "crm,task,tasks_extended,calendar,user,user_brief,user_basic,sonet_group,bizproc,log,placement,entity,disk,mailservice,lists,calendarmobile,tasks,tasksmobile,im"
     
+    // Webhook authentication for user 1 (used for disk.attachedObject.get)
+    const val WEBHOOK_USER_ID = "1"
+    const val WEBHOOK_TOKEN = "accwtpjw1vnywkss"
+    
     /**
      * Build the authorization URL for OAuth flow
      * Uses the HTTPS redirect URI (intermediate server) that Bitrix24 requires
