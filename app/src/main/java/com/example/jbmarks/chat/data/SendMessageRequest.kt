@@ -10,7 +10,7 @@ data class SendMessageRequest(
 )
 
 data class SendMessageResponse(
-    @SerializedName("result") val result: SendMessageResult?
+    @SerializedName("result") val result: Any? // Can be number (message ID) or object
 )
 
 data class SendMessageResult(

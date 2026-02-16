@@ -28,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,7 +37,9 @@ import com.example.jbmarks.calendar.domain.CalendarEvent
 
 @Composable
 fun CalendarScreen() {
-    val viewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory())
+    val context = LocalContext.current
+    val application = context.applicationContext as? android.app.Application
+    val viewModel: CalendarViewModel = viewModel(factory = CalendarViewModelFactory(application))
 
     val uiState by viewModel.uiState.collectAsState()
 

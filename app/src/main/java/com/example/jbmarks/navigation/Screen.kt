@@ -6,5 +6,5 @@ sealed class Screen(val route: String, val title: String, val iconResId: Int) {
     object Chat : Screen("chat", "Chat", com.example.jbmarks.R.drawable.chats)
     object Tasks : Screen("tasks", "Tasks", com.example.jbmarks.R.drawable.tasks)
     object Calendar : Screen("calendar", "Calendar", com.example.jbmarks.R.drawable.calender)
-    object Notifications : Screen("notifications", "Alerts", com.example.jbmarks.R.drawable.chats) // Using chats as fallback
+    object Feed : Screen("feed", "Feed", com.example.jbmarks.R.drawable.home) // Using home as fallback
 }

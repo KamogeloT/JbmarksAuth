@@ -203,4 +203,42 @@ class NotificationRepository(private val context: Context) {
             actionUrl = "task_detail/$taskId"
         )
     }
+    
+    /**
+     * Create notification for feed post
+     */
+    fun createFeedPostNotification(postId: String, authorName: String, postTitle: String?): Notification {
+        return Notification(
+            id = UUID.randomUUID().toString(),
+            type = NotificationType.FEED_POST,
+            title = "New Feed Post",
+            message = if (postTitle != null) {
+                "$authorName posted: $postTitle"
+            } else {
+                "$authorName posted in the feed"
+            },
+            timestamp = System.currentTimeMillis(),
+            isRead = false,
+            priority = NotificationPriority.NORMAL,
+            relatedId = postId,
+            actionUrl = "feed"
+        )
+    }
+    
+    /**
+     * Create notification for chat message
+     */
+    fun createChatMessageNotification(chatId: String, chatName: String, senderName: String, message: String): Notification {
+        return Notification(
+            id = UUID.randomUUID().toString(),
+            type = NotificationType.CHAT_MESSAGE,
+            title = "New message in $chatName",
+            message = "$senderName: ${message.take(50)}${if (message.length > 50) "..." else ""}",
+            timestamp = System.currentTimeMillis(),
+            isRead = false,
+            priority = NotificationPriority.HIGH,
+            relatedId = chatId,
+            actionUrl = "chat/$chatId"
+        )
+    }
 }

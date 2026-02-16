@@ -135,8 +135,27 @@ class ChatRepository(private val context: Context? = null) {
                 files = fileIds
             )
             val response = api.sendMessage(request)
-            if (response.isSuccessful && response.body()?.result?.messageId != null) {
-                Result.success(response.body()!!.result!!.messageId!!)
+            if (response.isSuccessful && response.body() != null) {
+                val responseBody = response.body()!!
+                val messageId = when (val result = responseBody.result) {
+                    is Number -> result.toString() // Result is a number (message ID)
+                    is Map<*, *> -> {
+                        // Result is an object with MESSAGE_ID field
+                        @Suppress("UNCHECKED_CAST")
+                        (result as? Map<String, Any?>)?.get("MESSAGE_ID")?.toString()
+                            ?: (result as? Map<String, Any?>)?.get("messageId")?.toString()
+                    }
+                    is String -> result // Result is already a string
+                    else -> null
+                }
+                
+                if (messageId != null) {
+                    Log.d(TAG, "Message sent successfully: $messageId")
+                    Result.success(messageId)
+                } else {
+                    Log.e(TAG, "Failed to parse message ID from response: $responseBody")
+                    Result.failure(Exception("Failed to parse message ID from response"))
+                }
             } else {
                 val error = response.errorBody()?.string() ?: "Unknown error"
                 Log.e(TAG, "Failed to send message: $error")
