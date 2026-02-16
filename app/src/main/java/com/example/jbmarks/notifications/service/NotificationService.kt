@@ -21,6 +21,8 @@ class NotificationService(private val context: Context) {
         private const val CHANNEL_ID_TASKS = "tasks_channel"
         private const val CHANNEL_ID_COMMENTS = "comments_channel"
         private const val CHANNEL_ID_DEADLINES = "deadlines_channel"
+        private const val CHANNEL_ID_FEED = "feed_channel"
+        private const val CHANNEL_ID_CHAT = "chat_channel"
         private const val CHANNEL_ID_GENERAL = "general_channel"
     }
     
@@ -61,6 +63,25 @@ class NotificationService(private val context: Context) {
                 enableVibration(true)
             }
             
+            // Feed channel
+            val feedChannel = NotificationChannel(
+                CHANNEL_ID_FEED,
+                "Feed",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications for feed posts and updates"
+            }
+            
+            // Chat channel
+            val chatChannel = NotificationChannel(
+                CHANNEL_ID_CHAT,
+                "Chat",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for new chat messages"
+                enableVibration(true)
+            }
+            
             // General channel
             val generalChannel = NotificationChannel(
                 CHANNEL_ID_GENERAL,
@@ -71,7 +92,7 @@ class NotificationService(private val context: Context) {
             }
             
             notificationManager.createNotificationChannels(
-                listOf(tasksChannel, commentsChannel, deadlinesChannel, generalChannel)
+                listOf(tasksChannel, commentsChannel, deadlinesChannel, feedChannel, chatChannel, generalChannel)
             )
         }
     }
@@ -153,6 +174,8 @@ class NotificationService(private val context: Context) {
             NotificationType.FILE_ATTACHED -> CHANNEL_ID_TASKS
             NotificationType.TASK_COMMENT -> CHANNEL_ID_COMMENTS
             NotificationType.TASK_DEADLINE -> CHANNEL_ID_DEADLINES
+            NotificationType.FEED_POST -> CHANNEL_ID_FEED
+            NotificationType.CHAT_MESSAGE -> CHANNEL_ID_CHAT
             NotificationType.GENERAL -> CHANNEL_ID_GENERAL
         }
     }

@@ -1,6 +1,10 @@
 package com.example.jbmarks.network
 
 import com.example.jbmarks.activity_feed.data.BlogFeedResponse
+import com.example.jbmarks.activity_feed.data.AddBlogPostRequest
+import com.example.jbmarks.activity_feed.data.AddBlogPostResponse
+import com.example.jbmarks.activity_feed.data.GetUsersFeedRequest
+import com.example.jbmarks.activity_feed.data.FeedEventsResponse
 import com.example.jbmarks.calendar.data.CalendarEventsResponse
 import com.example.jbmarks.calendar.data.CalendarEventsRequest
 import com.example.jbmarks.chat.data.ChatRecentResponse
@@ -38,8 +42,42 @@ import com.example.jbmarks.tasks.data.FileUploadRequest
 
 interface BitrixApi {
 
+    // ===== FEED / ACTIVITY STREAM OPERATIONS =====
+    
+    /**
+     * Get news feed messages (Activity Stream)
+     * Bitrix24 API: log.blogpost.get
+     */
     @GET("log.blogpost.get.json")
-    suspend fun getBlogFeed(): BlogFeedResponse
+    suspend fun getBlogFeed(
+        @Query("POST_ID") postId: String? = null,
+        @Query("FILTER") filter: Map<String, String>? = null
+    ): Response<BlogFeedResponse>
+    
+    /**
+     * Add / Post to Feed (Activity Stream)
+     * Bitrix24 API: log.blogpost.add
+     */
+    @POST("log.blogpost.add.json")
+    suspend fun addBlogPost(
+        @Body request: AddBlogPostRequest
+    ): Response<AddBlogPostResponse>
+    
+    /**
+     * Get posts for specific users
+     * Bitrix24 API: log.blogpost.getusers
+     */
+    @POST("log.blogpost.getusers.json")
+    suspend fun getUsersFeed(
+        @Body request: GetUsersFeedRequest
+    ): Response<BlogFeedResponse>
+    
+    /**
+     * Get feed events (types of events that trigger feed updates)
+     * Bitrix24 API: log/events
+     */
+    @GET("log/events.json")
+    suspend fun getFeedEvents(): Response<FeedEventsResponse>
 
     // ===== CHAT OPERATIONS =====
     

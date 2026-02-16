@@ -12,6 +12,8 @@ enum class NotificationType {
     TASK_DEADLINE,
     TASK_STATUS_CHANGED,
     FILE_ATTACHED,
+    FEED_POST,
+    CHAT_MESSAGE,
     GENERAL
 }
 
@@ -63,6 +65,8 @@ data class Notification(
             NotificationType.TASK_DEADLINE -> "⏰"
             NotificationType.TASK_STATUS_CHANGED -> "🔄"
             NotificationType.FILE_ATTACHED -> "📎"
+            NotificationType.FEED_POST -> "📰"
+            NotificationType.CHAT_MESSAGE -> "💬"
             NotificationType.GENERAL -> "🔔"
         }
     }

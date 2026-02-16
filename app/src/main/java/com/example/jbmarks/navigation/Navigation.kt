@@ -67,7 +67,6 @@ import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
-import com.example.jbmarks.notifications.ui.NotificationsScreen
 import com.example.jbmarks.tasks.ui.TaskDetailScreen
 import com.example.jbmarks.tasks.ui.TaskFormScreen
 import com.example.jbmarks.tasks.ui.TasksScreen
@@ -82,7 +81,7 @@ fun AppNavigation() {
         Screen.Tasks,
         Screen.Chat,
         Screen.Calendar,
-        Screen.Notifications
+        Screen.Feed
     )
 
     Scaffold(
@@ -383,18 +382,8 @@ fun AppNavigation() {
             }
             composable(Screen.Calendar.route) { CalendarScreen() }
             
-            composable(Screen.Notifications.route) {
-                NotificationsScreen(
-                    onNotificationClick = { actionUrl ->
-                        actionUrl?.let { url ->
-                            // Handle deep link navigation
-                            if (url.startsWith("task_detail/")) {
-                                val taskId = url.removePrefix("task_detail/")
-                                navController.navigate("task_detail/$taskId")
-                            }
-                        }
-                    }
-                )
+            composable(Screen.Feed.route) {
+                ActivityFeedScreen()
             }
             
             // Task Detail Screen

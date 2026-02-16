@@ -1,5 +1,7 @@
 package com.example.jbmarks.calendar.ui
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -16,9 +18,10 @@ sealed interface CalendarUiState {
     data class Error(val message: String) : CalendarUiState
 }
 
-class CalendarViewModel : ViewModel() {
-
-    private val repository = CalendarRepository()
+class CalendarViewModel(
+    private val repository: CalendarRepository,
+    private val application: Application? = null
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<CalendarUiState>(CalendarUiState.Loading)
     val uiState: StateFlow<CalendarUiState> = _uiState
@@ -43,10 +46,14 @@ class CalendarViewModel : ViewModel() {
 }
 
 @Suppress("UNCHECKED_CAST")
-class CalendarViewModelFactory : ViewModelProvider.Factory {
+class CalendarViewModelFactory(
+    private val application: Application? = null
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CalendarViewModel::class.java)) {
-            return CalendarViewModel() as T
+            val context = application?.applicationContext
+            val repository = CalendarRepository(context)
+            return CalendarViewModel(repository, application) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

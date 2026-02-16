@@ -15,24 +15,35 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.jbmarks.activity_feed.domain.BlogPost
 import com.example.jbmarks.user.ui.UserProfileHeader
@@ -42,39 +53,149 @@ fun ActivityFeedScreen() {
     val viewModel: ActivityFeedViewModel = viewModel(factory = ActivityFeedViewModelFactory())
 
     val uiState by viewModel.uiState.collectAsState()
+    val isPosting by viewModel.isPosting.collectAsState()
+    var showCreatePostDialog by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // User Profile Header
-        UserProfileHeader()
-        
-        // Activity Feed Content
-        when (val state = uiState) {
-            is ActivityFeedUiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // User Profile Header
+            UserProfileHeader()
+            
+            // Activity Feed Content
+            when (val state = uiState) {
+                is ActivityFeedUiState.Loading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-            }
 
-            is ActivityFeedUiState.Success -> {
-                if (state.posts.isEmpty()) {
-                    EmptyState()
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
-                    ) {
-                        items(state.posts) { post ->
-                            BlogPostItem(post)
+                is ActivityFeedUiState.Success -> {
+                    if (state.posts.isEmpty()) {
+                        EmptyState()
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
+                        ) {
+                            items(state.posts) { post ->
+                                BlogPostItem(post)
+                            }
                         }
                     }
                 }
-            }
 
-            is ActivityFeedUiState.Error -> {
-                ErrorState(errorMessage = state.message, onRetryClick = { viewModel.loadFeed() })
+                is ActivityFeedUiState.Error -> {
+                    ErrorState(errorMessage = state.message, onRetryClick = { viewModel.loadFeed() })
+                }
+            }
+        }
+        
+        // Floating Action Button to create new post
+        FloatingActionButton(
+            onClick = { showCreatePostDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            shape = CircleShape
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Create Post"
+            )
+        }
+        
+        // Create Post Dialog
+        if (showCreatePostDialog) {
+            CreatePostDialog(
+                onDismiss = { showCreatePostDialog = false },
+                onPost = { message, title ->
+                    viewModel.addFeedPost(message, title)
+                    showCreatePostDialog = false
+                },
+                isPosting = isPosting
+            )
+        }
+    }
+}
+
+@Composable
+fun CreatePostDialog(
+    onDismiss: () -> Unit,
+    onPost: (String, String?) -> Unit,
+    isPosting: Boolean
+) {
+    var title by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Create New Post",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isPosting
+                )
+                
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    label = { Text("Message *") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    maxLines = 5,
+                    enabled = !isPosting
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isPosting
+                    ) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onPost(message, title.ifBlank { null }) },
+                        enabled = message.isNotBlank() && !isPosting
+                    ) {
+                        if (isPosting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = "Post",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Post")
+                    }
+                }
             }
         }
     }
