@@ -17,6 +17,9 @@ local.properties
 # Kotlin
 .kotlin/
 
+# Firebase
+app/google-services.json
+
 # Documentation files (optional - remove if you want to include them)
 # BITRIX24_API_REFERENCE.md
 # IMPLEMENTATION_PLAN.md
