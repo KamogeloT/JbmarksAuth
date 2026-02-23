@@ -389,6 +389,167 @@ app.post('/api/push/send', async (req, res) => {
 });
 
 /**
+ * POST /api/bitrix/webhook
+ * Handle Bitrix24 webhook events and send push notifications
+ */
+app.post('/api/bitrix/webhook', async (req, res) => {
+    try {
+        const event = req.body;
+        console.log('📥 Bitrix24 webhook received:', JSON.stringify(event, null, 2));
+        
+        // Handle different event types
+        let notificationData = null;
+        
+        // Task comment added
+        if (event.event === 'ONTASKCOMMENTADD' || event.event === 'OnTaskCommentAdd') {
+            const taskId = event.data?.FIELDS_AFTER?.TASK_ID || event.data?.TASK_ID;
+            const commentText = event.data?.FIELDS_AFTER?.POST_MESSAGE || event.data?.POST_MESSAGE || 'New comment';
+            const authorId = event.data?.FIELDS_AFTER?.AUTHOR_ID || event.data?.AUTHOR_ID;
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'Task';
+            
+            // Send notification to task responsible (not the comment author)
+            if (responsibleId && responsibleId !== authorId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'New Comment on Task',
+                    body: `${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_COMMENT'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Task created/assigned
+        else if (event.event === 'ONTASKADD' || event.event === 'OnTaskAdd') {
+            const taskId = event.data?.FIELDS_AFTER?.ID || event.data?.ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'New Task';
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            
+            if (responsibleId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'New Task Assigned',
+                    body: taskTitle,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_ASSIGNED'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Task updated
+        else if (event.event === 'ONTASKUPDATE' || event.event === 'OnTaskUpdate') {
+            const taskId = event.data?.FIELDS_AFTER?.ID || event.data?.ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'Task';
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            
+            if (responsibleId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'Task Updated',
+                    body: taskTitle,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_UPDATED'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Chat message
+        else if (event.event === 'ONIMCOMMONADD' || event.event === 'OnImCommonAdd') {
+            const dialogId = event.data?.FIELDS_AFTER?.CHAT_ID || event.data?.CHAT_ID;
+            const messageText = event.data?.FIELDS_AFTER?.MESSAGE || event.data?.MESSAGE || 'New message';
+            const authorId = event.data?.FIELDS_AFTER?.AUTHOR_ID || event.data?.AUTHOR_ID;
+            const recipientId = event.data?.FIELDS_AFTER?.RECIPIENT_ID || event.data?.RECIPIENT_ID;
+            
+            // Send to recipient (not the sender)
+            if (recipientId && recipientId !== authorId) {
+                notificationData = {
+                    user_id: String(recipientId),
+                    title: 'New Message',
+                    body: messageText.substring(0, 100),
+                    data: {
+                        type: 'CHAT',
+                        dialog_id: String(dialogId),
+                        notification_type: 'CHAT_MESSAGE'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        
+        // Send push notification if we have data
+        if (notificationData) {
+            console.log('📤 Sending push notification:', notificationData);
+            
+            // Call internal push send function
+            if (!pool || !apnProvider) {
+                console.warn('⚠️ Push notifications not configured - skipping');
+                return res.json({ 
+                    success: true, 
+                    message: 'Webhook received but push notifications not configured' 
+                });
+            }
+            
+            // Get user's APNs token(s)
+            const query = 'SELECT apns_token FROM push_tokens WHERE user_id = $1';
+            const result = await pool.query(query, [notificationData.user_id]);
+            
+            if (result.rows.length > 0) {
+                // Create notification
+                const notification = new apn.Notification();
+                notification.alert = { 
+                    title: notificationData.title, 
+                    body: notificationData.body 
+                };
+                notification.sound = 'default';
+                notification.badge = notificationData.badge || 1;
+                notification.topic = process.env.APNS_BUNDLE_ID || 'jbmarks.JbmrksIOs';
+                notification.payload = notificationData.data || {};
+                notification.expiry = Math.floor(Date.now() / 1000) + 3600;
+                
+                // Send to all tokens for this user
+                const tokens = result.rows.map(row => row.apns_token);
+                const response = await apnProvider.send(notification, tokens);
+                
+                console.log(`✅ Push notification sent: ${response.sent.length} successful, ${response.failed.length} failed`);
+                
+                // Clean up invalid tokens
+                response.failed.forEach(failure => {
+                    if (failure.error === 'BadDeviceToken' || failure.error === 'Unregistered') {
+                        pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [failure.device])
+                            .catch(err => console.error('Error deleting token:', err));
+                    }
+                });
+            } else {
+                console.log(`⚠️ No push token found for user: ${notificationData.user_id}`);
+            }
+        } else {
+            console.log('ℹ️ No notification data generated for this event type');
+        }
+        
+        // Always return success to Bitrix24
+        res.json({ success: true, message: 'Webhook processed' });
+        
+    } catch (error) {
+        console.error('❌ Webhook error:', error);
+        // Still return success to Bitrix24 to prevent retries
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+/**
  * DELETE /api/push/token/:user_id
  * Remove push token for user
  */
