@@ -17,27 +17,53 @@ const PORT = process.env.PORT || 3000;
 // DATABASE SETUP (PostgreSQL)
 // ============================================
 let pool;
-if (process.env.DATABASE_URL) {
-    pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-    });
+
+async function setupDatabase() {
+    if (!process.env.DATABASE_URL) {
+        console.log('ℹ️ DATABASE_URL not set - database features disabled');
+        return;
+    }
     
-    // Create table if it doesn't exist
-    pool.query(`
-        CREATE TABLE IF NOT EXISTS push_tokens (
-            id SERIAL PRIMARY KEY,
-            user_id VARCHAR(255) NOT NULL,
-            apns_token TEXT NOT NULL,
-            platform VARCHAR(10) DEFAULT 'ios',
-            portal_url VARCHAR(500),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, apns_token)
-        );
-        CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
-    `).catch(err => console.error('Database setup error:', err));
+    try {
+        pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        });
+        
+        // Test connection
+        await pool.query('SELECT NOW()');
+        console.log('✅ Database connection established');
+        
+        // Create table if it doesn't exist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                apns_token TEXT NOT NULL,
+                platform VARCHAR(10) DEFAULT 'ios',
+                portal_url VARCHAR(500),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, apns_token)
+            );
+        `);
+        console.log('✅ push_tokens table created/verified');
+        
+        // Create index if it doesn't exist
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
+        `);
+        console.log('✅ Database indexes created/verified');
+        
+    } catch (err) {
+        console.error('❌ Database setup error:', err);
+        console.error('   Error details:', err.message);
+        pool = null; // Disable database features if setup fails
+    }
 }
+
+// Initialize database on server start
+setupDatabase();
 
 // ============================================
 // APNs SETUP
@@ -100,12 +126,63 @@ app.use((req, res, next) => {
 
 // Health check
 app.get('/health', (req, res) => {
+    const dbStatus = pool ? 'connected' : 'not configured';
     res.json({ 
         status: 'healthy', 
         service: 'jbmarks-token-exchange',
         version: '1.0.0',
+        database: dbStatus,
         timestamp: new Date().toISOString() 
     });
+});
+
+// Database setup endpoint (for manual table creation)
+app.post('/api/db/setup', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ 
+                error: 'Database not configured',
+                message: 'DATABASE_URL environment variable not set'
+            });
+        }
+        
+        // Create table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                apns_token TEXT NOT NULL,
+                platform VARCHAR(10) DEFAULT 'ios',
+                portal_url VARCHAR(500),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, apns_token)
+            );
+        `);
+        
+        // Create index
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
+        `);
+        
+        // Verify table exists
+        const result = await pool.query(`
+            SELECT COUNT(*) as count FROM information_schema.tables 
+            WHERE table_name = 'push_tokens';
+        `);
+        
+        res.json({ 
+            success: true,
+            message: 'Database tables created successfully',
+            tableExists: result.rows[0].count > 0
+        });
+    } catch (error) {
+        console.error('❌ Database setup error:', error);
+        res.status(500).json({ 
+            error: 'Failed to setup database',
+            message: error.message 
+        });
+    }
 });
 
 // Root endpoint
@@ -594,14 +671,34 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log('='.repeat(60));
     console.log('✅ JBmarks Token Exchange Server');
     console.log('='.repeat(60));
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🏥 Health check: http://localhost:${PORT}/health`);
     console.log(`🔑 Token exchange: http://localhost:${PORT}/api/exchangetoken`);
+    console.log(`🗄️  Database setup: POST http://localhost:${PORT}/api/db/setup`);
     console.log('='.repeat(60));
+    
+    // Wait a moment for database setup to complete, then verify
+    setTimeout(async () => {
+        if (pool) {
+            try {
+                const result = await pool.query(`
+                    SELECT COUNT(*) as count FROM information_schema.tables 
+                    WHERE table_name = 'push_tokens';
+                `);
+                if (result.rows[0].count > 0) {
+                    console.log('✅ Database table verified: push_tokens exists');
+                } else {
+                    console.log('⚠️  Database table not found. Call POST /api/db/setup to create it.');
+                }
+            } catch (err) {
+                console.error('❌ Error checking database:', err.message);
+            }
+        }
+    }, 2000);
 });
 
 module.exports = app;
