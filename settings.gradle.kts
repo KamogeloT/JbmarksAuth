@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "JBmarks"
 include(":app")
+include(":shared")
  

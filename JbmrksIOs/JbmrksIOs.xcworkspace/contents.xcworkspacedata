@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:JbmrksIOs.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Pods/Pods.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Services/Storage/IOSTokenStorage.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Services/Storage/KeychainHelper.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Services/Storage/StorageFactory.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Services/RepositoryFactory.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/ViewModels/AuthViewModel.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/ViewModels/TasksViewModel.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Views/AuthView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:JbmrksIOs/Views/TasksView.swift">
+   </FileRef>
+   <FileRef
+      location = "group:../JbmrksIOs.xctestplan">
+   </FileRef>
+</Workspace>
