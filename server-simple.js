@@ -118,7 +118,8 @@ app.get('/', (req, res) => {
             tokenExchange: 'POST /api/exchangetoken',
             pushRegister: 'POST /api/push/register-token',
             pushSend: 'POST /api/push/send',
-            pushDelete: 'DELETE /api/push/token/:user_id'
+            pushDelete: 'DELETE /api/push/token/:user_id',
+            bitrixWebhook: 'POST /api/bitrix/webhook'
         }
     });
 });
