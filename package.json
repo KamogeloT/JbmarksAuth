@@ -9,7 +9,9 @@
     "test": "node server-simple.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "apn": "^2.2.0"
   },
   "engines": {
     "node": ">=18"

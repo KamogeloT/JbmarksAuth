@@ -13,6 +13,7 @@ import com.example.jbmarks.auth.data.OAuthService
 import com.example.jbmarks.auth.data.TokenManager
 import com.example.jbmarks.config.Config
 import com.example.jbmarks.network.RetrofitInstance
+import com.example.jbmarks.notifications.fcm.FCMTokenManager
 import com.example.jbmarks.ui.theme.JBmarksTheme
 import kotlinx.coroutines.launch
 
@@ -97,6 +98,12 @@ class AuthActivity : ComponentActivity() {
                                 tokenManager.saveTokenExpiry(tokenResponse.expires_in)
                                 RetrofitInstance.refreshRetrofitInstance()
                                 
+                                // Register FCM token after successful authentication
+                                android.util.Log.d("AuthActivity", "Registering FCM token")
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                    FCMTokenManager(this@AuthActivity).checkAndRegisterToken()
+                                }
+                                
                                 isProcessingOAuth = false
                                 isAuthInProgress = false
                                 lastProcessedCode = code
@@ -166,6 +173,12 @@ class AuthActivity : ComponentActivity() {
                                 )
                                 tokenManager.saveTokenExpiry(tokenResponse.expires_in)
                                 RetrofitInstance.refreshRetrofitInstance()
+                                
+                                // Register FCM token after successful authentication
+                                android.util.Log.d("AuthActivity", "Registering FCM token")
+                                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                    FCMTokenManager(this@AuthActivity).checkAndRegisterToken()
+                                }
                                 
                                 isProcessingOAuth = false
                                 isAuthInProgress = false
@@ -449,6 +462,12 @@ class AuthActivity : ComponentActivity() {
                 android.util.Log.d("AuthActivity", "Tokens saved, refreshing Retrofit instance")
                 // Refresh Retrofit instance with new portal URL
                 RetrofitInstance.refreshRetrofitInstance()
+                
+                // Register FCM token after successful authentication
+                android.util.Log.d("AuthActivity", "Registering FCM token")
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    FCMTokenManager(this@AuthActivity).checkAndRegisterToken()
+                }
                 
                 android.util.Log.d("AuthActivity", "Navigating to main app")
                 setIsLoading(false)

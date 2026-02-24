@@ -17,6 +17,37 @@ local.properties
 # Kotlin
 .kotlin/
 
+# Firebase
+app/google-services.json
+
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace
+iosApp/*.xcuserdata
+iosApp/*.xcscmblueprint
+iosApp/DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcuserstate
+project.xcworkspace
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# iOS Configuration (contains secrets)
+JbmrksIOs/JbmrksIOs/Config/OAuthConfig.swift
+
+# Local Java installation (for Java 17)
+.java/
+
 # Documentation files (optional - remove if you want to include them)
 # BITRIX24_API_REFERENCE.md
 # IMPLEMENTATION_PLAN.md
