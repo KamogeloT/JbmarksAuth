@@ -10,6 +10,7 @@ import Foundation
 protocol UserRepository {
     func getCurrentUser() async throws -> User
     func getUser(id: String) async throws -> User
+    func getUserWorkgroups() async throws -> [Workgroup]
 }
 
 nonisolated class UserRepositoryImpl: UserRepository {
@@ -25,5 +26,9 @@ nonisolated class UserRepositoryImpl: UserRepository {
     
     func getUser(id: String) async throws -> User {
         return try await apiClient.getUser(id: id)
+    }
+    
+    func getUserWorkgroups() async throws -> [Workgroup] {
+        return try await apiClient.getUserWorkgroups()
     }
 }

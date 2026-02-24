@@ -93,6 +93,11 @@ struct TasksView: View {
         .refreshable {
             await viewModel.loadTasks()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshTasks"))) { _ in
+            _Concurrency.Task { @MainActor in
+                await viewModel.loadTasks()
+            }
+        }
     }
 }
 

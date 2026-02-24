@@ -71,6 +71,11 @@ struct ActivityFeedView: View {
         .refreshable {
             await viewModel.loadFeed()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshFeed"))) { _ in
+            _Concurrency.Task { @MainActor in
+                await viewModel.loadFeed()
+            }
+        }
     }
 }
 

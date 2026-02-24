@@ -71,6 +71,11 @@ struct DashboardView: View {
         .refreshable {
             await viewModel.loadDashboard()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshDashboard"))) { _ in
+            _Concurrency.Task { @MainActor in
+                await viewModel.loadDashboard()
+            }
+        }
     }
 }
 

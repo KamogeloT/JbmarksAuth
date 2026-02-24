@@ -31,7 +31,8 @@ final class CalendarViewModel: ObservableObject {
         
         let baseUrl = StorageFactory.shared.tokenStorage.getPortalUrl() ?? "https://jbmarks.sdinmotion.co.za/"
         let apiClient = BitrixApiClient(baseUrl: baseUrl, accessToken: tokenStorage)
-        calendarRepository = CalendarRepositoryImpl(apiClient: apiClient)
+        let userRepository = RepositoryFactory.shared.userRepository()
+        calendarRepository = CalendarRepositoryImpl(apiClient: apiClient, userRepository: userRepository)
         
         guard let repo = calendarRepository else {
             errorMessage = "Failed to create repository"

@@ -41,6 +41,11 @@ struct CalendarView: View {
         .refreshable {
             await viewModel.loadCalendarEvents()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshCalendar"))) { _ in
+            _Concurrency.Task { @MainActor in
+                await viewModel.loadCalendarEvents()
+            }
+        }
     }
 }
 

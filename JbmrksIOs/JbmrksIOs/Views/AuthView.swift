@@ -18,8 +18,17 @@ private func runAsync(_ operation: @escaping () async -> Void) {
 }
 
 struct AuthView: View {
-    @StateObject private var viewModel = AuthViewModel()
+    @ObservedObject var viewModel: AuthViewModel
     @State private var showError = false
+    
+    init(viewModel: AuthViewModel? = nil) {
+        // Use provided viewModel or create a new one (for previews)
+        if let viewModel = viewModel {
+            self._viewModel = ObservedObject(wrappedValue: viewModel)
+        } else {
+            self._viewModel = ObservedObject(wrappedValue: AuthViewModel())
+        }
+    }
     
     var body: some View {
         Group {
@@ -32,9 +41,8 @@ struct AuthView: View {
                 loginPrompt
             }
         }
-        .task {
-            await viewModel.checkAuth()
-        }
+        // Remove the checkAuth task - ContentView already handles initial auth check
+        // This prevents duplicate auth checks and state conflicts
         .alert("Error", isPresented: $showError) {
             Button("OK") {
                 viewModel.errorMessage = nil

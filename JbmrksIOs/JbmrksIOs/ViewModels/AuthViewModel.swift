@@ -75,6 +75,8 @@ final class AuthViewModel: ObservableObject {
             print("✅ Token exchange successful, checking authentication status...")
             let authStatus = await authRepository.isAuthenticated()
             print("🔐 Authentication status: \(authStatus)")
+            
+            // Set authentication state - this will trigger UI update
             isAuthenticated = authStatus
             
             if !authStatus {
@@ -83,6 +85,26 @@ final class AuthViewModel: ObservableObject {
                 if let token = await authRepository.getAccessToken(), !token.isEmpty {
                     print("🔧 Token exists, forcing isAuthenticated to true")
                     isAuthenticated = true
+                }
+            }
+            
+            // Ensure isLoading is set to false BEFORE registering push notifications
+            // This ensures UI updates immediately to show dashboard
+            isLoading = false
+            
+            // Register push notification token after successful authentication
+            // This is fire-and-forget - failures won't affect login
+            if isAuthenticated {
+                print("📱 Registering push notification token after authentication")
+                // Use Task to ensure this runs asynchronously and doesn't block
+                _Concurrency.Task { @MainActor in
+                    do {
+                        await PushNotificationService.shared.checkAndRegisterToken()
+                    } catch {
+                        // Log error but don't affect authentication
+                        print("⚠️ Push notification registration failed (non-blocking): \(error.localizedDescription)")
+                        print("   Login successful - user can continue using the app")
+                    }
                 }
             }
         } catch let error as OAuthError {
@@ -100,8 +122,13 @@ final class AuthViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to exchange authorization code: \(error.localizedDescription)"
             isAuthenticated = false
+            isLoading = false
         }
         
-        isLoading = false
+        // isLoading is already set to false above for success case
+        // Only set here if we haven't already set it
+        if isLoading {
+            isLoading = false
+        }
     }
 }

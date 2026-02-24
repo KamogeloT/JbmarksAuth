@@ -48,6 +48,11 @@ struct ChatListView: View {
         .refreshable {
             await viewModel.loadChats()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("RefreshChats"))) { _ in
+            _Concurrency.Task { @MainActor in
+                await viewModel.loadChats()
+            }
+        }
     }
 }
 

@@ -70,6 +70,7 @@ struct BitrixApiClient {
         components.queryItems = [
             URLQueryItem(name: "auth", value: accessToken),
             URLQueryItem(name: "taskId", value: id)
+            // Removed select parameter - might cause issues with some Bitrix24 versions
         ]
         
         guard let url = components.url else {
@@ -78,12 +79,44 @@ struct BitrixApiClient {
         
         let (data, response) = try await URLSession.shared.data(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.decodingError
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for getTask")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
         }
         
-        return try JSONDecoder().decode(TaskResponse.self, from: data)
+        // Log response for debugging
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📋 Task API response (first 500 chars): \(String(responseString.prefix(500)))")
+        }
+        
+        // Handle non-200 responses
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Task API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors in response
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in getTask: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
+        }
+        
+        // Try to decode the task response
+        do {
+            return try JSONDecoder().decode(TaskResponse.self, from: data)
+        } catch {
+            print("⚠️ Failed to decode task response: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
+            // Log the actual response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("   Full response: \(responseString)")
+            }
+            throw APIError.decodingError
+        }
     }
     
     func completeTask(id: String) async throws -> TaskResponse {
@@ -249,50 +282,8 @@ struct BitrixApiClient {
         return user
     }
     
-    func getCalendarEvents() async throws -> [CalendarEvent] {
-        // Get current date and date 1 year from now
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        
-        let today = Date()
-        let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: today) ?? today
-        
-        let fromDate = dateFormatter.string(from: today)
-        let toDate = dateFormatter.string(from: oneYearFromNow)
-        
-        let request = CalendarEventsRequest(
-            filter: CalendarEventFilter(fromDate: fromDate, toDate: toDate),
-            ownerId: nil,
-            type: "user"
-        )
-        
-        var components = URLComponents(string: "\(apiUrl)calendar.event.get.json")!
-        components.queryItems = [
-            URLQueryItem(name: "auth", value: accessToken)
-        ]
-        
-        guard let url = components.url else {
-            throw APIError.invalidURL
-        }
-        
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try JSONEncoder().encode(request)
-        
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.decodingError
-        }
-        
-        let eventsResponse = try JSONDecoder().decode(CalendarEventsResponse.self, from: data)
-        return eventsResponse.result?.map { $0.toDomain() } ?? []
-    }
-    
-    func getBlogFeed() async throws -> [BlogPost] {
-        var components = URLComponents(string: "\(apiUrl)log.blogpost.get.json")!
+    func getUserWorkgroups() async throws -> [Workgroup] {
+        var components = URLComponents(string: "\(apiUrl)sonet_group.user.groups.json")!
         components.queryItems = [
             URLQueryItem(name: "auth", value: accessToken)
         ]
@@ -303,13 +294,226 @@ struct BitrixApiClient {
         
         let (data, response) = try await URLSession.shared.data(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for user workgroups")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ User workgroups API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in getUserWorkgroups: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
+        }
+        
+        do {
+            let workgroupsResponse = try JSONDecoder().decode(WorkgroupsResponse.self, from: data)
+            print("✅ Fetched \(workgroupsResponse.result.count) workgroups")
+            return workgroupsResponse.result
+        } catch {
+            print("⚠️ Failed to decode workgroups: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
+            throw APIError.decodingError
+        }
+    }
+    
+    func getCalendarEvents(ownerId: String? = nil, type: String = "user") async throws -> [CalendarEvent] {
+        // Match Android date format: "yyyy-MM-dd'T'HH:mm:ss" with UTC timezone
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        dateFormatter.timeZone = TimeZone(identifier: "UTC")
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        
+        let today = Date()
+        let oneYearFromNow = Calendar.current.date(byAdding: .year, value: 1, to: today) ?? today
+        
+        let fromDate = dateFormatter.string(from: today)
+        let toDate = dateFormatter.string(from: oneYearFromNow)
+        
+        print("📅 Fetching calendar events: from=\(fromDate), to=\(toDate), ownerId=\(ownerId ?? "nil"), type=\(type)")
+        
+        // Match Android: create request with optional filter
+        let filter = CalendarEventFilter(fromDate: fromDate, toDate: toDate)
+        let request = CalendarEventsRequest(
+            filter: filter,
+            ownerId: ownerId,
+            type: type
+        )
+        
+        // Match Android: POST request with auth in query AND body
+        var components = URLComponents(string: "\(apiUrl)calendar.event.get.json")!
+        components.queryItems = [
+            URLQueryItem(name: "auth", value: accessToken)
+        ]
+        
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+        
+        // Create JSON encoder with custom settings to match Android
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .useDefaultKeys // Keep >FROM and <FROM as-is
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Encode request body
+        do {
+            urlRequest.httpBody = try encoder.encode(request)
+            // Log request body for debugging
+            if let bodyString = String(data: urlRequest.httpBody!, encoding: .utf8) {
+                print("📅 Calendar request body: \(bodyString)")
+            }
+        } catch {
+            print("❌ Failed to encode calendar request: \(error)")
             throw APIError.decodingError
         }
         
-        let feedResponse = try JSONDecoder().decode(BlogFeedResponse.self, from: data)
-        return feedResponse.result.map { $0.toDomain() }
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for calendar events")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
+        }
+        
+        // Log response for debugging
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📅 Calendar API response (first 500 chars): \(String(responseString.prefix(500)))")
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Calendar API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in getCalendarEvents: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
+        }
+        
+        do {
+            // Log full response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📅 Calendar API full response: \(responseString)")
+            }
+            
+            let eventsResponse = try JSONDecoder().decode(CalendarEventsResponse.self, from: data)
+            
+            // Match Android: result is List<CalendarEvent> (not optional in Android)
+            let events = (eventsResponse.result ?? []).map { $0.toDomain() }
+            print("✅ Fetched \(events.count) calendar events")
+            
+            if events.isEmpty {
+                print("⚠️ Calendar returned empty - check if events exist in Bitrix24")
+                print("   Response had result: \(eventsResponse.result != nil)")
+                print("   Result count: \(eventsResponse.result?.count ?? 0)")
+            } else {
+                events.forEach { event in
+                    print("   📅 Event: \(event.name ?? "No name") - \(event.fromDate ?? "No date")")
+                }
+            }
+            
+            return events
+        } catch {
+            print("⚠️ Failed to decode calendar events: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+                switch decodingError {
+                case .keyNotFound(let key, let context):
+                    print("   Missing key: \(key.stringValue) at \(context.codingPath)")
+                case .typeMismatch(let type, let context):
+                    print("   Type mismatch: expected \(type) at \(context.codingPath)")
+                case .valueNotFound(let type, let context):
+                    print("   Value not found: \(type) at \(context.codingPath)")
+                case .dataCorrupted(let context):
+                    print("   Data corrupted at \(context.codingPath): \(context.debugDescription)")
+                @unknown default:
+                    print("   Unknown decoding error")
+                }
+            }
+            // Log the actual response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("   Full response: \(responseString)")
+            }
+            throw APIError.decodingError
+        }
+    }
+    
+    func getBlogFeed() async throws -> [BlogPost] {
+        // Match Android: GET request with optional POST_ID query parameter
+        var components = URLComponents(string: "\(apiUrl)log.blogpost.get.json")!
+        components.queryItems = [
+            URLQueryItem(name: "auth", value: accessToken)
+            // POST_ID is optional - can be added if needed for specific post
+        ]
+        
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for blog feed")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
+        }
+        
+        // Log response for debugging
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📰 Blog feed API response (first 500 chars): \(String(responseString.prefix(500)))")
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Blog feed API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in getBlogFeed: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
+        }
+        
+        do {
+            let feedResponse = try JSONDecoder().decode(BlogFeedResponse.self, from: data)
+            
+            if let error = feedResponse.error {
+                print("❌ Bitrix24 error in feed: \(error) - \(feedResponse.error_description ?? "")")
+                throw APIError.bitrixError(feedResponse.error_description ?? error)
+            }
+            
+            // Match Android: use result directly (Android uses response.body()!!.result)
+            let posts = feedResponse.posts.map { $0.toDomain() }
+            print("✅ Fetched \(posts.count) feed posts")
+            if posts.isEmpty {
+                print("⚠️ Feed returned empty - check if API response structure matches")
+            }
+            return posts
+        } catch {
+            print("⚠️ Failed to decode blog feed: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
+            // Log the actual response for debugging
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("   Full response: \(responseString)")
+            }
+            throw APIError.decodingError
+        }
     }
     
     func addBlogPost(message: String, title: String?) async throws -> String {
@@ -698,30 +902,151 @@ struct BitrixApiClient {
     }
     
     func getTaskFiles(taskId: String) async throws -> [TaskFileDto] {
-        var components = URLComponents(string: "\(apiUrl)disk.attachedObject.get.json")!
-        components.queryItems = [
-            URLQueryItem(name: "auth", value: accessToken),
-            URLQueryItem(name: "ENTITY_TYPE_ID", value: "1"), // Task entity
-            URLQueryItem(name: "ENTITY_ID", value: taskId)
-        ]
+        // Get files from the task object itself (like Android does)
+        // Files are stored in UF_TASK_WEBDAV_FILES field
+        do {
+            // Get raw JSON response to parse files
+            // IMPORTANT: Request UF_* fields like Android does with select[] parameter (array format)
+            var components = URLComponents(string: "\(apiUrl)tasks.task.get.json")!
+            components.queryItems = [
+                URLQueryItem(name: "auth", value: accessToken),
+                URLQueryItem(name: "taskId", value: taskId),
+                // Request all fields including custom UF_* fields (like Android uses select[] array)
+                URLQueryItem(name: "select[]", value: "*"),
+                URLQueryItem(name: "select[]", value: "UF_*")
+            ]
+            
+            guard let url = components.url else {
+                throw APIError.invalidURL
+            }
+            
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("⚠️ Failed to get task for files: Invalid HTTP response")
+                return []
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                print("⚠️ Failed to get task for files: HTTP \(httpResponse.statusCode)")
+                return []
+            }
+            
+            // Parse raw JSON to extract files
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = json["result"] as? [String: Any],
+                  let task = result["task"] as? [String: Any] else {
+                print("⚠️ Failed to parse task JSON")
+                // Log the actual response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("   Response: \(responseString.prefix(1000))")
+                }
+                return []
+            }
+            
+            // Log all keys in task to see what fields are available
+            let taskKeys = Array(task.keys).sorted()
+            print("📁 Task fields available: \(taskKeys.joined(separator: ", "))")
+            
+            // Try to get files from various possible fields (check all variations like Android)
+            var files: [TaskFileDto] = []
+            
+            // Check multiple field name variations (Android checks: ufTaskWebdavFiles, FILES, files)
+            let filesData = task["UF_TASK_WEBDAV_FILES"] ?? 
+                           task["ufTaskWebdavFiles"] ?? 
+                           task["FILES"] ?? 
+                           task["files"]
+            
+            if let filesData = filesData {
+                print("📁 Found files data, type: \(type(of: filesData))")
+                files = parseFilesFromJson(filesData)
+            } else {
+                print("⚠️ No files field found in task response")
+            }
+            
+            print("✅ Found \(files.count) files for task \(taskId)")
+            if files.isEmpty {
+                // Log task structure for debugging
+                print("   Task keys: \(taskKeys)")
+            }
+            return files
+        } catch {
+            print("⚠️ Failed to get task files: \(error.localizedDescription)")
+            return []
+        }
+    }
+    
+    private func parseFilesFromJson(_ filesData: Any) -> [TaskFileDto] {
+        var files: [TaskFileDto] = []
         
-        guard let url = components.url else {
-            throw APIError.invalidURL
+        // Handle different data types
+        if let fileArray = filesData as? [[String: Any]] {
+            // Array of file objects
+            for fileDict in fileArray {
+                if let file = parseFileObject(fileDict) {
+                    files.append(file)
+                }
+            }
+        } else if let fileDict = filesData as? [String: Any] {
+            // Dictionary of files (key-value pairs)
+            for (_, value) in fileDict {
+                if let fileObj = value as? [String: Any],
+                   let file = parseFileObject(fileObj) {
+                    files.append(file)
+                } else if let fileId = (value as? String) ?? (value as? Int).map(String.init) {
+                    // Just an ID - we'd need to fetch details, but for now skip
+                    print("⚠️ File ID found but details not fetched: \(fileId)")
+                }
+            }
+        } else if let fileArray = filesData as? [Any] {
+            // Array of file IDs or objects
+            for item in fileArray {
+                if let fileObj = item as? [String: Any],
+                   let file = parseFileObject(fileObj) {
+                    files.append(file)
+                }
+            }
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.decodingError
+        return files
+    }
+    
+    private func parseFileObject(_ fileDict: [String: Any]) -> TaskFileDto? {
+        // Extract ID - can be String or Int
+        guard let id = (fileDict["ID"] as? String) ?? (fileDict["id"] as? String) ?? 
+                       (fileDict["ID"] as? Int).map(String.init) ?? 
+                       (fileDict["id"] as? Int).map(String.init) else {
+            print("   ⚠️ File object missing ID: \(fileDict.keys)")
+            return nil
         }
         
-        struct AttachedObjectResponse: Codable {
-            let result: [TaskFileDto]?
-        }
+        // Extract name
+        let name = (fileDict["NAME"] as? String) ?? (fileDict["name"] as? String) ?? "Unknown"
         
-        let filesResponse = try JSONDecoder().decode(AttachedObjectResponse.self, from: data)
-        return filesResponse.result ?? []
+        // Extract size - can be String or Int
+        let size = (fileDict["SIZE"] as? String) ?? (fileDict["size"] as? String) ?? 
+                   (fileDict["SIZE"] as? Int).map(String.init) ?? 
+                   (fileDict["size"] as? Int).map(String.init) ?? "0"
+        
+        // Extract type
+        let type = (fileDict["TYPE"] as? String) ?? (fileDict["type"] as? String) ?? "application/octet-stream"
+        
+        // Extract download URL - check multiple possible field names
+        let downloadUrl = (fileDict["DOWNLOAD_URL"] as? String) ?? 
+                          (fileDict["downloadUrl"] as? String) ?? 
+                          (fileDict["download_url"] as? String) ??
+                          (fileDict["URL"] as? String) ?? 
+                          (fileDict["url"] as? String)
+        
+        // Create TaskFileDto manually since we can't use Codable with raw dictionaries
+        return TaskFileDto(
+            id: id,
+            name: name,
+            size: size,
+            type: type,
+            downloadUrl: downloadUrl,
+            url: downloadUrl
+        )
     }
     
     func uploadFile(fileData: Data, fileName: String) async throws -> String {
@@ -770,28 +1095,84 @@ struct BitrixApiClient {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.decodingError
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for uploadFile")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
+        }
+        
+        // Log response for debugging
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📤 File upload API response (first 500 chars): \(String(responseString.prefix(500)))")
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ File upload API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            
+            // Special handling for 413 (Request Entity Too Large)
+            if httpResponse.statusCode == 413 {
+                throw APIError.bitrixError("File is too large. Maximum file size is approximately 10-15MB. Please compress or resize the file.")
+            }
+            
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in uploadFile: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
         }
         
         struct FileUploadResponse: Codable {
             let result: FileUploadResult?
+            let error: String?
+            let error_description: String?
         }
         
         struct FileUploadResult: Codable {
-            let id: String?
+            let id: String
             
             enum CodingKeys: String, CodingKey {
                 case id = "ID"
             }
+            
+            // Custom decoder to handle ID as either String or Int
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                
+                // Try to decode as String first, then Int, then fallback
+                if let stringId = try? container.decode(String.self, forKey: .id) {
+                    id = stringId
+                } else if let intId = try? container.decode(Int.self, forKey: .id) {
+                    id = String(intId)
+                } else {
+                    throw DecodingError.typeMismatch(String.self, DecodingError.Context(
+                        codingPath: [CodingKeys.id],
+                        debugDescription: "ID must be String or Int"
+                    ))
+                }
+            }
         }
         
-        let uploadResponse = try JSONDecoder().decode(FileUploadResponse.self, from: data)
-        guard let fileId = uploadResponse.result?.id else {
-            throw APIError.noData
+        do {
+            let uploadResponse = try JSONDecoder().decode(FileUploadResponse.self, from: data)
+            
+            if let error = uploadResponse.error {
+                throw APIError.bitrixError(uploadResponse.error_description ?? error)
+            }
+            
+            guard let fileId = uploadResponse.result?.id, !fileId.isEmpty else {
+                throw APIError.noData
+            }
+            return fileId
+        } catch {
+            print("⚠️ Failed to decode file upload response: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
+            throw APIError.decodingError
         }
-        return fileId
     }
     
     func attachFileToTask(taskId: String, fileId: String) async throws {
@@ -816,11 +1197,24 @@ struct BitrixApiClient {
         let body = AttachFileRequest(taskId: taskId, fileId: fileId)
         request.httpBody = try JSONEncoder().encode(body)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.decodingError
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ Invalid HTTP response for attachFileToTask")
+            throw APIError.networkError(NSError(domain: "InvalidResponse", code: -1))
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Attach file API error: HTTP \(httpResponse.statusCode). Response: \(errorBody.prefix(200))")
+            throw APIError.httpError(httpResponse.statusCode, errorBody)
+        }
+        
+        // Check for Bitrix24 errors
+        if let errorResponse = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let error = errorResponse.error {
+            print("❌ Bitrix24 error in attachFileToTask: \(error) - \(errorResponse.errorMessage ?? errorResponse.errorDescription ?? "")")
+            throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
         }
     }
 }
@@ -945,6 +1339,16 @@ struct TaskFileDto: Codable {
         case type = "TYPE"
         case downloadUrl = "DOWNLOAD_URL"
         case url = "URL"
+    }
+    
+    // Custom initializer for manual creation from dictionaries
+    init(id: String?, name: String?, size: String?, type: String?, downloadUrl: String?, url: String?) {
+        self.id = id
+        self.name = name
+        self.size = size
+        self.type = type
+        self.downloadUrl = downloadUrl
+        self.url = url
     }
     
     func toDomain() -> TaskFile {

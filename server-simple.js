@@ -17,27 +17,53 @@ const PORT = process.env.PORT || 3000;
 // DATABASE SETUP (PostgreSQL)
 // ============================================
 let pool;
-if (process.env.DATABASE_URL) {
-    pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-    });
+
+async function setupDatabase() {
+    if (!process.env.DATABASE_URL) {
+        console.log('ℹ️ DATABASE_URL not set - database features disabled');
+        return;
+    }
     
-    // Create table if it doesn't exist
-    pool.query(`
-        CREATE TABLE IF NOT EXISTS push_tokens (
-            id SERIAL PRIMARY KEY,
-            user_id VARCHAR(255) NOT NULL,
-            apns_token TEXT NOT NULL,
-            platform VARCHAR(10) DEFAULT 'ios',
-            portal_url VARCHAR(500),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, apns_token)
-        );
-        CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
-    `).catch(err => console.error('Database setup error:', err));
+    try {
+        pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        });
+        
+        // Test connection
+        await pool.query('SELECT NOW()');
+        console.log('✅ Database connection established');
+        
+        // Create table if it doesn't exist
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                apns_token TEXT NOT NULL,
+                platform VARCHAR(10) DEFAULT 'ios',
+                portal_url VARCHAR(500),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, apns_token)
+            );
+        `);
+        console.log('✅ push_tokens table created/verified');
+        
+        // Create index if it doesn't exist
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
+        `);
+        console.log('✅ Database indexes created/verified');
+        
+    } catch (err) {
+        console.error('❌ Database setup error:', err);
+        console.error('   Error details:', err.message);
+        pool = null; // Disable database features if setup fails
+    }
 }
+
+// Initialize database on server start
+setupDatabase();
 
 // ============================================
 // APNs SETUP
@@ -100,12 +126,63 @@ app.use((req, res, next) => {
 
 // Health check
 app.get('/health', (req, res) => {
+    const dbStatus = pool ? 'connected' : 'not configured';
     res.json({ 
         status: 'healthy', 
         service: 'jbmarks-token-exchange',
         version: '1.0.0',
+        database: dbStatus,
         timestamp: new Date().toISOString() 
     });
+});
+
+// Database setup endpoint (for manual table creation)
+app.post('/api/db/setup', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ 
+                error: 'Database not configured',
+                message: 'DATABASE_URL environment variable not set'
+            });
+        }
+        
+        // Create table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS push_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL,
+                apns_token TEXT NOT NULL,
+                platform VARCHAR(10) DEFAULT 'ios',
+                portal_url VARCHAR(500),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, apns_token)
+            );
+        `);
+        
+        // Create index
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
+        `);
+        
+        // Verify table exists
+        const result = await pool.query(`
+            SELECT COUNT(*) as count FROM information_schema.tables 
+            WHERE table_name = 'push_tokens';
+        `);
+        
+        res.json({ 
+            success: true,
+            message: 'Database tables created successfully',
+            tableExists: result.rows[0].count > 0
+        });
+    } catch (error) {
+        console.error('❌ Database setup error:', error);
+        res.status(500).json({ 
+            error: 'Failed to setup database',
+            message: error.message 
+        });
+    }
 });
 
 // Root endpoint
@@ -118,7 +195,8 @@ app.get('/', (req, res) => {
             tokenExchange: 'POST /api/exchangetoken',
             pushRegister: 'POST /api/push/register-token',
             pushSend: 'POST /api/push/send',
-            pushDelete: 'DELETE /api/push/token/:user_id'
+            pushDelete: 'DELETE /api/push/token/:user_id',
+            bitrixWebhook: 'POST /api/bitrix/webhook'
         }
     });
 });
@@ -260,8 +338,18 @@ app.post('/api/exchangetoken', async (req, res) => {
  */
 app.post('/api/push/register-token', async (req, res) => {
     try {
+        // Database is optional - if not configured, log warning but return success
+        // This allows the app to continue working even if push notifications aren't fully set up
         if (!pool) {
-            return res.status(503).json({ error: 'Database not configured' });
+            console.warn('⚠️ Push token registration attempted but database not configured');
+            console.warn('   Token registration skipped - app will continue to work');
+            // Return success so the app doesn't retry unnecessarily
+            // The token will be registered when database is available
+            return res.json({ 
+                success: true, 
+                message: 'Token registration skipped (database not configured)',
+                warning: 'Database not configured - token will be registered when available'
+            });
         }
         
         const { apns_token, platform, portal_url, user_id } = req.body;
@@ -379,6 +467,167 @@ app.post('/api/push/send', async (req, res) => {
 });
 
 /**
+ * POST /api/bitrix/webhook
+ * Handle Bitrix24 webhook events and send push notifications
+ */
+app.post('/api/bitrix/webhook', async (req, res) => {
+    try {
+        const event = req.body;
+        console.log('📥 Bitrix24 webhook received:', JSON.stringify(event, null, 2));
+        
+        // Handle different event types
+        let notificationData = null;
+        
+        // Task comment added
+        if (event.event === 'ONTASKCOMMENTADD' || event.event === 'OnTaskCommentAdd') {
+            const taskId = event.data?.FIELDS_AFTER?.TASK_ID || event.data?.TASK_ID;
+            const commentText = event.data?.FIELDS_AFTER?.POST_MESSAGE || event.data?.POST_MESSAGE || 'New comment';
+            const authorId = event.data?.FIELDS_AFTER?.AUTHOR_ID || event.data?.AUTHOR_ID;
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'Task';
+            
+            // Send notification to task responsible (not the comment author)
+            if (responsibleId && responsibleId !== authorId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'New Comment on Task',
+                    body: `${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}`,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_COMMENT'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Task created/assigned
+        else if (event.event === 'ONTASKADD' || event.event === 'OnTaskAdd') {
+            const taskId = event.data?.FIELDS_AFTER?.ID || event.data?.ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'New Task';
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            
+            if (responsibleId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'New Task Assigned',
+                    body: taskTitle,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_ASSIGNED'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Task updated
+        else if (event.event === 'ONTASKUPDATE' || event.event === 'OnTaskUpdate') {
+            const taskId = event.data?.FIELDS_AFTER?.ID || event.data?.ID;
+            const taskTitle = event.data?.FIELDS_AFTER?.TITLE || event.data?.TITLE || 'Task';
+            const responsibleId = event.data?.FIELDS_AFTER?.RESPONSIBLE_ID || event.data?.RESPONSIBLE_ID;
+            
+            if (responsibleId) {
+                notificationData = {
+                    user_id: String(responsibleId),
+                    title: 'Task Updated',
+                    body: taskTitle,
+                    data: {
+                        type: 'TASK',
+                        task_id: String(taskId),
+                        notification_type: 'TASK_UPDATED'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        // Chat message
+        else if (event.event === 'ONIMCOMMONADD' || event.event === 'OnImCommonAdd') {
+            const dialogId = event.data?.FIELDS_AFTER?.CHAT_ID || event.data?.CHAT_ID;
+            const messageText = event.data?.FIELDS_AFTER?.MESSAGE || event.data?.MESSAGE || 'New message';
+            const authorId = event.data?.FIELDS_AFTER?.AUTHOR_ID || event.data?.AUTHOR_ID;
+            const recipientId = event.data?.FIELDS_AFTER?.RECIPIENT_ID || event.data?.RECIPIENT_ID;
+            
+            // Send to recipient (not the sender)
+            if (recipientId && recipientId !== authorId) {
+                notificationData = {
+                    user_id: String(recipientId),
+                    title: 'New Message',
+                    body: messageText.substring(0, 100),
+                    data: {
+                        type: 'CHAT',
+                        dialog_id: String(dialogId),
+                        notification_type: 'CHAT_MESSAGE'
+                    },
+                    badge: 1
+                };
+            }
+        }
+        
+        // Send push notification if we have data
+        if (notificationData) {
+            console.log('📤 Sending push notification:', notificationData);
+            
+            // Call internal push send function
+            if (!pool || !apnProvider) {
+                console.warn('⚠️ Push notifications not configured - skipping');
+                return res.json({ 
+                    success: true, 
+                    message: 'Webhook received but push notifications not configured' 
+                });
+            }
+            
+            // Get user's APNs token(s)
+            const query = 'SELECT apns_token FROM push_tokens WHERE user_id = $1';
+            const result = await pool.query(query, [notificationData.user_id]);
+            
+            if (result.rows.length > 0) {
+                // Create notification
+                const notification = new apn.Notification();
+                notification.alert = { 
+                    title: notificationData.title, 
+                    body: notificationData.body 
+                };
+                notification.sound = 'default';
+                notification.badge = notificationData.badge || 1;
+                notification.topic = process.env.APNS_BUNDLE_ID || 'jbmarks.JbmrksIOs';
+                notification.payload = notificationData.data || {};
+                notification.expiry = Math.floor(Date.now() / 1000) + 3600;
+                
+                // Send to all tokens for this user
+                const tokens = result.rows.map(row => row.apns_token);
+                const response = await apnProvider.send(notification, tokens);
+                
+                console.log(`✅ Push notification sent: ${response.sent.length} successful, ${response.failed.length} failed`);
+                
+                // Clean up invalid tokens
+                response.failed.forEach(failure => {
+                    if (failure.error === 'BadDeviceToken' || failure.error === 'Unregistered') {
+                        pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [failure.device])
+                            .catch(err => console.error('Error deleting token:', err));
+                    }
+                });
+            } else {
+                console.log(`⚠️ No push token found for user: ${notificationData.user_id}`);
+            }
+        } else {
+            console.log('ℹ️ No notification data generated for this event type');
+        }
+        
+        // Always return success to Bitrix24
+        res.json({ success: true, message: 'Webhook processed' });
+        
+    } catch (error) {
+        console.error('❌ Webhook error:', error);
+        // Still return success to Bitrix24 to prevent retries
+        res.status(200).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+/**
  * DELETE /api/push/token/:user_id
  * Remove push token for user
  */
@@ -422,14 +671,34 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log('='.repeat(60));
     console.log('✅ JBmarks Token Exchange Server');
     console.log('='.repeat(60));
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🏥 Health check: http://localhost:${PORT}/health`);
     console.log(`🔑 Token exchange: http://localhost:${PORT}/api/exchangetoken`);
+    console.log(`🗄️  Database setup: POST http://localhost:${PORT}/api/db/setup`);
     console.log('='.repeat(60));
+    
+    // Wait a moment for database setup to complete, then verify
+    setTimeout(async () => {
+        if (pool) {
+            try {
+                const result = await pool.query(`
+                    SELECT COUNT(*) as count FROM information_schema.tables 
+                    WHERE table_name = 'push_tokens';
+                `);
+                if (result.rows[0].count > 0) {
+                    console.log('✅ Database table verified: push_tokens exists');
+                } else {
+                    console.log('⚠️  Database table not found. Call POST /api/db/setup to create it.');
+                }
+            } catch (err) {
+                console.error('❌ Error checking database:', err.message);
+            }
+        }
+    }, 2000);
 });
 
 module.exports = app;

@@ -41,7 +41,15 @@ struct BlogPost: Identifiable, Codable {
 }
 
 struct BlogFeedResponse: Codable {
-    let result: [BlogPostDto]
+    // Match Android: result is a list directly (not optional in Android, but we keep optional for safety)
+    let result: [BlogPostDto]?
+    let error: String?
+    let error_description: String?
+    
+    // Handle case where result might be empty array or null
+    var posts: [BlogPostDto] {
+        return result ?? []
+    }
 }
 
 struct BlogPostDto: Codable {
