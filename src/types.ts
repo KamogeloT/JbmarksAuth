@@ -8,6 +8,8 @@ export interface FaultReport {
   email?: string;
   formType: 'Water' | 'Electricity' | 'Roads' | 'Waste';
   specificField: string;
+  area?: 'Township' | 'Town'; // Area type selection
+  city?: 'Ventersdorp' | 'Potchefstroom'; // City selection
   address: string;
   details: string;
   photo?: string;

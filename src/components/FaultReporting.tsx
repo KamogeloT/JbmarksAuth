@@ -3,6 +3,7 @@ import { WaterIcon, PowerIcon, RoadIcon, TrashIcon, LocationMarkerIcon, CameraIc
 import { bitrix24Service } from '../services/bitrix24Service';
 import { storageService } from '../services/storageService';
 import { FaultReport } from '../types';
+import { config } from '../config';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 
@@ -53,7 +54,14 @@ const SelectField: React.FC<{
       required={required}
       value={value}
       onChange={onChange}
-      className="w-full px-4 py-3 text-base font-medium text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-DEFAULT focus:border-primary-DEFAULT transition-all duration-200"
+      className="w-full px-4 py-3 text-base font-medium text-gray-900 bg-white border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-DEFAULT focus:border-primary-DEFAULT transition-all duration-200 appearance-none cursor-pointer"
+      style={{
+        backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+        backgroundPosition: 'right 0.5rem center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '1.5em 1.5em',
+        paddingRight: '2.5rem'
+      }}
     >
       {children}
     </select>
@@ -67,17 +75,89 @@ const LocationInput: React.FC<{
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
+    try {
+      // Use Nominatim (OpenStreetMap) for reverse geocoding
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+        {
+          headers: {
+            'Accept-Language': 'en',
+            'User-Agent': 'SDINMOTION-Municipal-App'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Geocoding service unavailable');
+      }
+
+      const data = await response.json();
+      
+      if (data && data.address) {
+        const addr = data.address;
+        
+        // Build a readable address from components
+        const parts = [];
+        
+        // Street number and name
+        if (addr.house_number) parts.push(addr.house_number);
+        if (addr.road) parts.push(addr.road);
+        else if (addr.street) parts.push(addr.street);
+        
+        // Suburb/Town
+        if (addr.suburb) parts.push(addr.suburb);
+        else if (addr.neighbourhood) parts.push(addr.neighbourhood);
+        
+        // City/Town
+        if (addr.city) parts.push(addr.city);
+        else if (addr.town) parts.push(addr.town);
+        else if (addr.village) parts.push(addr.village);
+        
+        // Region/State
+        if (addr.state) parts.push(addr.state);
+        
+        // Postcode
+        if (addr.postcode) parts.push(addr.postcode);
+        
+        const formattedAddress = parts.join(', ');
+        
+        // If we got a good address, return it; otherwise return display_name
+        if (formattedAddress && parts.length > 2) {
+          return formattedAddress;
+        } else if (data.display_name) {
+          return data.display_name;
+        }
+      }
+      
+      // Fallback to coordinates if geocoding fails
+      return `Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`;
+    } catch (error) {
+      console.error('Error reverse geocoding:', error);
+      // Return coordinates as fallback
+      return `Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`;
+    }
+  };
+
   const handleGetLocation = async () => {
     setLoading(true);
     setError('');
     
     try {
+      console.log('📍 Getting GPS coordinates...');
       const position = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
         timeout: 10000,
       });
       const { latitude, longitude } = position.coords;
-      setAddress(`Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`);
+      console.log('✅ GPS coordinates:', latitude, longitude);
+      
+      // Convert coordinates to address
+      console.log('🌍 Converting to street address...');
+      const streetAddress = await reverseGeocode(latitude, longitude);
+      console.log('✅ Street address:', streetAddress);
+      
+      setAddress(streetAddress);
     } catch (err) {
       console.error('Error getting location:', err);
       setError('Unable to retrieve your location. Please grant permission or enter manually.');
@@ -124,8 +204,10 @@ const FileInput: React.FC<{
 
   const handleCameraCapture = async () => {
     try {
+      console.log('📸 Opening camera/gallery...');
+      
       const image = await Camera.getPhoto({
-        quality: 80,
+        quality: 60,  // Reduced for faster mobile upload
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Prompt,
@@ -134,55 +216,142 @@ const FileInput: React.FC<{
         promptLabelPicture: 'Take Photo'
       });
 
-      if (image.dataUrl) {
-        console.log('📸 Camera image captured, format:', image.format);
-        setPreview(image.dataUrl);
-        
-        try {
-          // Extract base64 data directly from dataUrl
-          const base64Data = image.dataUrl.split(',')[1];
-          
-          // Convert base64 to blob
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          
-          // Determine MIME type
-          const mimeType = `image/${image.format || 'jpeg'}`;
-          const blob = new Blob([byteArray], { type: mimeType });
-          
-          console.log('📦 Blob created from base64, size:', blob.size, 'type:', blob.type);
-          
-          // Create File with proper metadata and store original base64
-          const fileName = `photo_${Date.now()}.${image.format || 'jpg'}`;
-          const photoFile = new File([blob], fileName, { 
-            type: mimeType,
-            lastModified: Date.now()
-          });
-          
-          // Store the original base64 data as a custom property for direct upload
-          (photoFile as any).__base64Data = base64Data;
-          (photoFile as any).__isCamera = true;
-          
-          console.log('✅ File created from camera:', {
-            name: photoFile.name,
-            size: photoFile.size,
-            type: photoFile.type,
-            hasBase64: !!(photoFile as any).__base64Data
-          });
-          
-          setFile(photoFile);
-        } catch (conversionError) {
-          console.error('❌ Error converting image to file:', conversionError);
-          alert('Failed to process the image. Please try again.');
-        }
+      if (!image.dataUrl) {
+        console.error('❌ No image data received');
+        alert('No image data received. Please try again.');
+        return;
       }
-    } catch (err) {
-      console.error('Error capturing photo:', err);
-      alert('Failed to capture photo. Please check camera permissions.');
+
+      console.log('✅ Image received, format:', image.format);
+      console.log('📊 Data URL length:', image.dataUrl.length);
+      
+      // Show preview immediately
+      setPreview(image.dataUrl);
+      
+      // Extract base64 data
+      const base64Data = image.dataUrl.split(',')[1];
+      
+      if (!base64Data) {
+        console.error('❌ Could not extract base64 data');
+        alert('Failed to process image. Please try again.');
+        setPreview(null);
+        return;
+      }
+      
+      console.log('✅ Base64 extracted, length:', base64Data.length);
+      
+      // Convert to blob to get file size
+      const byteCharacters = atob(base64Data);
+      const byteArray = new Uint8Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteArray[i] = byteCharacters.charCodeAt(i);
+      }
+      
+      const format = image.format || 'jpeg';
+      const mimeType = `image/${format}`;
+      const blob = new Blob([byteArray], { type: mimeType });
+      
+      console.log('✅ Blob created, size:', blob.size, 'bytes');
+      
+      // STANDARDIZE: Force ALL photos through same compression pipeline
+      // This ensures consistent format/size across all devices and upload methods
+      console.log(`📦 Standardizing photo format (original: ${(blob.size / 1024 / 1024).toFixed(2)}MB)...`);
+      
+      let finalBlob = blob;
+      let finalBase64 = base64Data;
+      
+      try {
+        // Create an image element to resize
+        const img = new Image();
+        img.src = image.dataUrl;
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        
+        // Calculate new dimensions (max 1600px for optimal mobile upload)
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 1600;
+        
+        console.log(`📐 Original dimensions: ${width}x${height}`);
+        
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension;
+            width = maxDimension;
+          } else {
+            width = (width / height) * maxDimension;
+            height = maxDimension;
+          }
+        }
+        
+        console.log(`📐 Target dimensions: ${Math.round(width)}x${Math.round(height)}`);
+        
+        // Resize using canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Convert to JPEG with 60% quality (standardized across all sources)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        const compressedBase64 = compressedDataUrl.split(',')[1];
+        
+        // Convert to blob
+        const compressedBytes = atob(compressedBase64);
+        const compressedArray = new Uint8Array(compressedBytes.length);
+        for (let i = 0; i < compressedBytes.length; i++) {
+          compressedArray[i] = compressedBytes.charCodeAt(i);
+        }
+        
+        finalBlob = new Blob([compressedArray], { type: 'image/jpeg' });
+        finalBase64 = compressedBase64;
+        
+        console.log(`✅ Standardized: ${(blob.size / 1024 / 1024).toFixed(2)}MB → ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB`);
+        setPreview(compressedDataUrl); // Update preview with compressed image
+        
+      } catch (compressionError) {
+        console.error('❌ Compression failed, cannot proceed:', compressionError);
+        alert('Failed to process image. Please try again.');
+        setPreview(null);
+        return;
+      }
+      
+      const maxSize = 10 * 1024 * 1024; // 10MB absolute maximum
+      
+      if (finalBlob.size > maxSize) {
+        alert(`Image too large: ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB. Maximum is 10MB. Please try a smaller image.`);
+        setPreview(null);
+        return;
+      }
+      
+      // Create File object
+      const fileName = `photo_${Date.now()}.jpeg`;
+      const photoFile = new File([finalBlob], fileName, { 
+        type: 'image/jpeg',
+        lastModified: Date.now()
+      });
+      
+      // Store base64 for direct upload (avoids re-conversion)
+      (photoFile as any).__base64Data = finalBase64;
+      
+      console.log('✅ File ready:', photoFile.name, photoFile.size, 'bytes');
+      
+      setFile(photoFile);
+      
+    } catch (err: any) {
+      console.error('❌ Camera error:', err);
+      
+      // Don't show error if user cancelled
+      if (err.message?.includes('cancel') || err.message?.includes('Cancel')) {
+        console.log('User cancelled');
+        return;
+      }
+      
+      alert(`Error: ${err.message || 'Failed to capture photo'}`);
     }
   };
 
@@ -254,6 +423,8 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
     contactNumber: '',
     email: '',
     specificField: '',
+    area: '',
+    city: '',
     details: '',
   });
   const [address, setAddress] = useState('');
@@ -269,6 +440,8 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
         contactNumber: draft.contactNumber || '',
         email: draft.email || '',
         specificField: draft.specificField || '',
+        area: draft.area || '',
+        city: draft.city || '',
         details: draft.details || '',
       });
       setAddress(draft.address || '');
@@ -280,6 +453,8 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
       if (formData.fullName || formData.details) {
         storageService.saveDraft({
           ...formData,
+          area: formData.area as 'Township' | 'Town' | undefined,
+          city: formData.city as 'Ventersdorp' | 'Potchefstroom' | undefined,
           address,
           formType,
         });
@@ -299,6 +474,14 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
     setStatus('submitting');
     setErrorMessage('');
 
+    // Validate city is selected (required)
+    if (!formData.city || (formData.city !== 'Ventersdorp' && formData.city !== 'Potchefstroom')) {
+      setStatus('error');
+      setErrorMessage('Please select a city before submitting.');
+      alert('❌ Please select a city before submitting.');
+      return;
+    }
+
     const reportId = storageService.generateId();
     const refNumber = storageService.generateRefNumber();
 
@@ -310,6 +493,8 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
       email: formData.email,
       formType,
       specificField: formData.specificField,
+      area: undefined, // Area is hidden for now
+      city: formData.city as 'Ventersdorp' | 'Potchefstroom',
       address,
       details: formData.details,
       photoFile: file || undefined,
@@ -321,33 +506,19 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
     storageService.saveReport(report);
 
     try {
-      const taskResult = await bitrix24Service.createTaskFromFault(report);
+      // NEW APPROACH: Pass file to createTaskFromFault
+      // File will be uploaded FIRST, then task created with file attached
+      console.log('📤 Submitting report' + (file ? ' with photo' : ''));
+      
+      const taskResult = await bitrix24Service.createTaskFromFault(report, file || undefined);
 
       if (taskResult.success && taskResult.taskId) {
+        // Success! Task created (and file attached if provided)
+        console.log('✅ Task created successfully:', taskResult.taskId);
+        
         report.taskId = taskResult.taskId;
         report.status = 'submitted';
         report.submittedAt = new Date().toISOString();
-
-        // Handle file upload with detailed feedback
-        if (file && taskResult.taskId) {
-          console.log('🔄 Starting file upload...');
-          alert(`Task created successfully! Task ID: ${taskResult.taskId}\n\nNow uploading photo...`);
-          
-          const uploadResult = await bitrix24Service.uploadFile(file, taskResult.taskId, formType);
-          
-          if (uploadResult.success) {
-            console.log('✅ File upload SUCCESS!');
-            alert(`✅ SUCCESS!\n\nTask created: ${taskResult.taskId}\nPhoto uploaded: ${uploadResult.fileId}\n\nYour report has been submitted successfully!`);
-          } else {
-            console.error('❌ File upload FAILED:', uploadResult.error);
-            alert(`⚠️ PARTIAL SUCCESS\n\nTask created: ${taskResult.taskId}\n\nBUT photo upload FAILED:\n${uploadResult.error}\n\nThe task was created but without the photo. Please check the console for details.`);
-            
-            // Store error for debugging
-            report.error = `Photo upload failed: ${uploadResult.error}`;
-          }
-        } else {
-          alert(`✅ Task created successfully!\n\nTask ID: ${taskResult.taskId}\n\n(No photo was attached)`);
-        }
 
         storageService.saveReport(report);
         storageService.clearDraft();
@@ -355,20 +526,34 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
         setStatus('success');
         onSuccess(report);
       } else {
+        // Task creation failed - show detailed error popup
+        console.error('❌ Task creation failed:', taskResult.error);
+        
         report.status = 'failed';
         report.error = taskResult.error || 'Failed to create task';
         storageService.saveReport(report);
         
+        // Show detailed error popup
+        const errorDetails = taskResult.error || 'Failed to submit report. Please try again.';
+        alert(`❌ ERROR: Report Submission Failed\n\n${errorDetails}\n\nPlease check the details above and try again.`);
+        
         setStatus('error');
-        setErrorMessage(taskResult.error || 'Failed to submit report');
+        setErrorMessage(errorDetails);
       }
     } catch (error) {
+      console.error('❌ Submission exception:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
       report.status = 'failed';
-      report.error = 'Network error';
+      report.error = errorMessage;
       storageService.saveReport(report);
 
+      // Show detailed error popup
+      alert(`❌ NETWORK ERROR\n\n${errorMessage}\n\nYour report has been saved and can be retried from the Report History.`);
+      
       setStatus('error');
-      setErrorMessage('Network error. Your report has been saved and will be retried.');
+      setErrorMessage(errorMessage || 'Network error. Your report has been saved and will be retried.');
     }
   };
 
@@ -421,6 +606,33 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
         <option value="">Select an issue...</option>
         {issueOptions[formType].map(option => (
           <option key={option} value={option}>{option}</option>
+        ))}
+      </SelectField>
+
+      {/* Area dropdown hidden for now */}
+      {/* <SelectField
+        id="area"
+        label="Area"
+        value={formData.area}
+        onChange={handleChange}
+        required={false}
+      >
+        <option value="">Select area (optional)</option>
+        {config.areas.types.map(area => (
+          <option key={area} value={area}>{area}</option>
+        ))}
+      </SelectField> */}
+
+      <SelectField
+        id="city"
+        label="City"
+        value={formData.city}
+        onChange={handleChange}
+        required={true}
+      >
+        <option value="">Select city</option>
+        {config.areas.cities.map(city => (
+          <option key={city} value={city}>{city}</option>
         ))}
       </SelectField>
 
@@ -592,13 +804,22 @@ export const FaultReporting: React.FC<FaultReportingProps> = ({ initialFaultType
 
       {/* Powered by SDinMotion Footer */}
       <div className="bg-white border-t border-gray-200 py-4 mt-8">
-        <div className="flex items-center justify-center gap-2">
-          <span className="text-sm text-gray-600">Powered by</span>
-          <img 
-            src="/assets/images/logos/SdinMotionlogo.png" 
-            alt="SDinMotion" 
-            className="h-6 w-auto"
-          />
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-sm text-gray-600">Powered by</span>
+            <img 
+              src="/assets/images/logos/SdinMotionlogo.png" 
+              alt="SDinMotion" 
+              className="h-6 w-auto"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="px-2 py-1 bg-gray-100 rounded-md font-mono">
+              v{config.app.version}
+            </span>
+            <span className="text-gray-400">•</span>
+            <span>Build {config.app.versionCode}</span>
+          </div>
         </div>
       </div>
     </div>

@@ -22,6 +22,10 @@ const FeatureCard: React.FC<{ icon: React.ElementType, title: string, descriptio
 );
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
+  // Use version from config instead of Capacitor for consistency
+  const appVersion = `v${config.app.version}`;
+  const versionCode = config.app.versionCode;
+
   const features: Array<{ id: string; title: string; faultType: FaultType; icon: React.FC<{ className?: string }>; description: string }> = [
     { id: 'water', title: 'Water & Sanitation', faultType: 'Water', icon: WaterIcon, description: 'Leaks, blockages, supply issues.' },
     { id: 'electricity', title: 'Electricity', faultType: 'Electricity', icon: PowerIcon, description: 'Outages, faulty lights, hazards.' },
@@ -126,13 +130,22 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
       {/* Powered by SDinMotion Footer */}
       <div className="bg-white border-t border-gray-200 py-4 mt-12">
-        <div className="flex items-center justify-center gap-2">
-          <span className="text-sm text-gray-600">Powered by</span>
-          <img 
-            src="/assets/images/logos/SdinMotionlogo.png" 
-            alt="SDinMotion" 
-            className="h-6 w-auto"
-          />
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-sm text-gray-600">Powered by</span>
+            <img 
+              src="/assets/images/logos/SdinMotionlogo.png" 
+              alt="SDinMotion" 
+              className="h-6 w-auto"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="px-2 py-1 bg-gray-100 rounded-md font-mono">
+              {appVersion}
+            </span>
+            <span className="text-gray-400">•</span>
+            <span>Build {versionCode}</span>
+          </div>
         </div>
       </div>
     </div>

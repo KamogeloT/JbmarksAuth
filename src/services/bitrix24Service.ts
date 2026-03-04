@@ -2,7 +2,8 @@
 // This service handles creating tasks in Bitrix24 when faults are reported
 
 import { config } from '../config';
-import { FaultReport, Bitrix24Task, SubmitResult, FileUploadResult } from '../types';
+import { FaultReport, Bitrix24Task, SubmitResult } from '../types';
+import { debugLogger } from './debugLogger';
 
 class Bitrix24Service {
   /**
@@ -10,17 +11,63 @@ class Bitrix24Service {
    */
   private getSanitizedWebhookUrl(): string {
     const url = config.bitrix24.webhookUrl;
+    if (!url || url.trim() === '') {
+      throw new Error(`WEBHOOK URL NOT CONFIGURED
+
+❌ The Bitrix24 webhook URL is missing or empty.
+
+TO FIX THIS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Create a .env file in your project root (if it doesn't exist)
+
+2. Add your Bitrix24 webhook URL:
+   VITE_BITRIX24_WEBHOOK_URL=https://your-domain.bitrix24.com/rest/1/YOUR_WEBHOOK_CODE/
+
+3. Get your webhook URL from Bitrix24:
+   - Go to: Settings → Integrations → Webhooks
+   - Create or copy an "Inbound webhook"
+   - Make sure it has permissions for: Tasks, Disk
+
+4. Restart the development server:
+   - Stop the server (Ctrl+C)
+   - Run: npm run dev
+
+5. Refresh your browser
+
+WHERE TO FIND YOUR WEBHOOK URL:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Bitrix24 → Settings → Integrations → Webhooks → Inbound webhook
+
+The URL should look like:
+https://jbmarks.bitrix24.com/rest/1/abc123xyz456/
+
+Make sure it includes:
+✅ Full URL starting with https://
+✅ /rest/1/ path
+✅ Your webhook code
+✅ Trailing slash (optional)`);
+    }
     return url.endsWith('/') ? url.slice(0, -1) : url;
   }
 
   /**
    * Create a task in Bitrix24 from a fault report
+   * If file is provided, creates task FIRST, then attaches file via comment
+   * This is the most reliable method for Bitrix24 REST API
    */
-  async createTaskFromFault(faultReport: FaultReport): Promise<SubmitResult> {
+  async createTaskFromFault(faultReport: FaultReport, file?: File): Promise<SubmitResult> {
     try {
-      const groupId = this.getGroupId(faultReport.formType);
+      await debugLogger.log('INFO', '=== START: Creating task from fault ===');
+      await debugLogger.log('INFO', `Fault Type: ${faultReport.formType}`, { hasFile: !!file, fileSize: file?.size });
+      
+      const groupId = this.getGroupId(faultReport.formType, faultReport.city);
       
       console.log(`Creating task for ${faultReport.formType} fault, Group ID: ${groupId}`);
+      await debugLogger.log('INFO', `Creating task for ${faultReport.formType}, Group ID: ${groupId}`);
+      
+      // Step 1: Create task first (without file)
+      console.log('📝 Step 1: Creating task...');
       
       const task: Bitrix24Task = {
         TITLE: this.generateTaskTitle(faultReport),
@@ -34,9 +81,11 @@ class Bitrix24Service {
         UF_CRM_TASK: faultReport.refNumber
       };
 
-      console.log('Sending task to Bitrix24:', JSON.stringify(task, null, 2));
+      console.log('Task payload:', JSON.stringify(task, null, 2));
 
       const webhookUrl = this.getSanitizedWebhookUrl();
+      await debugLogger.logApiCall('POST', `${webhookUrl}/tasks.task.add.json`, { fields: task });
+      
       const response = await fetch(`${webhookUrl}/tasks.task.add.json`, {
         method: 'POST',
         headers: {
@@ -46,28 +95,108 @@ class Bitrix24Service {
           fields: task
         })
       });
+      
+      await debugLogger.log('INFO', `Task creation response status: ${response.status}`);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ HTTP error ${response.status}:`, errorText);
+        
+        // Create detailed error message for popup
+        const detailedError = `HTTP ${response.status} ERROR
+
+URL: ${webhookUrl}/tasks.task.add.json
+Status: ${response.status} ${response.statusText}
+Group ID: ${groupId}
+Fault Type: ${faultReport.formType}
+City: ${faultReport.city || 'Not specified'}
+
+Error Response:
+${errorText.substring(0, 500)}${errorText.length > 500 ? '...' : ''}
+
+Please check:
+- Webhook URL is correct
+- Group ID ${groupId} exists in Bitrix24
+- Webhook has permissions for Tasks`;
+        
+        throw new Error(detailedError);
       }
 
       const result = await response.json();
-      console.log('Bitrix24 response:', result);
+      console.log('Bitrix24 task creation response:', result);
+      await debugLogger.logApiResponse('tasks.task.add.json', response.status, result);
 
-      if (result.result?.task?.id) {
-        return {
-          success: true,
-          taskId: String(result.result.task.id)
-        };
-      } else {
-        console.error('Bitrix24 error details:', result.error);
+      if (result.error) {
+        console.error('❌ Bitrix24 error:', result.error);
+        
+        // Create detailed error message
+        const detailedError = `BITRIX24 API ERROR
+
+URL: ${webhookUrl}/tasks.task.add.json
+Group ID: ${groupId}
+Fault Type: ${faultReport.formType}
+City: ${faultReport.city || 'Not specified'}
+
+Error Code: ${result.error.error || 'Unknown'}
+Error Description: ${result.error.error_description || 'No description provided'}
+
+Full Error:
+${JSON.stringify(result.error, null, 2)}
+
+Please check:
+- Group ID ${groupId} exists and is accessible
+- Webhook has correct permissions
+- All required fields are valid`;
+        
         return {
           success: false,
-          error: result.error?.error_description || result.error_description || 'Failed to create task'
+          error: detailedError
         };
       }
+
+      if (!result.result?.task?.id) {
+        console.error('❌ Unexpected response format:', result);
+        return {
+          success: false,
+          error: 'Unexpected response format from Bitrix24'
+        };
+      }
+
+      const taskId = String(result.result.task.id);
+      console.log('✅ Task created successfully, ID:', taskId);
+      await debugLogger.log('INFO', `✅ Task created successfully, ID: ${taskId}`);
+
+      // Step 2: If file provided, attach it via comment
+      if (file) {
+        console.log('📤 Step 2: Attaching file to task via comment...');
+        await debugLogger.log('INFO', '📤 Step 2: Starting file attachment process');
+        
+        const attachResult = await this.attachFileToTask(taskId, file);
+        
+        if (!attachResult.success) {
+          console.error('❌ File attachment failed:', attachResult.error);
+          console.error('Task created but without image');
+          await debugLogger.logError('File Attachment', attachResult.error);
+          
+          // Return error so user knows photo didn't upload
+          return {
+            success: false,
+            error: `Task created (ID: ${taskId}) but photo failed to upload: ${attachResult.error || 'Unknown error'}`,
+            taskId: taskId
+          };
+        } else {
+          console.log('✅ File attached successfully to task');
+          await debugLogger.log('INFO', '✅ File attached successfully to task');
+        }
+      }
+
+      return {
+        success: true,
+        taskId: taskId
+      };
     } catch (error) {
-      console.error('Bitrix24 API Error:', error);
+      console.error('❌ Bitrix24 API Error:', error);
+      await debugLogger.logError('createTaskFromFault', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error occurred'
@@ -76,8 +205,255 @@ class Bitrix24Service {
   }
 
   /**
+   * Attach file to an existing task via comment
+   * This is the most reliable way to attach files in Bitrix24
+   */
+  private async attachFileToTask(taskId: string, file: File): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('📎 Attaching file to task', taskId);
+      console.log('📄 File details:', { name: file.name, size: file.size, type: file.type });
+      await debugLogger.log('INFO', `📎 Attaching file to task ${taskId}`, { name: file.name, size: file.size, type: file.type });
+      
+      // Validate file size
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        const errorMsg = `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB (max 10MB)`;
+        console.error('❌', errorMsg);
+        return {
+          success: false,
+          error: errorMsg
+        };
+      }
+      
+      // Convert file to base64
+      const base64Content = await this.fileToBase64(file);
+      console.log('✅ File converted to base64, length:', base64Content.length);
+      
+      const webhookUrl = this.getSanitizedWebhookUrl();
+      
+      // Try Method 1: Upload to task's group storage then attach (preferred)
+      console.log('🚀 Method 1: Trying task group storage upload...');
+      
+      // Get task details to find group
+      await debugLogger.log('INFO', `Fetching task details for task ${taskId}`);
+      const taskResponse = await fetch(`${webhookUrl}/tasks.task.get.json?taskId=${taskId}`, {
+        method: 'GET'
+      });
+      
+      await debugLogger.log('INFO', `Task details response status: ${taskResponse.status}`);
+      const taskResult = await taskResponse.json();
+      const groupId = taskResult.result?.task?.groupId;
+      await debugLogger.log('INFO', `Task group ID: ${groupId}`);
+      
+      if (groupId) {
+        console.log('👥 Task group ID:', groupId);
+        
+        // Get group's storage
+        await debugLogger.log('INFO', `Fetching storage for group ${groupId}`);
+        const storageResponse = await fetch(`${webhookUrl}/disk.storage.getlist.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filter: {
+              ENTITY_TYPE: 'group',
+              ENTITY_ID: groupId
+            }
+          })
+        });
+        
+        await debugLogger.log('INFO', `Storage response status: ${storageResponse.status}`);
+        const storageResult = await storageResponse.json();
+        console.log('📦 Group storage:', storageResult);
+        await debugLogger.log('INFO', `Storage result received`, { storageCount: storageResult.result?.length });
+        
+        if (storageResult.result && storageResult.result.length > 0) {
+          const storageId = storageResult.result[0].ID;
+          const folderId = storageResult.result[0].ROOT_OBJECT_ID;
+          console.log('📁 Storage ID:', storageId, 'Folder ID:', folderId);
+          
+          // Upload file to group's folder (not storage!)
+          const timestamp = Date.now();
+          const uniqueFileName = `${timestamp}_${file.name}`;
+          
+          const uploadParams = new URLSearchParams();
+          uploadParams.append('id', folderId);  // Use ROOT_OBJECT_ID!
+          uploadParams.append('data[NAME]', uniqueFileName);  // Unique filename
+          uploadParams.append('fileContent', base64Content);
+          uploadParams.append('generateUniqueName', '1');  // Auto-rename if exists
+          
+          await debugLogger.log('INFO', `Starting file upload to folder ${folderId}`, { 
+            fileName: uniqueFileName, 
+            base64Length: base64Content.length 
+          });
+          
+          // Create abort controller for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+          
+          let uploadResponse1;
+          try {
+            uploadResponse1 = await fetch(`${webhookUrl}/disk.folder.uploadfile.json`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: uploadParams.toString(),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+          } catch (fetchError) {
+            clearTimeout(timeoutId);
+            await debugLogger.logError('File upload fetch failed', fetchError);
+            throw fetchError;
+          }
+          
+          console.log('📊 Method 1 upload status:', uploadResponse1.status);
+          await debugLogger.log('INFO', `File upload response status: ${uploadResponse1.status}`);
+          
+          if (uploadResponse1.ok) {
+            const uploadResult1 = await uploadResponse1.json();
+            console.log('📥 Method 1 upload result:', uploadResult1);
+            
+            if (!uploadResult1.error && uploadResult1.result?.ID) {
+              const diskId = uploadResult1.result.ID;
+              const fileId = uploadResult1.result.FILE_ID;
+              console.log('✅ File uploaded to group storage, Disk ID:', diskId, 'File ID:', fileId);
+              await debugLogger.log('INFO', `✅ File uploaded to group storage`, { diskId, fileId });
+              
+              // Attach file to task using tasks.task.files.attach with DISK_ID (try DISK_ID first)
+              console.log('📎 Attaching file to task using tasks.task.files.attach (trying DISK_ID first)...');
+              await debugLogger.log('INFO', '📎 Trying tasks.task.files.attach with DISK_ID', { taskId, diskId });
+              
+              const attachParams = new URLSearchParams();
+              attachParams.append('taskId', taskId);
+              attachParams.append('fileId', diskId);  // Try DISK_ID first
+              
+              const attachResponse = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: attachParams.toString()
+              });
+              
+              if (attachResponse.ok) {
+                const attachResult = await attachResponse.json();
+                console.log('📥 Attach result (DISK_ID):', attachResult);
+                await debugLogger.logApiResponse('tasks.task.files.attach (DISK_ID)', attachResponse.status, attachResult);
+                
+                if (!attachResult.error && attachResult.result) {
+                  console.log('✅ File attached successfully with DISK_ID! Attachment ID:', attachResult.result.attachmentId);
+                  return { success: true };
+                }
+                
+                // DISK_ID failed, try FILE_ID as fallback
+                if (attachResult.error && fileId) {
+                  console.warn('⚠️ DISK_ID failed, trying FILE_ID as fallback...');
+                  await debugLogger.log('WARN', '⚠️ DISK_ID failed, trying FILE_ID as fallback', { taskId, fileId });
+                  
+                  const attachParams2 = new URLSearchParams();
+                  attachParams2.append('taskId', taskId);
+                  attachParams2.append('fileId', fileId);  // Try FILE_ID
+                  
+                  const attachResponse2 = await fetch(`${webhookUrl}/tasks.task.files.attach.json`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: attachParams2.toString()
+                  });
+                  
+                  if (attachResponse2.ok) {
+                    const attachResult2 = await attachResponse2.json();
+                    console.log('📥 Attach result (FILE_ID):', attachResult2);
+                    await debugLogger.logApiResponse('tasks.task.files.attach (FILE_ID)', attachResponse2.status, attachResult2);
+                    
+                    if (!attachResult2.error && attachResult2.result) {
+                      console.log('✅ File attached successfully with FILE_ID! Attachment ID:', attachResult2.result.attachmentId);
+                      return { success: true };
+                    } else {
+                      console.error('❌ Both DISK_ID and FILE_ID failed:', attachResult2.error);
+                    }
+                  }
+                } else {
+                  console.warn('⚠️ DISK_ID attach returned error:', attachResult.error);
+                }
+              }
+            }
+            
+            console.warn('⚠️ Method 1 failed, trying alternative...');
+          } else {
+            const errorText1 = await uploadResponse1.text();
+            console.warn(`⚠️ Method 1 HTTP error ${uploadResponse1.status}:`, errorText1);
+            
+            // Create detailed error for 404
+            if (uploadResponse1.status === 404) {
+              const detailedError = `HTTP 404 ERROR - FILE UPLOAD FAILED (Method 1)
+
+URL: ${webhookUrl}/disk.folder.uploadfile.json
+Task ID: ${taskId}
+Group ID: ${groupId || 'Unknown'}
+Folder ID: ${folderId || 'Unknown'}
+Storage ID: ${storageId || 'Unknown'}
+
+Error Response:
+${errorText1.substring(0, 500)}${errorText1.length > 500 ? '...' : ''}
+
+TROUBLESHOOTING:
+1. Check if Folder ID ${folderId} exists in Bitrix24
+2. Verify Group ID ${groupId} has Drive enabled
+3. Check webhook has Drive permissions
+4. Verify ROOT_OBJECT_ID is correct`;
+              
+              console.error(detailedError);
+            }
+            console.log('Trying alternative method...');
+          }
+        } else {
+          console.warn('⚠️ No group storage found for Method 1');
+        }
+      } else {
+        console.warn('⚠️ Task has no group ID');
+      }
+      
+      // Try Method 2: Simple fallback (just in case)
+      console.log('🚀 Method 2: Fallback method...');
+      console.warn('❌ No working upload method available');
+      
+      // Both methods failed
+      console.error('❌ All attachment methods failed');
+      const detailedError = `FILE ATTACHMENT FAILED
+
+Task ID: ${taskId}
+All upload methods failed.
+
+Please check:
+- Webhook has Drive permissions
+- Webhook has Tasks permissions
+- Group has Drive storage enabled
+- File size is under 10MB`;
+      
+      return {
+        success: false,
+        error: detailedError
+      };
+      
+    } catch (error) {
+      console.error('❌ File attachment exception:', error);
+      await debugLogger.logError('attachFileToTask - Full Exception', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to attach file'
+      };
+    }
+  }
+
+  // Note: Old uploadFileToUploadFolder method removed - now using task.commentitem.add for file attachment
+
+  /**
    * Get workgroup storage ID from group ID
    * Each workgroup has a storage in Bitrix24 Drive
+   * @deprecated - No longer needed with new upload approach
    */
   async getWorkgroupStorageId(groupId: string): Promise<{ success: boolean; storageId?: string; error?: string }> {
     try {
@@ -150,6 +526,34 @@ class Bitrix24Service {
   }
 
   /**
+   * Get configured storage ID and root object ID for a department (bypasses API lookup)
+   * NOTE: Area selection (Township/Town) does NOT affect routing - it's purely informational
+   * Routing is based ONLY on city and department type
+   */
+  private getConfiguredStorageInfo(faultType: string, city?: string): { storageId?: string; rootObjectId?: string } {
+    // Default to Potchefstroom if no city specified
+    // Area (Township/Town) is ignored - routing only uses city
+    const selectedCity = (city === 'Ventersdorp' || city === 'Potchefstroom') 
+      ? city 
+      : 'Potchefstroom';
+    
+    const cityStorage = config.bitrix24.storage[selectedCity];
+    
+    const storageMap: Record<string, { storageId: string; rootObjectId: string }> = {
+      'Water': cityStorage.water,
+      'Electricity': cityStorage.electricity,
+      'Roads': cityStorage.roads,
+      'Waste': cityStorage.waste
+    };
+
+    const storageInfo = storageMap[faultType];
+    return {
+      storageId: storageInfo?.storageId,
+      rootObjectId: storageInfo?.rootObjectId
+    };
+  }
+
+  /**
    * Upload file to workgroup's Drive using the group ID
    * Supports both manual folder ID configuration and automatic storage lookup
    */
@@ -158,70 +562,47 @@ class Bitrix24Service {
    */
   private async fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
-      console.log('🔄 Converting file to base64:', {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        isCamera: !!(file as any).__isCamera
-      });
+      console.log('🔄 Converting file to base64:', file.name, file.size, 'bytes');
       
-      // Check if this file has pre-stored base64 data (from camera)
+      // Check if file has pre-stored base64 data (from Capacitor Camera)
       if ((file as any).__base64Data) {
-        console.log('✅ Using pre-stored base64 data from camera (avoiding double conversion)');
-        const base64 = (file as any).__base64Data;
-        console.log('✅ Base64 data length:', base64.length);
-        resolve(base64);
+        console.log('✅ Using pre-stored base64 (no re-conversion needed)');
+        resolve((file as any).__base64Data);
         return;
       }
       
-      // For gallery images, read the file normally
-      console.log('📖 Reading file from gallery using FileReader');
+      // Read file using FileReader
+      console.log('📖 Reading file with FileReader...');
       const reader = new FileReader();
       
       reader.onload = () => {
-        try {
-          const result = reader.result as string;
-          
-          if (!result) {
-            throw new Error('FileReader returned empty result');
-          }
-          
-          // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-          const parts = result.split(',');
-          if (parts.length < 2) {
-            console.error('❌ Invalid data URL format:', result.substring(0, 100));
-            throw new Error('Invalid data URL format');
-          }
-          
-          const base64 = parts[1];
-          console.log('✅ Base64 conversion successful (gallery), length:', base64.length);
-          resolve(base64);
-        } catch (error) {
-          console.error('❌ Error in FileReader onload:', error);
-          reject(error);
+        const result = reader.result as string;
+        if (!result) {
+          reject(new Error('FileReader returned empty result'));
+          return;
         }
+        
+        // Extract base64 (remove data:image/xxx;base64, prefix)
+        const base64 = result.split(',')[1];
+        if (!base64) {
+          reject(new Error('Could not extract base64 data'));
+          return;
+        }
+        
+        console.log('✅ Conversion complete, length:', base64.length);
+        resolve(base64);
       };
       
-      reader.onerror = (error) => {
-        console.error('❌ FileReader error:', error);
-        reject(new Error(`FileReader failed: ${error}`));
+      reader.onerror = () => {
+        console.error('❌ FileReader error');
+        reject(new Error('FileReader failed'));
       };
       
-      reader.onabort = () => {
-        console.error('❌ FileReader aborted');
-        reject(new Error('FileReader was aborted'));
-      };
-      
-      try {
-        reader.readAsDataURL(file);
-      } catch (error) {
-        console.error('❌ Error starting FileReader:', error);
-        reject(error);
-      }
+      reader.readAsDataURL(file);
     });
   }
 
-  async uploadFileToDrive(file: File, faultType: string): Promise<{ success: boolean; fileId?: string; error?: string }> {
+  async uploadFileToDrive(file: File, faultType: string, city?: string): Promise<{ success: boolean; fileId?: string; error?: string }> {
     try {
       console.log(`Uploading file: ${file.name} for fault type: ${faultType}`);
       console.log('📄 File size:', file.size, 'bytes');
@@ -321,36 +702,57 @@ class Bitrix24Service {
         }
       }
 
-      // Method 2: Automatic - Get workgroup's storage and upload there
-      console.log(`📂 METHOD 2: Using automatic storage lookup for ${faultType}`);
-      const groupId = this.getGroupId(faultType);
-      console.log('🔍 Looking up storage for workgroup ID:', groupId);
+      // Method 2: Try configured storage IDs first, then fallback to API lookup
+      console.log(`📂 METHOD 2: Checking configured storage for ${faultType}`);
       
-      const storageResult = await this.getWorkgroupStorageId(groupId);
+      // First, try using configured storage and root object IDs (fastest)
+      const configuredStorage = this.getConfiguredStorageInfo(faultType, city);
       
-      if (!storageResult.success || !storageResult.storageId) {
-        console.error('❌ METHOD 2 FAILED: Could not get workgroup storage');
-        console.error('Storage error:', storageResult.error);
-        return {
-          success: false,
-          error: `METHOD 1 & 2 FAILED. Storage lookup error: ${storageResult.error || 'Could not access workgroup Drive'}`
-        };
+      let storageId: string | undefined;
+      let rootObjectId: string | undefined;
+      
+      if (configuredStorage.storageId && configuredStorage.rootObjectId) {
+        console.log('✅ Using configured storage IDs (bypassing API lookup)');
+        storageId = configuredStorage.storageId;
+        rootObjectId = configuredStorage.rootObjectId;
+        console.log(`📦 Storage ID: ${storageId}, Root Object ID: ${rootObjectId}`);
+      } else {
+        // Fallback: Look up storage via API
+        console.log('🔍 Configured storage not available, looking up via API...');
+        const groupId = this.getGroupId(faultType, city);
+        console.log('🔍 Looking up storage for workgroup ID:', groupId);
+        
+        const storageResult = await this.getWorkgroupStorageId(groupId);
+        
+        if (!storageResult.success || !storageResult.storageId) {
+          console.error('❌ METHOD 2 FAILED: Could not get workgroup storage');
+          console.error('Storage error:', storageResult.error);
+          return {
+            success: false,
+            error: `METHOD 1 & 2 FAILED. Storage lookup error: ${storageResult.error || 'Could not access workgroup Drive'}`
+          };
+        }
+
+        storageId = storageResult.storageId;
+        console.log('✓ Storage found via API:', storageId);
       }
 
-      console.log('✓ Storage found:', storageResult.storageId);
-
-      // Upload file to workgroup's Drive storage using base64 format
+      // Upload file to workgroup's Drive using root object ID (preferred) or storage ID
+      // Use root object ID if available (faster, more direct)
+      const uploadTargetId = rootObjectId || storageId;
+      const uploadMethod = rootObjectId ? 'disk.folder.uploadfile' : 'disk.storage.uploadfile';
+      
       // Use URLSearchParams for proper URL-encoded format
       const params = new URLSearchParams();
-      params.append('id', storageResult.storageId);
+      params.append('id', uploadTargetId!);
       params.append('data[NAME]', file.name);  // Use array notation, not JSON.stringify
       params.append('fileContent[name]', file.name);
       params.append('fileContent[content]', base64Content);
       
-      const uploadUrl = `${webhookUrl}/disk.storage.uploadfile.json`;
+      const uploadUrl = `${webhookUrl}/${uploadMethod}.json`;
       
       console.log('🔗 Upload URL:', uploadUrl);
-      console.log('📦 Uploading to storage ID:', storageResult.storageId);
+      console.log(`📦 Uploading to ${rootObjectId ? 'root folder' : 'storage'} ID:`, uploadTargetId);
       console.log('📄 File name:', file.name);
 
       let uploadResponse;
@@ -382,9 +784,73 @@ class Bitrix24Service {
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
         console.error(`❌ METHOD 2 FAILED - HTTP ${uploadResponse.status}:`, errorText);
+        
+        // Handle 404 specifically - likely means storage/group ID is incorrect
+        const groupId = this.getGroupId(faultType, city);
+        
+        if (uploadResponse.status === 404) {
+          console.error(`❌ 404 ERROR: Storage ID or Root Object ID may be incorrect`);
+          console.error(`   Storage ID: ${storageId}`);
+          console.error(`   Root Object ID: ${rootObjectId}`);
+          console.error(`   Upload Target ID: ${uploadTargetId}`);
+          console.error(`   Method: ${uploadMethod}`);
+          
+          // Create detailed error message for popup
+          const detailedError = `HTTP 404 ERROR - FILE UPLOAD FAILED
+
+URL: ${uploadUrl}
+Upload Method: ${uploadMethod}
+Fault Type: ${faultType}
+City: ${city || 'Not specified'}
+Group ID: ${groupId}
+
+Storage Information:
+- Storage ID: ${storageId || 'Not configured'}
+- Root Object ID: ${rootObjectId || 'Not configured'}
+- Upload Target ID: ${uploadTargetId || 'N/A'}
+
+Error Response:
+${errorText.substring(0, 500)}${errorText.length > 500 ? '...' : ''}
+
+TROUBLESHOOTING:
+1. Check Storage ID in .env: VITE_BITRIX24_STORAGE_${city || 'POTCHEFSTROOM'}_${faultType.toUpperCase()}
+2. Check Root Object ID in .env: VITE_BITRIX24_ROOT_${city || 'POTCHEFSTROOM'}_${faultType.toUpperCase()}
+3. Verify these IDs exist in Bitrix24 Drive
+4. Check webhook has Drive permissions
+5. Verify Group ID is correct: ${groupId}`;
+          
+          return {
+            success: false,
+            error: detailedError
+          };
+        }
+        
+        // Create detailed error message for other HTTP errors
+        const detailedError = `HTTP ${uploadResponse.status} ERROR - FILE UPLOAD FAILED
+
+URL: ${uploadUrl}
+Upload Method: ${uploadMethod}
+Status: ${uploadResponse.status} ${uploadResponse.statusText}
+Fault Type: ${faultType}
+City: ${city || 'Not specified'}
+Group ID: ${groupId}
+
+Storage Information:
+- Storage ID: ${storageId || 'Not configured'}
+- Root Object ID: ${rootObjectId || 'Not configured'}
+- Upload Target ID: ${uploadTargetId || 'N/A'}
+
+Error Response:
+${errorText.substring(0, 500)}${errorText.length > 500 ? '...' : ''}
+
+Please check:
+- Webhook URL is correct
+- Storage/Root Object IDs are correct
+- Webhook has Drive permissions`;
+        
         return {
           success: false,
-          error: `BOTH METHODS FAILED. HTTP ${uploadResponse.status}: ${errorText}`
+          error: detailedError
         };
       }
 
@@ -393,9 +859,30 @@ class Bitrix24Service {
 
       if (uploadResult.error) {
         console.error('❌ METHOD 2 FAILED - Bitrix24 error:', uploadResult.error);
+        
+        const groupId = this.getGroupId(faultType, city);
+        const detailedError = `BITRIX24 API ERROR - FILE UPLOAD FAILED
+
+URL: ${uploadUrl}
+Upload Method: ${uploadMethod}
+Fault Type: ${faultType}
+City: ${city || 'Not specified'}
+Group ID: ${groupId}
+
+Storage Information:
+- Storage ID: ${storageId || 'Not configured'}
+- Root Object ID: ${rootObjectId || 'Not configured'}
+- Upload Target ID: ${uploadTargetId || 'N/A'}
+
+Error Code: ${uploadResult.error.error || 'Unknown'}
+Error Description: ${uploadResult.error.error_description || 'No description'}
+
+Full Error:
+${JSON.stringify(uploadResult.error, null, 2)}`;
+        
         return {
           success: false,
-          error: `BOTH METHODS FAILED. Bitrix error: ${uploadResult.error.error_description || uploadResult.error.error || 'Unknown error'}`
+          error: detailedError
         };
       }
 
@@ -416,9 +903,20 @@ class Bitrix24Service {
       console.error('Drive upload error:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
       
+      const groupId = this.getGroupId(faultType, city);
       let errorMessage = 'File upload to Drive failed';
+      
       if (error instanceof Error) {
-        errorMessage = `${error.name}: ${error.message}`;
+        errorMessage = `FILE UPLOAD EXCEPTION
+
+Error Type: ${error.name}
+Error Message: ${error.message}
+
+Fault Type: ${faultType}
+City: ${city || 'Not specified'}
+Group ID: ${groupId}
+
+${error.stack ? `Stack Trace:\n${error.stack}` : ''}`;
         console.error('Error stack:', error.stack);
       }
       
@@ -430,86 +928,16 @@ class Bitrix24Service {
   }
 
   /**
-   * Upload file to Bitrix24 and attach to task
-   * This version properly uploads to workgroup Drive first, then attaches to task
+   * @deprecated - No longer used. Files are now uploaded BEFORE task creation
+   * and attached using UF_TASK_WEBDAV_FILES field in tasks.task.add
+   * 
+   * New approach (following official Bitrix24 docs):
+   * 1. Upload file to "upload" folder using disk.folder.uploadfile
+   * 2. Get file ID from response
+   * 3. Create task with UF_TASK_WEBDAV_FILES: [fileId]
+   * 
+   * This is simpler, more reliable, and follows official documentation.
    */
-  async uploadFile(file: File, taskId: string, faultType: string): Promise<FileUploadResult> {
-    try {
-      console.log(`Processing file upload for task: ${taskId}`);
-      
-      // Step 1: Upload file to workgroup's Drive folder
-      const driveUpload = await this.uploadFileToDrive(file, faultType);
-      
-      if (!driveUpload.success || !driveUpload.fileId) {
-        return {
-          success: false,
-          error: driveUpload.error || 'Failed to upload file to Drive'
-        };
-      }
-
-      // Step 2: Attach the file to the task using tasks.task.files.attach
-      const webhookUrl = this.getSanitizedWebhookUrl();
-      const attachUrl = `${webhookUrl}/tasks.task.files.attach.json`;
-      
-      console.log('📎 STEP 2: Attaching file to task...');
-      console.log('🎯 Task ID:', taskId);
-      console.log('📄 File ID:', driveUpload.fileId);
-      console.log('🔗 Attach URL:', attachUrl);
-
-      const attachPayload = {
-        taskId: taskId,
-        fileId: driveUpload.fileId
-      };
-      console.log('📦 Attach payload:', JSON.stringify(attachPayload, null, 2));
-
-      const attachResponse = await fetch(attachUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(attachPayload)
-      });
-
-      console.log('📊 Attach response status:', attachResponse.status, attachResponse.statusText);
-
-      if (!attachResponse.ok) {
-        const errorText = await attachResponse.text();
-        console.error(`❌ File attach failed - HTTP ${attachResponse.status}:`, errorText);
-        
-        // File is uploaded to Drive, but attachment failed
-        return {
-          success: true,
-          fileId: driveUpload.fileId,
-          error: `File uploaded to Drive (ID: ${driveUpload.fileId}) but failed to attach to task. HTTP ${attachResponse.status}: ${errorText}`
-        };
-      }
-
-      const attachResult = await attachResponse.json();
-      console.log('📥 Attach result:', JSON.stringify(attachResult, null, 2));
-
-      if (attachResult.error) {
-        console.error('❌ Bitrix24 attach error:', attachResult.error);
-        // File is uploaded to Drive, but attachment failed
-        return {
-          success: true,
-          fileId: driveUpload.fileId,
-          error: `File uploaded to Drive (ID: ${driveUpload.fileId}) but Bitrix error during attachment: ${attachResult.error.error_description || attachResult.error.error || 'Unknown error'}`
-        };
-      }
-
-      console.log('✅✅ SUCCESS! File uploaded to Drive AND attached to task!');
-      return {
-        success: true,
-        fileId: driveUpload.fileId
-      };
-    } catch (error) {
-      console.error('File upload/attach error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'File upload failed'
-      };
-    }
-  }
 
   /**
    * Generate task title based on fault type
@@ -530,6 +958,14 @@ class Bitrix24Service {
    * Generate detailed task description
    */
   private generateTaskDescription(faultReport: FaultReport): string {
+    const areaInfo = faultReport.area && faultReport.city 
+      ? `Area: ${faultReport.area}\nCity: ${faultReport.city}\n`
+      : faultReport.area 
+        ? `Area: ${faultReport.area}\n`
+        : faultReport.city
+          ? `City: ${faultReport.city}\n`
+          : '';
+    
     return `
 FAULT REPORT DETAILS:
 ====================
@@ -538,7 +974,7 @@ Reference Number: ${faultReport.refNumber}
 Reported By: ${faultReport.fullName}
 Contact: ${faultReport.contactNumber}
 Email: ${faultReport.email || 'Not provided'}
-Location: ${faultReport.address}
+${areaInfo}Location: ${faultReport.address}
 
 Issue Type: ${faultReport.formType}
 Specific Issue: ${faultReport.specificField}
@@ -556,18 +992,29 @@ Please investigate and resolve this issue promptly.
   }
 
   /**
-   * Get group ID based on fault type (Fixed to use config)
+   * Get group ID based on fault type and city
+   * NOTE: Area selection (Township/Town) does NOT affect routing - it's purely informational
+   * Routing is based ONLY on city and department type
+   * Since Township workgroups are not set up, all routing goes to the default city groups (Town)
    */
-  private getGroupId(faultType: string): string {
+  private getGroupId(faultType: string, city?: string): string {
+    // Default to Potchefstroom if no city specified
+    // Area (Township/Town) is ignored - routing only uses city
+    const selectedCity = (city === 'Ventersdorp' || city === 'Potchefstroom') 
+      ? city 
+      : 'Potchefstroom'; // Default fallback
+    
+    const cityGroups = config.bitrix24.groups[selectedCity];
+    
     const groupMap: Record<string, string> = {
-      'Water': config.bitrix24.groups.water,
-      'Electricity': config.bitrix24.groups.electricity,
-      'Roads': config.bitrix24.groups.roads,
-      'Waste': config.bitrix24.groups.waste
+      'Water': cityGroups.water,
+      'Electricity': cityGroups.electricity,
+      'Roads': cityGroups.roads,
+      'Waste': cityGroups.waste
     };
 
-    const groupId = groupMap[faultType] || config.bitrix24.groups.water;
-    console.log(`Routing ${faultType} fault to group ID: ${groupId}`);
+    const groupId = groupMap[faultType] || cityGroups.water;
+    console.log(`Routing ${faultType} fault to ${selectedCity} group ID: ${groupId} (Area selection does not affect routing)`);
     return groupId;
   }
 

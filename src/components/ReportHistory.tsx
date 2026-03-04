@@ -3,6 +3,7 @@ import { storageService } from '../services/storageService';
 import { FaultReport } from '../types';
 import { CheckCircleIcon, XCircleIcon, ClockIcon, WaterIcon, PowerIcon, RoadIcon, TrashIcon, RefreshIcon, AlertIcon } from './icons';
 import { bitrix24Service } from '../services/bitrix24Service';
+import { config } from '../config';
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -188,18 +189,16 @@ export const ReportHistory: React.FC = () => {
     setRetrying(true);
     
     try {
-      const taskResult = await bitrix24Service.createTaskFromFault(report);
+      const taskResult = await bitrix24Service.createTaskFromFault(
+        report,
+        report.photoFile || undefined
+      );
       
       if (taskResult.success && taskResult.taskId) {
         report.taskId = taskResult.taskId;
         report.status = 'submitted';
         report.submittedAt = new Date().toISOString();
         report.error = undefined;
-
-        // Upload file if present
-        if (report.photoFile && taskResult.taskId) {
-          await bitrix24Service.uploadFile(report.photoFile, taskResult.taskId, report.formType);
-        }
 
         storageService.saveReport(report);
         loadReports();
@@ -290,13 +289,22 @@ export const ReportHistory: React.FC = () => {
 
       {/* Powered by SDinMotion Footer */}
       <div className="bg-white border-t border-gray-200 py-4 mt-12 mb-20">
-        <div className="flex items-center justify-center gap-2">
-          <span className="text-sm text-gray-600">Powered by</span>
-          <img 
-            src="/assets/images/logos/SdinMotionlogo.png" 
-            alt="SDinMotion" 
-            className="h-6 w-auto"
-          />
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-sm text-gray-600">Powered by</span>
+            <img 
+              src="/assets/images/logos/SdinMotionlogo.png" 
+              alt="SDinMotion" 
+              className="h-6 w-auto"
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="px-2 py-1 bg-gray-100 rounded-md font-mono">
+              v{config.app.version}
+            </span>
+            <span className="text-gray-400">•</span>
+            <span>Build {config.app.versionCode}</span>
+          </div>
         </div>
       </div>
 

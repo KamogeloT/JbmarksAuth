@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">SDINMOTION</string>
     <string name="title_activity_main">SDINMOTION</string>
-    <string name="package_name">com.municipality.faultreporter</string>
-    <string name="custom_url_scheme">com.municipality.faultreporter</string>
+    <string name="package_name">com.jbmarks.faultreporter</string>
+    <string name="custom_url_scheme">com.jbmarks.faultreporter</string>
 </resources>

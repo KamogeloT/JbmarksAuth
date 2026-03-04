@@ -1,0 +1,32 @@
+QUICK FIX - Privacy Policy Requirement
+=======================================
+
+YOUR PRIVACY POLICY FILE:
+  ✅ privacy-policy.html (ready in project)
+
+WHAT YOU NEED TO DO:
+
+1. HOST IT ONLINE:
+   - Option A: GitHub Pages (free, easy)
+   - Option B: Your website
+   
+2. ADD URL TO PLAY CONSOLE:
+   - Policy → App content → Privacy policy
+   - Paste the URL
+   - Save
+
+3. UPLOAD AAB:
+   - Version code 18 is ready
+   - Upload after adding privacy policy URL
+
+GITHUB PAGES STEPS:
+-------------------
+1. git add privacy-policy.html
+2. git commit -m "Add privacy policy"
+3. git push origin master
+4. Go to GitHub repo → Settings → Pages
+5. Enable GitHub Pages (master branch, root folder)
+6. Wait 2-5 minutes
+7. URL: https://kamogelot.github.io/sdinmotionapp/privacy-policy.html
+
+=======================================

@@ -1,4 +1,4 @@
-package com.municipality.faultreporter;
+package com.jbmarks.faultreporter;
 
 import com.getcapacitor.BridgeActivity;
 
