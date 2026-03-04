@@ -199,7 +199,7 @@ const FileInput: React.FC<{
       console.log('📸 Opening camera/gallery...');
       
       const image = await Camera.getPhoto({
-        quality: 80,
+        quality: 60,  // Reduced for faster mobile upload
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Prompt,
@@ -245,23 +245,90 @@ const FileInput: React.FC<{
       
       console.log('✅ Blob created, size:', blob.size, 'bytes');
       
-      // Check file size
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (blob.size > maxSize) {
-        alert(`Image too large: ${(blob.size / 1024 / 1024).toFixed(2)}MB. Maximum is 10MB.`);
+      // STANDARDIZE: Force ALL photos through same compression pipeline
+      // This ensures consistent format/size across all devices and upload methods
+      console.log(`📦 Standardizing photo format (original: ${(blob.size / 1024 / 1024).toFixed(2)}MB)...`);
+      
+      let finalBlob = blob;
+      let finalBase64 = base64Data;
+      
+      try {
+        // Create an image element to resize
+        const img = new Image();
+        img.src = image.dataUrl;
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        
+        // Calculate new dimensions (max 1600px for optimal mobile upload)
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 1600;
+        
+        console.log(`📐 Original dimensions: ${width}x${height}`);
+        
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension;
+            width = maxDimension;
+          } else {
+            width = (width / height) * maxDimension;
+            height = maxDimension;
+          }
+        }
+        
+        console.log(`📐 Target dimensions: ${Math.round(width)}x${Math.round(height)}`);
+        
+        // Resize using canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Convert to JPEG with 60% quality (standardized across all sources)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        const compressedBase64 = compressedDataUrl.split(',')[1];
+        
+        // Convert to blob
+        const compressedBytes = atob(compressedBase64);
+        const compressedArray = new Uint8Array(compressedBytes.length);
+        for (let i = 0; i < compressedBytes.length; i++) {
+          compressedArray[i] = compressedBytes.charCodeAt(i);
+        }
+        
+        finalBlob = new Blob([compressedArray], { type: 'image/jpeg' });
+        finalBase64 = compressedBase64;
+        
+        console.log(`✅ Standardized: ${(blob.size / 1024 / 1024).toFixed(2)}MB → ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB`);
+        setPreview(compressedDataUrl); // Update preview with compressed image
+        
+      } catch (compressionError) {
+        console.error('❌ Compression failed, cannot proceed:', compressionError);
+        alert('Failed to process image. Please try again.');
+        setPreview(null);
+        return;
+      }
+      
+      const maxSize = 10 * 1024 * 1024; // 10MB absolute maximum
+      
+      if (finalBlob.size > maxSize) {
+        alert(`Image too large: ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB. Maximum is 10MB. Please try a smaller image.`);
         setPreview(null);
         return;
       }
       
       // Create File object
-      const fileName = `photo_${Date.now()}.${format}`;
-      const photoFile = new File([blob], fileName, { 
-        type: mimeType,
+      const fileName = `photo_${Date.now()}.jpeg`;
+      const photoFile = new File([finalBlob], fileName, { 
+        type: 'image/jpeg',
         lastModified: Date.now()
       });
       
       // Store base64 for direct upload (avoids re-conversion)
-      (photoFile as any).__base64Data = base64Data;
+      (photoFile as any).__base64Data = finalBase64;
       
       console.log('✅ File ready:', photoFile.name, photoFile.size, 'bytes');
       
