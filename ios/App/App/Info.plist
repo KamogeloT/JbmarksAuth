@@ -58,11 +58,5 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs your location to accurately report the location of municipal faults.</string>
 	
-	<!-- App Transport Security Settings -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 </dict>
 </plist>

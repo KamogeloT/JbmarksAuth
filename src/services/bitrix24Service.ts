@@ -48,7 +48,19 @@ Make sure it includes:
 ✅ Your webhook code
 ✅ Trailing slash (optional)`);
     }
-    return url.endsWith('/') ? url.slice(0, -1) : url;
+    
+    // Ensure URL uses HTTPS (required for App Store compliance)
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl.toLowerCase().startsWith('https://')) {
+      throw new Error(`❌ SECURITY ERROR: Webhook URL must use HTTPS
+
+The webhook URL must start with 'https://' for security and App Store compliance.
+
+Current URL: ${trimmedUrl}
+Please update your .env file to use an HTTPS URL.`);
+    }
+    
+    return trimmedUrl.endsWith('/') ? trimmedUrl.slice(0, -1) : trimmedUrl;
   }
 
   /**
