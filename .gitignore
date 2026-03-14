@@ -41,3 +41,14 @@ android/gradle.properties
 # Android build outputs (large binary files)
 *.aab
 *.apk
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+
+# Debug logs
+sdinmotion_debug.log
+phone-debug*.log
+crash-log.txt
+
+# Temporary test files
+test-upload.html
