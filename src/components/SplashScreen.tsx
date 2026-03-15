@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { updateService } from '../services/updateService';
 
 interface SplashScreenProps {
   onFinish: () => void;
@@ -6,24 +7,48 @@ interface SplashScreenProps {
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const [stage, setStage] = useState<'jbmarks' | 'sdinmotion' | 'done'>('jbmarks');
+  const [updateCheckComplete, setUpdateCheckComplete] = useState(false);
 
   useEffect(() => {
+    // Check for updates in the background
+    const checkUpdates = async () => {
+      try {
+        console.log('🔄 Starting update check...');
+        await updateService.checkAndPromptForUpdates();
+        console.log('✅ Update check complete');
+      } catch (error) {
+        console.error('❌ Update check failed:', error);
+      } finally {
+        setUpdateCheckComplete(true);
+      }
+    };
+
+    // Start update check immediately
+    checkUpdates();
+
     // Show JBmarks logo for 2 seconds
     const timer1 = setTimeout(() => {
       setStage('sdinmotion');
     }, 2000);
 
     // Show SDINMOTION for 2 seconds, then finish
+    // Only finish if update check is complete (to ensure dialogs are shown)
     const timer2 = setTimeout(() => {
       setStage('done');
-      onFinish();
+      // Wait for update check to complete before finishing
+      const checkInterval = setInterval(() => {
+        if (updateCheckComplete) {
+          clearInterval(checkInterval);
+          onFinish();
+        }
+      }, 100);
     }, 4000);
 
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
     };
-  }, [onFinish]);
+  }, [onFinish, updateCheckComplete]);
 
   if (stage === 'done') {
     return null;
