@@ -126,8 +126,8 @@ export const defaultConfig: AppConfig = {
     name: 'SDINMOTION',
     version: '1.7.9',
     versionCode: 19,
-    supportEmail: 'support@municipality.gov.za',
-    supportPhone: '+27 18 297 5111',
+    supportEmail: 'admin@t3ssystems.co.za',
+    supportPhone: '0661327845',
   },
   areas: {
     types: ['Township', 'Town'],
