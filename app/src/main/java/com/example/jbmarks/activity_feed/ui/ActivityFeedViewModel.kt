@@ -50,6 +50,7 @@ class ActivityFeedViewModel : ViewModel() {
     
     /**
      * Add a new post to the feed
+     * Validates that message and title are not empty (match iOS validation)
      */
     fun addFeedPost(
         message: String,
@@ -57,9 +58,25 @@ class ActivityFeedViewModel : ViewModel() {
         destinations: List<String>? = null,
         files: List<String>? = null
     ) {
+        // Input validation (match iOS)
+        val trimmedMessage = message.trim()
+        val trimmedTitle = title?.trim()
+        
+        if (trimmedMessage.isEmpty()) {
+            android.util.Log.w("ActivityFeedViewModel", "Cannot add post: message is empty")
+            _uiState.value = ActivityFeedUiState.Error("Message cannot be empty")
+            return
+        }
+        
+        if (trimmedTitle != null && trimmedTitle.isEmpty()) {
+            android.util.Log.w("ActivityFeedViewModel", "Cannot add post: title is empty")
+            _uiState.value = ActivityFeedUiState.Error("Title cannot be empty")
+            return
+        }
+        
         viewModelScope.launch {
             _isPosting.value = true
-            repository.addFeedPost(message, title, destinations, files)
+            repository.addFeedPost(trimmedMessage, trimmedTitle, destinations, files)
                 .onSuccess {
                     // Refresh feed after posting
                     loadFeed()
@@ -68,6 +85,7 @@ class ActivityFeedViewModel : ViewModel() {
                 .onFailure { throwable ->
                     _isPosting.value = false
                     android.util.Log.e("ActivityFeedViewModel", "Failed to add feed post", throwable)
+                    _uiState.value = ActivityFeedUiState.Error(throwable.message ?: "Failed to add post")
                 }
         }
     }

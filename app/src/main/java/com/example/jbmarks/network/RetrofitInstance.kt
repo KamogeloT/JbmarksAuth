@@ -61,10 +61,14 @@ object RetrofitInstance {
             level = HttpLoggingInterceptor.Level.HEADERS
         }
 
+        // Match iOS network timeout configuration:
+        // timeoutIntervalForRequest = 30.0 (individual request timeout)
+        // timeoutIntervalForResource = 60.0 (total resource transfer timeout)
         val clientBuilder = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)  // Match iOS timeoutIntervalForRequest
+            .readTimeout(30, TimeUnit.SECONDS)    // Match iOS timeoutIntervalForRequest
+            .writeTimeout(30, TimeUnit.SECONDS)   // Match iOS timeoutIntervalForRequest
+            .callTimeout(60, TimeUnit.SECONDS)     // Match iOS timeoutIntervalForResource (total call timeout)
             .addInterceptor(logging)
 
         // Add AuthInterceptor if we have context and tokenManager

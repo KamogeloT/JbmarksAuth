@@ -154,22 +154,17 @@ class PushNotificationService: NSObject {
     /// Check and register token (called after login)
     /// This is non-blocking - failures won't affect authentication
     func checkAndRegisterToken() async {
-        do {
-            // Request authorization if not already granted
-            let authorized = await requestAuthorization()
-            
-            if authorized {
-                // If we have a stored token, try to register it
-                if let storedToken = userDefaults.string(forKey: tokenKey) {
-                    await registerTokenWithBackend(storedToken)
-                } else {
-                    // Token will be registered when device token is received
-                    print("📱 Waiting for device token from APNs...")
-                }
+        // Request authorization if not already granted
+        let authorized = await requestAuthorization()
+        
+        if authorized {
+            // If we have a stored token, try to register it
+            if let storedToken = userDefaults.string(forKey: tokenKey) {
+                await registerTokenWithBackend(storedToken)
+            } else {
+                // Token will be registered when device token is received
+                print("📱 Waiting for device token from APNs...")
             }
-        } catch {
-            // Log error but don't throw - this is non-blocking
-            print("⚠️ Push notification check failed (non-blocking): \(error.localizedDescription)")
         }
     }
     

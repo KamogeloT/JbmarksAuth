@@ -1,19 +1,34 @@
 package com.example.jbmarks.activity_feed.data
 
+import android.content.Context
 import android.util.Log
 import com.example.jbmarks.activity_feed.domain.BlogPost
 import com.example.jbmarks.activity_feed.domain.mapDataToDomain
+import com.example.jbmarks.network.APIRequestHelper
 import com.example.jbmarks.network.RetrofitInstance
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class ActivityFeedRepository {
+class ActivityFeedRepository(private val context: Context? = null) {
     
     private val TAG = "ActivityFeedRepository"
     
     private val _feedPosts = MutableStateFlow<List<BlogPost>>(emptyList())
     val feedPosts: StateFlow<List<BlogPost>> = _feedPosts.asStateFlow()
+    
+    private val apiHelper: APIRequestHelper? = if (context != null) APIRequestHelper(context) else null
+    
+    /**
+     * Helper to execute API calls with automatic token refresh
+     */
+    private suspend fun <T> executeApiCall(operation: suspend () -> retrofit2.Response<T>): retrofit2.Response<T> {
+        return if (apiHelper != null) {
+            apiHelper.executeWithTokenRefresh(operation)
+        } else {
+            operation()
+        }
+    }
     
     /**
      * Get news feed messages (Activity Stream)
@@ -22,7 +37,9 @@ class ActivityFeedRepository {
     suspend fun getFeed(postId: String? = null): List<BlogPost> {
         return try {
             // 1. Fetch the raw data from the API
-            val response = RetrofitInstance.api.getBlogFeed(postId)
+            val response = executeApiCall {
+                RetrofitInstance.api.getBlogFeed(postId)
+            }
             if (response.isSuccessful && response.body() != null) {
                 val rawData = response.body()!!.result
                 // 2. Use the mapper to convert the raw data into a clean domain list
@@ -56,7 +73,9 @@ class ActivityFeedRepository {
                 destinations = destinations,
                 files = files
             )
-            val response = RetrofitInstance.api.addBlogPost(request)
+            val response = executeApiCall {
+                RetrofitInstance.api.addBlogPost(request)
+            }
             if (response.isSuccessful && response.body()?.result != null) {
                 val postId = response.body()!!.result!!
                 Log.d(TAG, "Feed post added successfully: $postId")
@@ -87,7 +106,9 @@ class ActivityFeedRepository {
                 userIds = userIds,
                 groupIds = groupIds
             )
-            val response = RetrofitInstance.api.getUsersFeed(request)
+            val response = executeApiCall {
+                RetrofitInstance.api.getUsersFeed(request)
+            }
             if (response.isSuccessful && response.body() != null) {
                 val rawData = response.body()!!.result
                 val posts = rawData.map { mapDataToDomain(it) }
@@ -109,7 +130,9 @@ class ActivityFeedRepository {
      */
     suspend fun getFeedEvents(): Result<Map<String, com.example.jbmarks.activity_feed.data.FeedEventType>> {
         return try {
-            val response = RetrofitInstance.api.getFeedEvents()
+            val response = executeApiCall {
+                RetrofitInstance.api.getFeedEvents()
+            }
             if (response.isSuccessful && response.body()?.result != null) {
                 Result.success(response.body()!!.result!!)
             } else {

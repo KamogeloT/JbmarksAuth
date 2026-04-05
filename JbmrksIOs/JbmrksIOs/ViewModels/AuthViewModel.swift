@@ -98,13 +98,7 @@ final class AuthViewModel: ObservableObject {
                 print("📱 Registering push notification token after authentication")
                 // Use Task to ensure this runs asynchronously and doesn't block
                 _Concurrency.Task { @MainActor in
-                    do {
-                        await PushNotificationService.shared.checkAndRegisterToken()
-                    } catch {
-                        // Log error but don't affect authentication
-                        print("⚠️ Push notification registration failed (non-blocking): \(error.localizedDescription)")
-                        print("   Login successful - user can continue using the app")
-                    }
+                    await PushNotificationService.shared.checkAndRegisterToken()
                 }
             }
         } catch let error as OAuthError {

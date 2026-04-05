@@ -14,6 +14,7 @@ import com.example.jbmarks.tasks.data.FileDetails
 import com.example.jbmarks.tasks.data.AttachedObject
 import com.example.jbmarks.tasks.data.AttachedObjectResponse
 import com.example.jbmarks.config.Config
+import com.example.jbmarks.network.APIRequestHelper
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
@@ -38,6 +39,18 @@ class TasksRepository(private val context: Context? = null) {
     private val TAG = "TasksRepository"
     
     private val userRepository: UserRepository? = if (context != null) UserRepository(context) else null
+    private val apiHelper: APIRequestHelper? = if (context != null) APIRequestHelper(context) else null
+    
+    /**
+     * Helper to execute API calls with automatic token refresh
+     */
+    private suspend fun <T> executeApiCall(operation: suspend () -> retrofit2.Response<T>): retrofit2.Response<T> {
+        return if (apiHelper != null) {
+            apiHelper.executeWithTokenRefresh(operation)
+        } else {
+            operation()
+        }
+    }
 
     /**
      * Get all tasks accessible to the current logged-in user
@@ -66,11 +79,13 @@ class TasksRepository(private val context: Context? = null) {
             // Fetch all tasks without filters - Bitrix24 will automatically return
             // only tasks the user has access to based on their permissions
             // This includes tasks where user is responsible, creator, accomplice, or auditor
-            val response = api.getTasks(
-                responsibleId = null,
-                createdBy = null,
-                status = null
-            )
+            val response = executeApiCall {
+                api.getTasks(
+                    responsibleId = null,
+                    createdBy = null,
+                    status = null
+                )
+            }
             
             // Bitrix24 API returns tasks - handle both array and map formats
             val rawData = response.result.tasks ?: emptyList()
@@ -157,7 +172,10 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun getTask(taskId: String): Result<Task> {
         return try {
-            val response = api.getTask(taskId)
+            val response = executeApiCall {
+                api.getTask(taskId)
+            }
+            
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -200,7 +218,9 @@ class TasksRepository(private val context: Context? = null) {
                 )
             )
             
-            val response = api.createTask(request)
+            val response = executeApiCall {
+                api.createTask(request)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -244,7 +264,9 @@ class TasksRepository(private val context: Context? = null) {
                 )
             )
             
-            val response = api.updateTask(taskId, request)
+            val response = executeApiCall {
+                api.updateTask(taskId, request)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -266,7 +288,9 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun deleteTask(taskId: String): Result<Boolean> {
         return try {
-            val response = api.deleteTask(taskId)
+            val response = executeApiCall {
+                api.deleteTask(taskId)
+            }
             if (response.isSuccessful) {
                 Log.d(TAG, "Task deleted successfully: $taskId")
                 Result.success(true)
@@ -286,7 +310,9 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun completeTask(taskId: String): Result<Task> {
         return try {
-            val response = api.completeTask(taskId)
+            val response = executeApiCall {
+                api.completeTask(taskId)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -308,7 +334,9 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun startTask(taskId: String): Result<Task> {
         return try {
-            val response = api.startTask(taskId)
+            val response = executeApiCall {
+                api.startTask(taskId)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -330,7 +358,9 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun deferTask(taskId: String): Result<Task> {
         return try {
-            val response = api.deferTask(taskId)
+            val response = executeApiCall {
+                api.deferTask(taskId)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -352,7 +382,9 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun renewTask(taskId: String): Result<Task> {
         return try {
-            val response = api.renewTask(taskId)
+            val response = executeApiCall {
+                api.renewTask(taskId)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 val task = mapDtoToDomain(taskDto)
@@ -375,7 +407,9 @@ class TasksRepository(private val context: Context? = null) {
     suspend fun getTaskComments(taskId: String): Result<List<DomainComment>> {
         return try {
             val request = mapOf("TASK_ID" to taskId)
-            val response = api.getTaskComments(request)
+            val response = executeApiCall {
+                api.getTaskComments(request)
+            }
             
             if (response.isSuccessful && response.body() != null) {
                 // Bitrix24 returns comments in result array or object
@@ -752,7 +786,9 @@ class TasksRepository(private val context: Context? = null) {
                 data = com.example.jbmarks.tasks.data.FileData(name = fileName),
                 fileContent = base64Content
             )
-            val response = api.uploadFile(request)
+            val response = executeApiCall {
+                api.uploadFile(request)
+            }
             
             if (response.isSuccessful && response.body()?.result != null) {
                 val uploadResult = response.body()!!.result!!
@@ -820,7 +856,9 @@ class TasksRepository(private val context: Context? = null) {
                 fileId = fileId
             )
             
-            val response = api.attachFileToTask(request)
+            val response = executeApiCall {
+                api.attachFileToTask(request)
+            }
             
             if (response.isSuccessful) {
                 Log.d(TAG, "File attached to task successfully")
@@ -843,7 +881,9 @@ class TasksRepository(private val context: Context? = null) {
     suspend fun getTaskFiles(taskId: String): Result<List<DomainTaskFile>> {
         return try {
             // Get task details which includes files
-            val response = api.getTask(taskId)
+            val response = executeApiCall {
+                api.getTask(taskId)
+            }
             if (response.isSuccessful && response.body()?.result?.task != null) {
                 val taskDto = response.body()!!.result!!.task!!
                 
@@ -976,22 +1016,20 @@ class TasksRepository(private val context: Context? = null) {
                     }
                     fileItem is String || fileItem is Number -> {
                         // File is just an ID - these are attachment IDs from UF_TASK_WEBDAV_FILES
-                        // Try disk.attachedObject.get with webhook auth first (user 1)
+                        // Use OAuth REST API to fetch attached object details (match iOS)
                         val attachmentId = fileItem.toString()
-                        Log.d(TAG, "File item is ID only: $attachmentId, trying disk.attachedObject.get with webhook auth")
+                        Log.d(TAG, "File item is ID only: $attachmentId, fetching via disk.attachedObject.get with OAuth")
                         
                         try {
-                            val attachedFile = fetchAttachedObjectWithWebhook(attachmentId)
+                            val attachedFile = fetchAttachedObjectWithOAuth(attachmentId)
                             if (attachedFile != null) {
                                 parsedFiles.add(attachedFile)
                                 Log.d(TAG, "Successfully fetched attached object for ID $attachmentId: ${attachedFile.name}, URL: ${attachedFile.downloadUrl}")
                             } else {
                                 Log.w(TAG, "disk.attachedObject.get failed for ID $attachmentId, file will not be displayed")
-                                // Don't add file if webhook method fails - we only use webhook for attachments
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Error fetching attached object for ID $attachmentId: ${e.message}", e)
-                            // Don't add file if webhook method fails
                         }
                     }
                     else -> {
@@ -1008,94 +1046,62 @@ class TasksRepository(private val context: Context? = null) {
     }
     
     /**
-     * Fetch attached object using webhook authentication (user 1)
-     * Uses format: /rest/1/<webhook_token>/disk.attachedObject.get.json?objectId=<attachmentId>
-     * This is separate from OAuth2 authentication
+     * Fetch attached object using OAuth REST API (match iOS implementation)
+     * Uses disk.attachedObject.get.json with OAuth authentication
      */
-    private suspend fun fetchAttachedObjectWithWebhook(attachmentId: String): DomainTaskFile? {
+    private suspend fun fetchAttachedObjectWithOAuth(attachmentId: String): DomainTaskFile? {
         return try {
-            // Get portal URL
-            val portalUrl = if (context != null) {
-                com.example.jbmarks.auth.data.TokenManager(context).getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
-            } else {
-                Config.DEFAULT_PORTAL_URL
+            Log.d(TAG, "Fetching attached object via OAuth REST API: $attachmentId")
+            
+            val response = executeApiCall {
+                api.getAttachedObject(attachmentId)
             }
             
-            val webhookToken = getWebhookToken()
-            if (webhookToken == null) {
-                Log.w(TAG, "Webhook token not available, skipping disk.attachedObject.get")
-                return null
-            }
-            
-            // Construct webhook URL: /rest/1/<token>/disk.attachedObject.get.json?id=<id>
-            val webhookUrl = "$portalUrl/rest/${Config.WEBHOOK_USER_ID}/$webhookToken/disk.attachedObject.get.json?id=$attachmentId"
-            Log.d(TAG, "Calling disk.attachedObject.get with webhook: $webhookUrl")
-            
-            // Make direct HTTP call using OkHttpClient (no OAuth interceptor)
-            // Use withContext to run blocking call on IO dispatcher
-            val response = withContext(Dispatchers.IO) {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(60, TimeUnit.SECONDS)
-                    .build()
+            if (response.isSuccessful && response.body() != null) {
+                val attachedResponse = response.body()!!
                 
-                val request = Request.Builder()
-                    .url(webhookUrl)
-                    .get()
-                    .build()
+                if (attachedResponse.error != null) {
+                    Log.e(TAG, "Error from disk.attachedObject.get: ${attachedResponse.error} - ${attachedResponse.errorDescription}")
+                    return null
+                }
                 
-                client.newCall(request).execute()
-            }
-            
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                if (responseBody != null) {
-                    val gson = Gson()
-                    val attachedResponse = gson.fromJson(responseBody, AttachedObjectResponse::class.java)
+                if (attachedResponse.result != null) {
+                    val attachedData = attachedResponse.result!!
+                    val fileName = attachedData.getNameValue() ?: "Unknown"
+                    val fileSize = attachedData.getSizeValue()?.toLongOrNull() ?: 0L
+                    var fileType = attachedData.getTypeValue() ?: "application/octet-stream"
                     
-                    if (attachedResponse.error != null) {
-                        Log.e(TAG, "Error from disk.attachedObject.get: ${attachedResponse.error} - ${attachedResponse.errorDescription}")
+                    // If MIME type is generic, try to infer from filename
+                    if (fileType == "application/octet-stream" || fileType.isEmpty()) {
+                        fileType = inferMimeTypeFromFileName(fileName)
+                        Log.d(TAG, "Inferred MIME type from filename: $fileName -> $fileType")
+                    }
+                    
+                    val downloadUrl = attachedData.getDownloadableUrlValue()
+                    
+                    if (downloadUrl.isNullOrBlank()) {
+                        Log.w(TAG, "No downloadableUrl returned for attachment ID $attachmentId")
                         return null
                     }
                     
-                    if (attachedResponse.result != null) {
-                        val attachedData = attachedResponse.result!!
-                        val fileName = attachedData.getNameValue() ?: "Unknown"
-                        val fileSize = attachedData.getSizeValue()?.toLongOrNull() ?: 0L
-                        var fileType = attachedData.getTypeValue() ?: "application/octet-stream"
-                        
-                        // If MIME type is generic, try to infer from filename
-                        if (fileType == "application/octet-stream" || fileType.isEmpty()) {
-                            fileType = inferMimeTypeFromFileName(fileName)
-                            Log.d(TAG, "Inferred MIME type from filename: $fileName -> $fileType")
-                        }
-                        
-                        val downloadUrl = attachedData.getDownloadableUrlValue()
-                        
-                        if (downloadUrl.isNullOrBlank()) {
-                            Log.w(TAG, "No downloadableUrl returned for attachment ID $attachmentId")
-                            return null
-                        }
-                        
-                        Log.d(TAG, "Successfully fetched attached object: id=$attachmentId, name=$fileName, type=$fileType, url=$downloadUrl")
-                        
-                        return DomainTaskFile(
-                            id = attachmentId,
-                            name = fileName,
-                            size = fileSize,
-                            type = fileType,
-                            downloadUrl = downloadUrl
-                        )
-                    }
+                    Log.d(TAG, "Successfully fetched attached object via OAuth: id=$attachmentId, name=$fileName, type=$fileType, url=$downloadUrl")
+                    
+                    return DomainTaskFile(
+                        id = attachmentId,
+                        name = fileName,
+                        size = fileSize,
+                        type = fileType,
+                        downloadUrl = downloadUrl
+                    )
                 }
             } else {
-                val errorBody = response.body?.string()
-                Log.e(TAG, "Failed to get attached object for ID $attachmentId: HTTP ${response.code}, error: $errorBody")
+                val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "OAuth API call failed: ${response.code()}, $errorBody")
             }
             
             null
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching attached object with webhook for ID $attachmentId: ${e.message}", e)
+            Log.e(TAG, "Error fetching attached object with OAuth: ${e.message}", e)
             null
         }
     }
@@ -1118,7 +1124,9 @@ class TasksRepository(private val context: Context? = null) {
     private suspend fun fetchFileDetails(fileId: String): DomainTaskFile? {
         return try {
             Log.d(TAG, "Calling disk.file.get.json for file ID: $fileId")
-            val response = api.getFileDetails(fileId)
+            val response = executeApiCall {
+                api.getFileDetails(fileId)
+            }
             
             Log.d(TAG, "disk.file.get response - isSuccessful: ${response.isSuccessful}, code: ${response.code()}")
             

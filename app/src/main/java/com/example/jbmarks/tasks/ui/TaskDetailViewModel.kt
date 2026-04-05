@@ -82,8 +82,15 @@ class TaskDetailViewModel(
     }
     
     fun addComment(text: String, fileIds: List<String> = emptyList()) {
+        // Input validation (match iOS)
+        val trimmedText = text.trim()
+        if (trimmedText.isEmpty()) {
+            android.util.Log.w("TaskDetailViewModel", "Cannot add comment: text is empty")
+            return
+        }
+        
         viewModelScope.launch {
-            repository.addComment(taskId, text, fileIds)
+            repository.addComment(taskId, trimmedText, fileIds)
                 .onSuccess { comment ->
                     // Add new comment to list optimistically
                     _comments.value = _comments.value + comment

@@ -74,81 +74,60 @@ class FCMTokenManager(private val context: Context) {
         }
     }
     
+    
     /**
-     * Register token with backend API
-     * Note: This requires a backend endpoint to receive the token
-     * You can integrate this with Bitrix24 webhooks or your own backend
+     * Register with Railway backend endpoint (match iOS)
+     * Uses Railway push notification registration endpoint
      */
     private suspend fun registerWithBackend(token: String, accessToken: String) {
         try {
             val portalUrl = tokenManager.getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
+            val userId = tokenManager.getAccessToken()?.let { 
+                // Extract user ID from token or get from user repository
+                // For now, we'll use a placeholder - you may need to get actual user ID
+                null
+            }
             
-            // Option 1: Register with Bitrix24 via REST API (if supported)
-            // Note: Bitrix24 may not have a direct FCM token registration endpoint
-            // You might need to use webhooks or a custom backend
-            
-            // Option 2: Register with your own backend
-            // Example: POST to your backend endpoint
-            // registerWithCustomBackend(token, accessToken)
-            
-            // For now, we'll log the token registration
-            // In production, you should implement one of the above options
-            Log.d(TAG, "Token registration (implement backend endpoint):")
-            Log.d(TAG, "  Portal: $portalUrl")
-            Log.d(TAG, "  Token: ${token.take(20)}...")
-            Log.d(TAG, "  Access Token: ${accessToken.take(20)}...")
-            
-            // Mark as registered (even if backend call fails, we'll retry later)
-            sharedPreferences.edit()
-                .putBoolean(KEY_TOKEN_REGISTERED, true)
-                .apply()
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error registering token with backend", e)
-            // Don't mark as registered so we can retry
-        }
-    }
-    
-    /**
-     * Register with custom backend endpoint
-     * Uncomment and implement if you have a backend service
-     */
-    /*
-    private suspend fun registerWithCustomBackend(token: String, accessToken: String) {
-        try {
-            val url = URL("${Config.BFF_API_TOKEN_EXCHANGE_URL}/register-fcm-token")
+            // Use Railway endpoint (match iOS)
+            val railwayUrl = "https://jbmarksauth-production.up.railway.app/api/push/register-token"
+            val url = URL(railwayUrl)
             val connection = url.openConnection() as HttpURLConnection
             
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("Authorization", "Bearer $accessToken")
             connection.doOutput = true
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
             
+            // Match iOS payload structure
             val json = """
                 {
                     "fcm_token": "$token",
-                    "platform": "android"
+                    "platform": "android",
+                    "portal_url": "$portalUrl",
+                    "user_id": "${userId ?: ""}"
                 }
             """.trimIndent()
             
             connection.outputStream.use { it.write(json.toByteArray()) }
             
             val responseCode = connection.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                Log.d(TAG, "Token registered successfully with backend")
+            if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
+                Log.d(TAG, "✅ Token registered successfully with Railway backend")
                 sharedPreferences.edit()
                     .putBoolean(KEY_TOKEN_REGISTERED, true)
                     .apply()
             } else {
-                Log.e(TAG, "Backend registration failed: $responseCode")
+                val errorStream = connection.errorStream
+                val errorMessage = errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                Log.e(TAG, "Railway registration failed: $responseCode, $errorMessage")
             }
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error registering with custom backend", e)
-            throw e
+            Log.e(TAG, "Error registering with Railway backend", e)
+            // Don't mark as registered so we can retry
         }
     }
-    */
     
     /**
      * Check if token needs to be registered (e.g., after login)

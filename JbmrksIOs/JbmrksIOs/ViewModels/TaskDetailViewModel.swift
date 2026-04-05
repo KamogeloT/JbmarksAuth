@@ -122,8 +122,15 @@ final class TaskDetailViewModel: ObservableObject {
     func addComment(_ text: String, fileIds: [String]? = nil) async {
         guard let repo = tasksRepository else { return }
         
+        // Validate comment text (trim whitespace and check if empty)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            errorMessage = "Comment cannot be empty"
+            return
+        }
+        
         do {
-            _ = try await repo.addTaskComment(taskId: taskId, message: text, fileIds: fileIds)
+            _ = try await repo.addTaskComment(taskId: taskId, message: trimmedText, fileIds: fileIds)
             await loadComments()
         } catch {
             errorMessage = "Failed to add comment: \(error.localizedDescription)"

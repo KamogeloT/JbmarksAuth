@@ -59,10 +59,11 @@ final class DashboardViewModel: ObservableObject {
         do {
             stats = try await dashboardRepo.getDashboardStats()
             
-            // Load recent activity
+            // Load recent activity (first 5 posts)
+            // Match Android: fetch all posts, then take first 5
             if let feedRepo = activityFeedRepository {
-                let posts = (try? await feedRepo.getFeed()) ?? []
-                recentActivity = Array(posts.prefix(5))
+                let allPosts = (try? await feedRepo.getFeed(start: nil, limit: nil)) ?? []
+                recentActivity = Array(allPosts.prefix(5))
             }
         } catch {
             errorMessage = error.localizedDescription

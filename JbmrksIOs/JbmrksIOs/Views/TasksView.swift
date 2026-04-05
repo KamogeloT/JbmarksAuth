@@ -16,6 +16,7 @@ private func runAsync(_ operation: @escaping () async -> Void) {
 
 struct TasksView: View {
     @StateObject private var viewModel = TasksViewModel()
+    @State private var showCreateTask = false
     
     var body: some View {
         ZStack {
@@ -71,6 +72,26 @@ struct TasksView: View {
             }
         }
         .navigationTitle("Tasks")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    showCreateTask = true
+                }) {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showCreateTask) {
+            NavigationStack {
+                TaskFormView(taskId: nil) {
+                    showCreateTask = false
+                    // Refresh tasks after creating
+                    _Concurrency.Task { @MainActor in
+                        await viewModel.loadTasks()
+                    }
+                }
+            }
+        }
         .navigationDestination(for: NavigationRoute.self) { route in
             switch route {
             case .taskDetail(let taskId):

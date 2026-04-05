@@ -19,13 +19,23 @@ final class TaskFormViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private var tasksRepository: TasksRepository?
-    private let taskId: String
+    private let taskId: String?
     
-    init(taskId: String) {
+    var isCreating: Bool {
+        taskId == nil || taskId == "new"
+    }
+    
+    init(taskId: String? = nil) {
         self.taskId = taskId
     }
     
     func loadTask() async {
+        guard let taskId = taskId, !isCreating else {
+            // Creating new task - no need to load
+            isLoading = false
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         tasksRepository = RepositoryFactory.shared.tasksRepository()
@@ -49,10 +59,12 @@ final class TaskFormViewModel: ObservableObject {
         isLoading = false
     }
     
-    func updateTask() async throws {
-        guard let repo = tasksRepository else {
+    func saveTask() async throws {
+        guard let repo = tasksRepository ?? RepositoryFactory.shared.tasksRepository() else {
             throw NSError(domain: "TaskFormViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Not authenticated"])
         }
+        
+        tasksRepository = repo
         
         guard !title.isEmpty else {
             errorMessage = "Title is required"
@@ -63,19 +75,36 @@ final class TaskFormViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            _ = try await repo.updateTask(
-                id: taskId,
-                title: title,
-                description: description.isEmpty ? nil : description,
-                deadline: deadline,
-                priority: priority
-            )
+            if isCreating {
+                _ = try await repo.createTask(
+                    title: title,
+                    description: description.isEmpty ? nil : description,
+                    deadline: deadline,
+                    priority: priority
+                )
+            } else {
+                guard let taskId = taskId else {
+                    throw NSError(domain: "TaskFormViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Task ID required for update"])
+                }
+                _ = try await repo.updateTask(
+                    id: taskId,
+                    title: title,
+                    description: description.isEmpty ? nil : description,
+                    deadline: deadline,
+                    priority: priority
+                )
+            }
         } catch {
-            errorMessage = "Failed to update task: \(error.localizedDescription)"
+            errorMessage = isCreating ? "Failed to create task: \(error.localizedDescription)" : "Failed to update task: \(error.localizedDescription)"
             isSaving = false
             throw error
         }
         
         isSaving = false
+    }
+    
+    // Legacy method for backward compatibility
+    func updateTask() async throws {
+        try await saveTask()
     }
 }

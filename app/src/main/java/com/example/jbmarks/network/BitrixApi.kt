@@ -340,4 +340,14 @@ interface BitrixApi {
     suspend fun getFileDetails(
         @Query("id") fileId: String
     ): Response<BitrixResponse<FileDetails>>
+    
+    /**
+     * Get attached object details by ID
+     * Bitrix24 API: disk.attachedObject.get.json
+     * Used for fetching file details when only attachment ID is available
+     */
+    @GET("disk.attachedObject.get.json")
+    suspend fun getAttachedObject(
+        @Query("id") attachmentId: String
+    ): Response<com.example.jbmarks.tasks.data.AttachedObjectResponse>
 }
