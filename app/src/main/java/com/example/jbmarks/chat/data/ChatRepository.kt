@@ -7,6 +7,7 @@ import com.example.jbmarks.chat.domain.Chat
 import com.example.jbmarks.chat.domain.ChatType
 import com.example.jbmarks.chat.domain.Message
 import com.example.jbmarks.chat.domain.MessageFile
+import com.example.jbmarks.network.APIRequestHelper
 import com.example.jbmarks.network.RetrofitInstance
 import com.example.jbmarks.user.data.BitrixResponse
 import com.example.jbmarks.user.data.User
@@ -24,6 +25,18 @@ class ChatRepository(private val context: Context? = null) {
     private val sharedPreferences: SharedPreferences? = 
         context?.getSharedPreferences("chat_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
+    private val apiHelper: APIRequestHelper? = if (context != null) APIRequestHelper(context) else null
+    
+    /**
+     * Helper to execute API calls with automatic token refresh
+     */
+    private suspend fun <T> executeApiCall(operation: suspend () -> retrofit2.Response<T>): retrofit2.Response<T> {
+        return if (apiHelper != null) {
+            apiHelper.executeWithTokenRefresh(operation)
+        } else {
+            operation()
+        }
+    }
     
     /**
      * Get recent chats
@@ -49,7 +62,9 @@ class ChatRepository(private val context: Context? = null) {
      */
     suspend fun getChatMessages(dialogId: String, limit: Int = 50, lastId: String? = null): List<Message> {
         return try {
-            val response = api.getChatMessages(dialogId, limit, lastId)
+            val response = executeApiCall {
+                api.getChatMessages(dialogId, limit, lastId)
+            }
             if (response.isSuccessful && response.body()?.result?.messages != null) {
                 val messages = response.body()!!.result!!.messages!!
                 
@@ -84,7 +99,9 @@ class ChatRepository(private val context: Context? = null) {
             Log.w(TAG, "Timeout fetching messages for dialog $dialogId, retrying...", e)
             // Retry once on timeout
             return try {
-                val retryResponse = api.getChatMessages(dialogId, limit, lastId)
+                val retryResponse = executeApiCall {
+                    api.getChatMessages(dialogId, limit, lastId)
+                }
                 if (retryResponse.isSuccessful && retryResponse.body()?.result?.messages != null) {
                     val messages = retryResponse.body()!!.result!!.messages!!
                     
@@ -134,7 +151,9 @@ class ChatRepository(private val context: Context? = null) {
                 system = "N",
                 files = fileIds
             )
-            val response = api.sendMessage(request)
+            val response = executeApiCall {
+                api.sendMessage(request)
+            }
             if (response.isSuccessful && response.body() != null) {
                 val responseBody = response.body()!!
                 val messageId = when (val result = responseBody.result) {
@@ -177,7 +196,9 @@ class ChatRepository(private val context: Context? = null) {
                 type = type,
                 users = userIds
             )
-            val response = api.createChat(request)
+            val response = executeApiCall {
+                api.createChat(request)
+            }
             if (response.isSuccessful && response.body()?.result?.chatId != null) {
                 Result.success(response.body()!!.result!!.chatId!!)
             } else {
@@ -196,7 +217,9 @@ class ChatRepository(private val context: Context? = null) {
      */
     suspend fun markMessagesAsRead(dialogId: String, messageId: String? = null): Result<Boolean> {
         return try {
-            val response = api.markMessagesAsRead(dialogId, messageId)
+            val response = executeApiCall {
+                api.markMessagesAsRead(dialogId, messageId)
+            }
             if (response.isSuccessful) {
                 Result.success(true)
             } else {

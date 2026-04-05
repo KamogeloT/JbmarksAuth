@@ -8,13 +8,13 @@
 import SwiftUI
 
 struct TaskFormView: View {
-    let taskId: String
+    let taskId: String?
     let onNavigateBack: () -> Void
     
     @StateObject private var viewModel: TaskFormViewModel
     @State private var showPriorityMenu = false
     
-    init(taskId: String, onNavigateBack: @escaping () -> Void) {
+    init(taskId: String? = nil, onNavigateBack: @escaping () -> Void) {
         self.taskId = taskId
         self.onNavigateBack = onNavigateBack
         _viewModel = StateObject(wrappedValue: TaskFormViewModel(taskId: taskId))
@@ -131,7 +131,7 @@ struct TaskFormView: View {
                 Button(action: {
                     _Concurrency.Task { @MainActor in
                         do {
-                            try await viewModel.updateTask()
+                            try await viewModel.saveTask()
                             onNavigateBack()
                         } catch {
                             // Error already set in viewModel
@@ -146,7 +146,7 @@ struct TaskFormView: View {
                             .foregroundColor(.white)
                             .cornerRadius(8)
                     } else {
-                        Text("Save")
+                        Text(viewModel.isCreating ? "Create" : "Save")
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(Color.blue)
@@ -158,7 +158,7 @@ struct TaskFormView: View {
             }
             .padding()
         }
-        .navigationTitle("Edit Task")
+        .navigationTitle(viewModel.isCreating ? "New Task" : "Edit Task")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.loadTask()

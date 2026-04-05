@@ -84,10 +84,17 @@ class MessageViewModel(
     }
     
     fun sendMessage(text: String) {
+        // Input validation (match iOS)
+        val trimmedText = text.trim()
+        if (trimmedText.isEmpty()) {
+            android.util.Log.w("MessageViewModel", "Cannot send message: text is empty")
+            return
+        }
+        
         viewModelScope.launch {
             _isSending.value = true
             try {
-                repository.sendMessage(dialogId, text)
+                repository.sendMessage(dialogId, trimmedText)
                     .onSuccess {
                         // Reload messages to get the new one
                         loadMessages()

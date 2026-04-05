@@ -879,38 +879,6 @@ struct ImageViewerDialog: View {
     }
 }
 
-// MARK: - Document Picker
-struct DocumentPicker: UIViewControllerRepresentable {
-    let onDocumentPicked: (URL) -> Void
-    
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item])
-        picker.delegate = context.coordinator
-        return picker
-    }
-    
-    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, UIDocumentPickerDelegate {
-        var parent: DocumentPicker
-        
-        init(_ parent: DocumentPicker) {
-            self.parent = parent
-        }
-        
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-            parent.onDocumentPicked(url)
-        }
-        
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
-    }
-}
-
 // MARK: - Camera View
 struct CameraView: UIViewControllerRepresentable {
     let onPhotoTaken: (Data, String) -> Void
@@ -936,10 +904,14 @@ struct CameraView: UIViewControllerRepresentable {
         }
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let image = info[.originalImage] as? UIImage,
-               let imageData = image.jpegData(compressionQuality: 0.8) {
-                let fileName = "photo_\(Int(Date().timeIntervalSince1970)).jpg"
-                parent.onPhotoTaken(imageData, fileName)
+            if let image = info[.originalImage] as? UIImage {
+                // Resize image to max 1920x1920 to reduce file size
+                let resizedImage = image.resized(toMaxDimension: 1920)
+                // Use higher compression for smaller file size
+                if let imageData = resizedImage.jpegData(compressionQuality: 0.7) {
+                    let fileName = "photo_\(Int(Date().timeIntervalSince1970)).jpg"
+                    parent.onPhotoTaken(imageData, fileName)
+                }
             }
             picker.dismiss(animated: true)
         }
@@ -947,5 +919,34 @@ struct CameraView: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             picker.dismiss(animated: true)
         }
+    }
+}
+
+// MARK: - UIImage Extension for Resizing
+extension UIImage {
+    func resized(toMaxDimension maxDimension: CGFloat) -> UIImage {
+        let size = self.size
+        
+        // If image is already smaller, return original
+        if size.width <= maxDimension && size.height <= maxDimension {
+            return self
+        }
+        
+        // Calculate new size maintaining aspect ratio
+        let ratio = size.width / size.height
+        var newSize: CGSize
+        
+        if size.width > size.height {
+            newSize = CGSize(width: maxDimension, height: maxDimension / ratio)
+        } else {
+            newSize = CGSize(width: maxDimension * ratio, height: maxDimension)
+        }
+        
+        // Resize image
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+        defer { UIGraphicsEndImageContext() }
+        
+        self.draw(in: CGRect(origin: .zero, size: newSize))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? self
     }
 }

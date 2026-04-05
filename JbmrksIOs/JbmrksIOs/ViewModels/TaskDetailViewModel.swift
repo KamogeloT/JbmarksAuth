@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 @MainActor
 final class TaskDetailViewModel: ObservableObject {
@@ -69,8 +70,11 @@ final class TaskDetailViewModel: ObservableObject {
         
         do {
             files = try await repo.getTaskFiles(taskId: taskId)
+            print("✅ Loaded \(files.count) files for task \(taskId)")
         } catch {
-            print("Failed to load files: \(error)")
+            print("⚠️ Failed to load files: \(error.localizedDescription)")
+            // Set empty array on error - better than showing stale data
+            files = []
         }
     }
     
@@ -118,8 +122,15 @@ final class TaskDetailViewModel: ObservableObject {
     func addComment(_ text: String, fileIds: [String]? = nil) async {
         guard let repo = tasksRepository else { return }
         
+        // Validate comment text (trim whitespace and check if empty)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            errorMessage = "Comment cannot be empty"
+            return
+        }
+        
         do {
-            _ = try await repo.addTaskComment(taskId: taskId, message: text, fileIds: fileIds)
+            _ = try await repo.addTaskComment(taskId: taskId, message: trimmedText, fileIds: fileIds)
             await loadComments()
         } catch {
             errorMessage = "Failed to add comment: \(error.localizedDescription)"
@@ -134,9 +145,37 @@ final class TaskDetailViewModel: ObservableObject {
         }
         
         do {
-            let fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            var fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            let fileSizeMB = Double(fileData.count) / (1024 * 1024)
+            
+            // Check file size (Bitrix24 typically has 10-20MB limit)
+            if fileSizeMB > 15 {
+                errorMessage = "File is too large (\(String(format: "%.1f", fileSizeMB))MB). Maximum size is 15MB. Please compress or resize the file."
+                isUploadingFile = false
+                return
+            }
+            
+            // If it's an image, try to compress/resize it
+            if fileName.lowercased().hasSuffix(".jpg") || fileName.lowercased().hasSuffix(".jpeg") || 
+               fileName.lowercased().hasSuffix(".png") {
+                if let image = UIImage(data: fileData) {
+                    let resizedImage = image.resized(toMaxDimension: 1920)
+                    if let compressedData = resizedImage.jpegData(compressionQuality: 0.7) {
+                        let newSizeMB = Double(compressedData.count) / (1024 * 1024)
+                        print("📸 Image compressed: \(String(format: "%.1f", fileSizeMB))MB → \(String(format: "%.1f", newSizeMB))MB")
+                        fileData = compressedData
+                    }
+                }
+            }
+            
             _ = try await repo.uploadTaskFile(taskId: taskId, fileData: fileData, fileName: fileName)
             await loadFiles()
+        } catch let error as APIError {
+            if case .httpError(let code, _) = error, code == 413 {
+                errorMessage = "File is too large. Please compress or resize the file before uploading."
+            } else {
+                errorMessage = "Failed to upload file: \(error.localizedDescription)"
+            }
         } catch {
             errorMessage = "Failed to upload file: \(error.localizedDescription)"
         }
@@ -147,13 +186,37 @@ final class TaskDetailViewModel: ObservableObject {
         guard let repo = tasksRepository else { return }
         
         do {
+            var fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
+            let fileSizeMB = Double(fileData.count) / (1024 * 1024)
+            
+            // Check file size
+            if fileSizeMB > 15 {
+                errorMessage = "Photo is too large (\(String(format: "%.1f", fileSizeMB))MB). Maximum size is 15MB."
+                return
+            }
+            
+            // Compress image if needed
+            if let image = UIImage(data: fileData) {
+                let resizedImage = image.resized(toMaxDimension: 1920)
+                if let compressedData = resizedImage.jpegData(compressionQuality: 0.7) {
+                    let newSizeMB = Double(compressedData.count) / (1024 * 1024)
+                    print("📸 Photo compressed: \(String(format: "%.1f", fileSizeMB))MB → \(String(format: "%.1f", newSizeMB))MB")
+                    fileData = compressedData
+                }
+            }
+            
             // First upload the file
-            let fileData = try Data(contentsOf: URL(fileURLWithPath: filePath))
             let file = try await repo.uploadTaskFile(taskId: taskId, fileData: fileData, fileName: fileName)
             // Then add comment with the file ID
             _ = try await repo.addTaskComment(taskId: taskId, message: "📷 \(fileName)", fileIds: [file.id])
             await loadComments()
             await loadFiles()
+        } catch let error as APIError {
+            if case .httpError(let code, _) = error, code == 413 {
+                errorMessage = "Photo is too large. Please try taking a photo with lower resolution."
+            } else {
+                errorMessage = "Failed to upload photo and add comment: \(error.localizedDescription)"
+            }
         } catch {
             errorMessage = "Failed to upload photo and add comment: \(error.localizedDescription)"
         }

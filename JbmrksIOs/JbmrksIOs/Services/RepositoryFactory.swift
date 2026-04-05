@@ -28,6 +28,24 @@ nonisolated final class RepositoryFactory {
         return BitrixApiClient(baseUrl: baseUrl, accessToken: accessToken)
     }
     
+    /// Refresh token and get new API client. Returns nil if refresh fails.
+    func refreshTokenAndGetApiClient() async -> BitrixApiClient? {
+        guard let portalUrl = tokenStorage.getPortalUrl() ?? defaultBaseUrl as String? else {
+            return nil
+        }
+        
+        do {
+            let newToken = try await TokenRefreshHelper.shared.refreshTokenIfNeeded(
+                portalUrl: portalUrl,
+                tokenStorage: tokenStorage
+            )
+            return BitrixApiClient(baseUrl: portalUrl, accessToken: newToken)
+        } catch {
+            print("⚠️ Token refresh failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
     /// Create AuthRepository instance
     var authRepository: AuthRepository {
         return AuthRepositoryImpl(tokenStorage: tokenStorage)

@@ -45,6 +45,13 @@ Podfile.lock
 # iOS Configuration (contains secrets)
 JbmrksIOs/JbmrksIOs/Config/OAuthConfig.swift
 
+# APNs Keys and Certificates (contains secrets)
+JbmrksIOs/certs/
+*.p8
+*.p12
+*.cer
+AuthKey_*.p8
+
 # Local Java installation (for Java 17)
 .java/
 

@@ -68,13 +68,20 @@ final class MessageViewModel: ObservableObject {
     }
     
     func sendMessage(text: String) async {
-        guard let repo = chatRepository, !text.isEmpty else { return }
+        guard let repo = chatRepository else { return }
+        
+        // Validate message text (trim whitespace and check if empty)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            errorMessage = "Message cannot be empty"
+            return
+        }
         
         isSending = true
         errorMessage = nil
         
         do {
-            _ = try await repo.sendMessage(dialogId: dialogId, text: text)
+            _ = try await repo.sendMessage(dialogId: dialogId, text: trimmedText)
             await loadMessages() // Reload messages after sending
         } catch {
             errorMessage = "Failed to send message: \(error.localizedDescription)"

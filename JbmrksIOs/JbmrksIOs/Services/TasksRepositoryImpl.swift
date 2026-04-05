@@ -10,10 +10,16 @@ import Foundation
 nonisolated class TasksRepositoryImpl: TasksRepository {
     private let apiClient: BitrixApiClient
     private let tokenStorage: TokenStorage
+    private let baseUrl: String
     
     init(apiClient: BitrixApiClient, tokenStorage: TokenStorage) {
         self.apiClient = apiClient
         self.tokenStorage = tokenStorage
+        self.baseUrl = apiClient.baseUrl
+    }
+    
+    private var requestHelper: APIRequestHelper {
+        APIRequestHelper(baseApiClient: apiClient, tokenStorage: tokenStorage, baseUrl: baseUrl)
     }
     
     func getTasks(
@@ -22,12 +28,14 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
         status: String?,
         groupId: String?
     ) async throws -> [Task] {
-        let response = try await apiClient.getTasks(
-            responsibleId: responsibleId,
-            createdBy: createdBy,
-            status: status,
-            groupId: groupId
-        )
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.getTasks(
+                responsibleId: responsibleId,
+                createdBy: createdBy,
+                status: status,
+                groupId: groupId
+            )
+        }
         
         guard let result = response.result else {
             return []
@@ -39,7 +47,29 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func getTask(id: String) async throws -> Task {
-        let response = try await apiClient.getTask(id: id)
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.getTask(id: id)
+        }
+        guard let taskDto = response.result?.task else {
+            throw APIError.noData
+        }
+        return taskDto.toDomain()
+    }
+    
+    func createTask(
+        title: String,
+        description: String?,
+        deadline: String?,
+        priority: TaskPriority?
+    ) async throws -> Task {
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.createTask(
+                title: title,
+                description: description,
+                deadline: deadline,
+                priority: priority
+            )
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -47,7 +77,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func completeTask(id: String) async throws -> Task {
-        let response = try await apiClient.completeTask(id: id)
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.completeTask(id: id)
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -55,7 +87,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func startTask(id: String) async throws -> Task {
-        let response = try await apiClient.startTask(id: id)
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.startTask(id: id)
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -63,7 +97,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func deferTask(id: String) async throws -> Task {
-        let response = try await apiClient.deferTask(id: id)
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.deferTask(id: id)
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -71,7 +107,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func renewTask(id: String) async throws -> Task {
-        let response = try await apiClient.renewTask(id: id)
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.renewTask(id: id)
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -79,7 +117,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func deleteTask(id: String) async throws {
-        try await apiClient.deleteTask(id: id)
+        try await requestHelper.executeWithTokenRefresh { client in
+            try await client.deleteTask(id: id)
+        }
     }
     
     func updateTask(
@@ -89,13 +129,15 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
         deadline: String?,
         priority: TaskPriority?
     ) async throws -> Task {
-        let response = try await apiClient.updateTask(
-            id: id,
-            title: title,
-            description: description,
-            deadline: deadline,
-            priority: priority
-        )
+        let response = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.updateTask(
+                id: id,
+                title: title,
+                description: description,
+                deadline: deadline,
+                priority: priority
+            )
+        }
         guard let taskDto = response.result?.task else {
             throw APIError.noData
         }
@@ -103,7 +145,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func getTaskComments(taskId: String) async throws -> [Comment] {
-        let commentDtos = try await apiClient.getTaskComments(taskId: taskId)
+        let commentDtos = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.getTaskComments(taskId: taskId)
+        }
         
         // Fetch author names for all comments
         var comments: [Comment] = []
@@ -111,7 +155,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
             var authorName: String? = nil
             if let authorId = dto.authorId ?? dto.authorIdUpper {
                 do {
-                    let user = try await apiClient.getUser(id: authorId)
+                    let user = try await requestHelper.executeWithTokenRefresh { client in
+                        try await client.getUser(id: authorId)
+                    }
                     authorName = user.fullName
                 } catch {
                     // Use author info from DTO if available
@@ -126,7 +172,9 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func addTaskComment(taskId: String, message: String, fileIds: [String]?) async throws -> Comment {
-        let commentId = try await apiClient.addTaskComment(taskId: taskId, text: message, fileIds: fileIds)
+        let commentId = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.addTaskComment(taskId: taskId, text: message, fileIds: fileIds)
+        }
         // Reload comments to get the new one
         let comments = try await getTaskComments(taskId: taskId)
         guard let newComment = comments.first(where: { $0.id == commentId }) else {
@@ -136,15 +184,21 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
     }
     
     func getTaskFiles(taskId: String) async throws -> [TaskFile] {
-        let fileDtos = try await apiClient.getTaskFiles(taskId: taskId)
+        let fileDtos = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.getTaskFiles(taskId: taskId)
+        }
         return fileDtos.map { $0.toDomain() }
     }
     
     func uploadTaskFile(taskId: String, fileData: Data, fileName: String) async throws -> TaskFile {
-        // Upload file
-        let fileId = try await apiClient.uploadFile(fileData: fileData, fileName: fileName)
-        // Attach to task
-        try await apiClient.attachFileToTask(taskId: taskId, fileId: fileId)
+        // Upload file with token refresh
+        let fileId = try await requestHelper.executeWithTokenRefresh { client in
+            try await client.uploadFile(fileData: fileData, fileName: fileName)
+        }
+        // Attach to task with token refresh
+        try await requestHelper.executeWithTokenRefresh { client in
+            try await client.attachFileToTask(taskId: taskId, fileId: fileId)
+        }
         // Reload files to get the new one
         let files = try await getTaskFiles(taskId: taskId)
         guard let newFile = files.first(where: { $0.id == fileId }) else {

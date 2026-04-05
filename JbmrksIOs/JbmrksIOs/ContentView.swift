@@ -15,6 +15,7 @@ private func runAsync(_ operation: @escaping () async -> Void) {
 
 struct ContentView: View {
     @StateObject private var authViewModel = AuthViewModel()
+    @StateObject private var notificationHandler = NotificationNavigationHandler()
     @State private var selectedTab: TabItem = .dashboard
     
     var body: some View {
@@ -25,11 +26,29 @@ struct ContentView: View {
             } else if authViewModel.isAuthenticated {
                 mainContent
             } else {
-                AuthView()
+                AuthView(viewModel: authViewModel)
             }
         }
         .task {
             await authViewModel.checkAuth()
+        }
+        .onChange(of: notificationHandler.selectedTab) { oldValue, newValue in
+            selectedTab = newValue
+        }
+        .onChange(of: selectedTab) { oldValue, newValue in
+            // Refresh data when tab changes
+            switch newValue {
+            case .dashboard:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshDashboard"), object: nil)
+            case .tasks:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshTasks"), object: nil)
+            case .chat:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshChats"), object: nil)
+            case .calendar:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshCalendar"), object: nil)
+            case .feed:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+            }
         }
     }
     
@@ -46,12 +65,42 @@ struct ContentView: View {
                 Label("Home", systemImage: "house.fill")
             }
             .tag(TabItem.dashboard)
+            .onAppear {
+                // Refresh when tab appears
+                if selectedTab == .dashboard {
+                    _Concurrency.Task { @MainActor in
+                        // Trigger refresh via notification or direct call
+                    }
+                }
+            }
             
             // Tasks Tab
             NavigationStack {
                 VStack(spacing: 0) {
                     TopNavigationBar()
                     TasksView()
+                }
+                .navigationDestination(for: NavigationRoute.self) { route in
+                    switch route {
+                    case .taskDetail(let taskId):
+                        TaskDetailView(taskId: taskId) {
+                            // Navigation handled by NavigationStack
+                        }
+                    case .taskEdit(let taskId):
+                        TaskFormView(taskId: taskId) {
+                            // Navigation handled by NavigationStack
+                        }
+                    case .chatMessage:
+                        // Not used in tasks tab
+                        EmptyView()
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToTask"))) { notification in
+                    if notification.userInfo?["taskId"] as? String != nil {
+                        // Navigation will be handled by NavigationStack when route is set
+                        // This is a workaround - in a real app you'd use a NavigationPath
+                        selectedTab = .tasks
+                    }
                 }
             }
             .tabItem {
@@ -74,6 +123,11 @@ struct ContentView: View {
                     case .taskDetail, .taskEdit:
                         // Not used in chat tab
                         EmptyView()
+                    }
+                }
+                .onChange(of: notificationHandler.navigationRoute) { oldValue, newValue in
+                    if case .chatMessage = newValue {
+                        // Navigation handled by NavigationStack
                     }
                 }
             }

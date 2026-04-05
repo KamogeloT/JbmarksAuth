@@ -47,14 +47,32 @@ struct CalendarEvent: Identifiable, Codable {
 }
 
 struct CalendarEventsRequest: Codable {
-    let filter: CalendarEventFilter
+    // Match Android: all fields are optional
+    let filter: CalendarEventFilter?
     let ownerId: String?
-    let type: String
+    let type: String?
 }
 
 struct CalendarEventFilter: Codable {
-    let fromDate: String
-    let toDate: String
+    // Match Android: use >FROM and <FROM for date range (optional fields like Android)
+    let fromDate: String?
+    let toDate: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case fromDate = ">FROM"
+        case toDate = "<FROM"
+    }
+    
+    // Custom encoding to match Android format
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let fromDate = fromDate {
+            try container.encode(fromDate, forKey: .fromDate)
+        }
+        if let toDate = toDate {
+            try container.encode(toDate, forKey: .toDate)
+        }
+    }
 }
 
 struct CalendarEventsResponse: Codable {
@@ -62,6 +80,7 @@ struct CalendarEventsResponse: Codable {
 }
 
 struct CalendarEventDto: Codable {
+    // Match Android: all fields are nullable
     let id: String?
     let name: String?
     let description: String?
@@ -78,13 +97,25 @@ struct CalendarEventDto: Codable {
         case location = "LOCATION"
     }
     
+    // Custom decoder to handle missing fields gracefully
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        fromDate = try container.decodeIfPresent(String.self, forKey: .fromDate)
+        toDate = try container.decodeIfPresent(String.self, forKey: .toDate)
+        location = try container.decodeIfPresent(String.self, forKey: .location)
+    }
+    
     func toDomain() -> CalendarEvent {
+        // Match Android mapper: provide defaults for required fields
         CalendarEvent(
-            id: id ?? "",
-            name: name,
+            id: id ?? "0",
+            name: name ?? "No Title",
             description: description,
-            fromDate: fromDate,
-            toDate: toDate,
+            fromDate: fromDate ?? "",
+            toDate: toDate ?? "",
             location: location
         )
     }

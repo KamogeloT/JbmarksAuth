@@ -17,6 +17,14 @@ protocol TasksRepository {
     
     func getTask(id: String) async throws -> Task
     
+    // Task creation
+    func createTask(
+        title: String,
+        description: String?,
+        deadline: String?,
+        priority: TaskPriority?
+    ) async throws -> Task
+    
     // Task status management
     func completeTask(id: String) async throws -> Task
     func startTask(id: String) async throws -> Task
