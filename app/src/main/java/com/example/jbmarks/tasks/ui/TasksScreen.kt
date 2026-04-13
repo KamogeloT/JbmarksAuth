@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +87,7 @@ fun TasksScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedStatus by viewModel.selectedStatus.collectAsState()
     val selectedPriority by viewModel.selectedPriority.collectAsState()
+    val workgroupMembershipKey by viewModel.workgroupMembershipSignature.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     
@@ -121,10 +123,12 @@ fun TasksScreen(
                     }
                     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
-                    LaunchedEffect(groupedTasks.keys) {
-                        groupedTasks.keys.forEach { groupName ->
-                            if (expandedGroups[groupName] == null) {
+                    LaunchedEffect(groupedTasks.keys, workgroupMembershipKey) {
+                        groupedTasks.forEach { (groupName, tasksInGroup) ->
+                            if (!viewModel.isUserMemberOfGroup(groupName, tasksInGroup)) {
                                 expandedGroups[groupName] = true
+                            } else if (expandedGroups[groupName] == null) {
+                                expandedGroups[groupName] = false
                             }
                         }
                         val staleKeys = expandedGroups.keys.toList().filter { it !in groupedTasks.keys }
@@ -158,17 +162,26 @@ fun TasksScreen(
                         ) {
                             groupedTasks.forEach { (groupName, tasksInGroup) ->
                                 item(key = "group_header_$groupName") {
+                                    val canToggle = viewModel.isUserMemberOfGroup(groupName, tasksInGroup)
                                     WorkgroupHeader(
                                         title = groupName,
                                         taskCount = tasksInGroup.size,
-                                        isExpanded = expandedGroups[groupName] != false,
+                                        isExpanded = expandedGroups[groupName] == true,
+                                        canToggle = canToggle,
+                                        restrictionMessage = if (canToggle) {
+                                            null
+                                        } else {
+                                            "You are not a member of this workgroup. You can view tasks shared with you, but you cannot collapse this section."
+                                        },
                                         onToggle = {
-                                            expandedGroups[groupName] = !(expandedGroups[groupName] ?: true)
+                                            if (canToggle) {
+                                                expandedGroups[groupName] = !(expandedGroups[groupName] ?: false)
+                                            }
                                         }
                                     )
                                 }
 
-                                if (expandedGroups[groupName] != false) {
+                                if (expandedGroups[groupName] == true) {
                                     items(tasksInGroup, key = { it.id }) { task ->
                                         android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
                                         TaskItem(
@@ -199,39 +212,70 @@ fun WorkgroupHeader(
     title: String,
     taskCount: Int,
     isExpanded: Boolean,
+    canToggle: Boolean = true,
+    restrictionMessage: String? = null,
     onToggle: () -> Unit
 ) {
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 4.dp, vertical = 4.dp)
-            .clickable(onClick = onToggle),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .clickable(enabled = canToggle, onClick = onToggle),
+            colors = CardDefaults.cardColors(
+                containerColor = if (canToggle) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                }
+            ),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$title ($taskCount)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (canToggle) {
+                        if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight
+                    } else {
+                        Icons.Default.Lock
+                    },
+                    contentDescription = if (canToggle) {
+                        if (isExpanded) "Collapse group" else "Expand group"
+                    } else {
+                        "Section locked"
+                    },
+                    tint = if (canToggle) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    }
+                )
+            }
+        }
+        if (!canToggle && restrictionMessage != null) {
             Text(
-                text = "$title ($taskCount)",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                contentDescription = if (isExpanded) "Collapse group" else "Expand group",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                text = restrictionMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(horizontal = 8.dp, top = 4.dp)
             )
         }
     }

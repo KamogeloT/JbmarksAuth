@@ -16,6 +16,9 @@ final class TaskDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var comments: [Comment] = []
     @Published var isLoadingComments = false
+    @Published var isPostingComment = false
+    /// Shown near the comment box; does not replace the whole screen (unlike `errorMessage` from task load).
+    @Published var commentSubmissionError: String?
     @Published var files: [TaskFile] = []
     @Published var isUploadingFile = false
     
@@ -122,18 +125,21 @@ final class TaskDetailViewModel: ObservableObject {
     func addComment(_ text: String, fileIds: [String]? = nil) async {
         guard let repo = tasksRepository else { return }
         
-        // Validate comment text (trim whitespace and check if empty)
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else {
-            errorMessage = "Comment cannot be empty"
+            commentSubmissionError = "Comment cannot be empty"
             return
         }
+        
+        commentSubmissionError = nil
+        isPostingComment = true
+        defer { isPostingComment = false }
         
         do {
             _ = try await repo.addTaskComment(taskId: taskId, message: trimmedText, fileIds: fileIds)
             await loadComments()
         } catch {
-            errorMessage = "Failed to add comment: \(error.localizedDescription)"
+            commentSubmissionError = error.localizedDescription
         }
     }
     
@@ -191,7 +197,7 @@ final class TaskDetailViewModel: ObservableObject {
             
             // Check file size
             if fileSizeMB > 15 {
-                errorMessage = "Photo is too large (\(String(format: "%.1f", fileSizeMB))MB). Maximum size is 15MB."
+                commentSubmissionError = "Photo is too large (\(String(format: "%.1f", fileSizeMB))MB). Maximum size is 15MB."
                 return
             }
             
@@ -213,12 +219,12 @@ final class TaskDetailViewModel: ObservableObject {
             await loadFiles()
         } catch let error as APIError {
             if case .httpError(let code, _) = error, code == 413 {
-                errorMessage = "Photo is too large. Please try taking a photo with lower resolution."
+                commentSubmissionError = "Photo is too large. Please try taking a photo with lower resolution."
             } else {
-                errorMessage = "Failed to upload photo and add comment: \(error.localizedDescription)"
+                commentSubmissionError = "Failed to upload photo and add comment: \(error.localizedDescription)"
             }
         } catch {
-            errorMessage = "Failed to upload photo and add comment: \(error.localizedDescription)"
+            commentSubmissionError = "Failed to upload photo and add comment: \(error.localizedDescription)"
         }
     }
 }

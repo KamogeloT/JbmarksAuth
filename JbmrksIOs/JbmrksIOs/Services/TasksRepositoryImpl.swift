@@ -41,8 +41,7 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
             return []
         }
         
-        // Flatten the dictionary values into a single array
-        var tasks = result.values.flatMap { $0 }.map { $0.toDomain() }
+        var tasks = result.tasks.map { $0.toDomain() }
         tasks = await enrichGroupNamesIfNeeded(tasks)
         return tasks
     }
@@ -201,12 +200,19 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
         let commentId = try await requestHelper.executeWithTokenRefresh { client in
             try await client.addTaskComment(taskId: taskId, text: message, fileIds: fileIds)
         }
-        // Reload comments to get the new one
         let comments = try await getTaskComments(taskId: taskId)
-        guard let newComment = comments.first(where: { $0.id == commentId }) else {
-            throw APIError.noData
+        if !commentId.isEmpty, let match = comments.first(where: { $0.id == commentId }) {
+            return match
         }
-        return newComment
+        // ID parsing can fail even when Bitrix saved the comment; match by text (same as Android fallback path)
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let byText = comments.reversed().first(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed }) {
+            return byText
+        }
+        if let last = comments.last {
+            return last
+        }
+        throw APIError.noData
     }
     
     func getTaskFiles(taskId: String) async throws -> [TaskFile] {

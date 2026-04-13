@@ -8,9 +8,12 @@ import com.example.jbmarks.tasks.data.TasksRepository
 import com.example.jbmarks.tasks.domain.Task
 import com.example.jbmarks.tasks.domain.TaskPriority
 import com.example.jbmarks.tasks.domain.TaskStatus
+import com.example.jbmarks.user.data.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 sealed interface TasksUiState {
     object Loading : TasksUiState
@@ -38,10 +41,56 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     val searchQuery: StateFlow<String> = _searchQuery
     val selectedStatus: StateFlow<TaskStatus?> = _selectedStatus
     val selectedPriority: StateFlow<TaskPriority?> = _selectedPriority
-    
+
+    private val _userWorkgroupIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _userWorkgroupNamesLower = MutableStateFlow<Set<String>>(emptySet())
+    private val _membershipKnown = MutableStateFlow(false)
+    private val _workgroupMembershipSignature = MutableStateFlow("")
+    val workgroupMembershipSignature: StateFlow<String> = _workgroupMembershipSignature.asStateFlow()
 
     init {
         loadTasks()
+    }
+
+    private fun updateWorkgroupMembershipSignature() {
+        val ids = _userWorkgroupIds.value.sorted().joinToString(",")
+        _workgroupMembershipSignature.value = "${_membershipKnown.value}|$ids"
+    }
+
+    /**
+     * If workgroups could not be loaded, allow expand/collapse. "No Workgroup" is always interactive.
+     */
+    fun isUserMemberOfGroup(groupName: String, tasks: List<Task>): Boolean {
+        if (!_membershipKnown.value) return true
+        if (groupName == "No Workgroup") return true
+        val ids = tasks.mapNotNull { it.groupId }.toSet()
+        if (ids.any { it in _userWorkgroupIds.value }) return true
+        val namesLower = _userWorkgroupNamesLower.value
+        if (tasks.any { t ->
+                val n = t.groupName?.trim()?.lowercase(Locale.getDefault())
+                n != null && n in namesLower
+            }
+        ) return true
+        val titleLower = groupName.trim().lowercase(Locale.getDefault())
+        return titleLower in namesLower
+    }
+
+    private suspend fun refreshWorkgroupMembership() {
+        val userRepo = UserRepository(getApplication())
+        userRepo.getUserWorkgroups()
+            .onSuccess { list ->
+                _userWorkgroupIds.value = list.map { it.id }.toSet()
+                _userWorkgroupNamesLower.value = list.map { it.name.trim().lowercase(Locale.getDefault()) }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                _membershipKnown.value = true
+            }
+            .onFailure {
+                _userWorkgroupIds.value = emptySet()
+                _userWorkgroupNamesLower.value = emptySet()
+                _membershipKnown.value = false
+            }
+        updateWorkgroupMembershipSignature()
     }
 
     private fun applyFilters() {
@@ -70,6 +119,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = TasksUiState.Loading
             try {
                 val tasks = repository.getTasks()
+                refreshWorkgroupMembership()
                 _allTasks.value = tasks
                 applyFilters()
             } catch (t: Throwable) {
@@ -87,6 +137,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _isRefreshing.value = true
             try {
                 val tasks = repository.getTasks()
+                refreshWorkgroupMembership()
                 _allTasks.value = tasks
                 applyFilters()
             } catch (t: Throwable) {

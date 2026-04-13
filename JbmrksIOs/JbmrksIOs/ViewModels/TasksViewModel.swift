@@ -14,6 +14,15 @@ final class TasksViewModel: ObservableObject {
     @Published var searchQuery: String = ""
     @Published var selectedStatus: TaskStatus? = nil
     @Published var selectedPriority: TaskPriority? = nil
+    /// Used to disable expand/collapse for groups the user is not a member of.
+    @Published private(set) var userWorkgroupIds: Set<String> = []
+    @Published private(set) var userWorkgroupNamesLowercased: Set<String> = []
+    @Published private(set) var workgroupsMembershipKnown: Bool = false
+    
+    /// Changes when membership data loads (drive `syncExpandedGroups` in the view).
+    var workgroupMembershipSignature: String {
+        "\(workgroupsMembershipKnown)|\(userWorkgroupIds.sorted().joined(separator: ","))"
+    }
     
     private var tasksRepository: TasksRepository?
     
@@ -58,11 +67,63 @@ final class TasksViewModel: ObservableObject {
         
         do {
             allTasks = try await repo.getTasks(responsibleId: nil, createdBy: nil, status: nil, groupId: nil)
+            await loadUserWorkgroupsForMembership()
         } catch {
             errorMessage = error.localizedDescription
             allTasks = []
         }
         isLoading = false
+    }
+    
+    private func loadUserWorkgroupsForMembership() async {
+        guard let userRepo = RepositoryFactory.shared.userRepository() else {
+            workgroupsMembershipKnown = false
+            userWorkgroupIds = []
+            userWorkgroupNamesLowercased = []
+            return
+        }
+        do {
+            let groups = try await userRepo.getUserWorkgroups()
+            userWorkgroupIds = Set(groups.map(\.id))
+            userWorkgroupNamesLowercased = Set(
+                groups.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+            )
+            workgroupsMembershipKnown = true
+        } catch {
+            workgroupsMembershipKnown = false
+            userWorkgroupIds = []
+            userWorkgroupNamesLowercased = []
+        }
+    }
+    
+    /// If membership could not be loaded, allow toggling (avoid locking the UI). "No Workgroup" is always allowed.
+    func isUserMemberOfWorkgroupSection(groupTitle: String, tasksInGroup: [Task]) -> Bool {
+        guard workgroupsMembershipKnown else { return true }
+        if groupTitle == "No Workgroup" { return true }
+        guard let first = tasksInGroup.first else { return true }
+        let label = workgroupLabel(for: first)
+        if label == "No Workgroup" { return true }
+        
+        let idsInTasks = Set(tasksInGroup.compactMap { $0.groupId })
+        for id in idsInTasks where userWorkgroupIds.contains(id) {
+            return true
+        }
+        for t in tasksInGroup {
+            if let n = t.groupName?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty,
+               userWorkgroupNamesLowercased.contains(n.lowercased()) {
+                return true
+            }
+        }
+        if userWorkgroupNamesLowercased.contains(groupTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
+            return true
+        }
+        return false
+    }
+    
+    private func workgroupLabel(for task: Task) -> String {
+        let trimmed = task.groupName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let t = trimmed, !t.isEmpty { return t }
+        return "No Workgroup"
     }
     
     func setSearchQuery(_ query: String) {
