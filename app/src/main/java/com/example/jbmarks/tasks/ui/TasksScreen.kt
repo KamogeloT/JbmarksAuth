@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -52,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -111,6 +114,23 @@ fun TasksScreen(
                 }
 
                 is TasksUiState.Success -> {
+                    val groupedTasks = remember(state.tasks) {
+                        state.tasks.groupBy { task ->
+                            task.groupName?.trim().takeUnless { it.isNullOrEmpty() } ?: "No Workgroup"
+                        }
+                    }
+                    val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
+
+                    LaunchedEffect(groupedTasks.keys) {
+                        groupedTasks.keys.forEach { groupName ->
+                            if (expandedGroups[groupName] == null) {
+                                expandedGroups[groupName] = true
+                            }
+                        }
+                        val staleKeys = expandedGroups.keys.toList().filter { it !in groupedTasks.keys }
+                        staleKeys.forEach { expandedGroups.remove(it) }
+                    }
+
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
@@ -136,25 +156,83 @@ fun TasksScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(vertical = 8.dp)
                         ) {
-                            items(state.tasks) { task ->
-                                android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
-                                TaskItem(
-                                    task = task,
-                                        onClick = { onTaskClick(task.id) },
-                                        onStatusChange = { newStatus ->
-                                            viewModel.changeTaskStatus(task.id, newStatus)
+                            groupedTasks.forEach { (groupName, tasksInGroup) ->
+                                item(key = "group_header_$groupName") {
+                                    WorkgroupHeader(
+                                        title = groupName,
+                                        taskCount = tasksInGroup.size,
+                                        isExpanded = expandedGroups[groupName] != false,
+                                        onToggle = {
+                                            expandedGroups[groupName] = !(expandedGroups[groupName] ?: true)
                                         }
-                                )
+                                    )
+                                }
+
+                                if (expandedGroups[groupName] != false) {
+                                    items(tasksInGroup, key = { it.id }) { task ->
+                                        android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
+                                        TaskItem(
+                                            task = task,
+                                                onClick = { onTaskClick(task.id) },
+                                                onStatusChange = { newStatus ->
+                                                    viewModel.changeTaskStatus(task.id, newStatus)
+                                                }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                }
                 }
 
                 is TasksUiState.Error -> {
                     ErrorState(errorMessage = state.message, onRetryClick = { viewModel.loadTasks() })
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun WorkgroupHeader(
+    title: String,
+    taskCount: Int,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .clickable(onClick = onToggle),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$title ($taskCount)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                contentDescription = if (isExpanded) "Collapse group" else "Expand group",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

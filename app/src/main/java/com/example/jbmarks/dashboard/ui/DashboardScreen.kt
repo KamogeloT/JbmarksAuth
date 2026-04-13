@@ -356,14 +356,6 @@ fun QuickActionsRow(onNavigateTo: (String) -> Unit) {
                 onClick = { onNavigateTo("calendar") }
             )
         }
-        item {
-            QuickActionCard(
-                title = "Activity",
-                icon = Icons.Default.Home,
-                containerColor = MaterialTheme.colorScheme.error,
-                onClick = { onNavigateTo("activity_feed") }
-            )
-        }
     }
 }
 

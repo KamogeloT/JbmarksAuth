@@ -62,7 +62,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.jbmarks.activity_feed.ui.ActivityFeedScreen
 import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
@@ -71,6 +70,7 @@ import com.example.jbmarks.tasks.ui.TaskDetailScreen
 import com.example.jbmarks.tasks.ui.TaskFormScreen
 import com.example.jbmarks.tasks.ui.TasksScreen
 import com.example.jbmarks.utils.AssetLoader
+import com.example.jbmarks.user.data.Workgroup
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,8 +80,7 @@ fun AppNavigation() {
         Screen.Dashboard,
         Screen.Tasks,
         Screen.Chat,
-        Screen.Calendar,
-        Screen.Feed
+        Screen.Calendar
     )
 
     Scaffold(
@@ -89,6 +88,7 @@ fun AppNavigation() {
             val context = LocalContext.current
             val userRepository = remember { UserRepository(context) }
             var user by remember { mutableStateOf<User?>(null) }
+            var workgroups by remember { mutableStateOf<List<Workgroup>>(emptyList()) }
             var isLoadingUser by remember { mutableStateOf(true) }
             
             // Fetch user data
@@ -97,10 +97,15 @@ fun AppNavigation() {
                 scope.launch {
                     userRepository.getCurrentUser().onSuccess { fetchedUser ->
                         user = fetchedUser
-                        isLoadingUser = false
                     }.onFailure {
-                        isLoadingUser = false
                     }
+
+                    userRepository.getUserWorkgroups().onSuccess { fetchedGroups ->
+                        workgroups = fetchedGroups
+                    }.onFailure {
+                    }
+
+                    isLoadingUser = false
                 }
             }
             
@@ -180,14 +185,30 @@ fun AppNavigation() {
                                 modifier = Modifier.weight(1f),
                                 horizontalAlignment = Alignment.End
                             ) {
-                                Text(
-                                    text = user!!.fullName,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = user!!.fullName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    val workgroupsLabel = remember(workgroups) { buildWorkgroupsLabel(workgroups) }
+                                    if (workgroupsLabel != null) {
+                                        Text(
+                                            text = workgroupsLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                                 
                                 if (!user!!.position.isNullOrEmpty()) {
                                     Text(
@@ -353,7 +374,6 @@ fun AppNavigation() {
                     }
                 )
             }
-            composable(Screen.ActivityFeed.route) { ActivityFeedScreen() }
             composable(Screen.Chat.route) {
                 ChatListScreen(
                     onChatClick = { dialogId ->
@@ -381,11 +401,7 @@ fun AppNavigation() {
                 )
             }
             composable(Screen.Calendar.route) { CalendarScreen() }
-            
-            composable(Screen.Feed.route) {
-                ActivityFeedScreen()
-            }
-            
+
             // Task Detail Screen
             composable(
                 route = "task_detail/{taskId}",
@@ -418,4 +434,13 @@ fun AppNavigation() {
             }
         }
     }
+}
+
+private fun buildWorkgroupsLabel(workgroups: List<Workgroup>, maxVisible: Int = 2): String? {
+    if (workgroups.isEmpty()) return null
+    val visible = workgroups.take(maxVisible).map { it.name.trim() }.filter { it.isNotEmpty() }
+    if (visible.isEmpty()) return null
+    val remaining = workgroups.size - visible.size
+    val base = visible.joinToString(", ")
+    return if (remaining > 0) "$base +$remaining" else base
 }
