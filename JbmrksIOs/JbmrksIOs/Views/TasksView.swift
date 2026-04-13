@@ -17,6 +17,44 @@ private func runAsync(_ operation: @escaping () async -> Void) {
 struct TasksView: View {
     @StateObject private var viewModel = TasksViewModel()
     @State private var showCreateTask = false
+    /// Collapsible workgroup sections (aligned with Android `TasksScreen` / `groupBy(groupName)`).
+    @State private var expandedGroups: [String: Bool] = [:]
+    
+    private func workgroupLabel(for task: Task) -> String {
+        let trimmed = task.groupName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let t = trimmed, !t.isEmpty { return t }
+        return "No Workgroup"
+    }
+    
+    private var groupedTasks: [String: [Task]] {
+        Dictionary(grouping: viewModel.tasks, by: workgroupLabel(for:))
+    }
+    
+    private var orderedGroupNames: [String] {
+        var keys: [String] = []
+        var seen = Set<String>()
+        for task in viewModel.tasks {
+            let name = workgroupLabel(for: task)
+            if seen.insert(name).inserted {
+                keys.append(name)
+            }
+        }
+        return keys
+    }
+    
+    private var taskGroupLayoutSignature: String {
+        viewModel.tasks.map { "\($0.id):\(workgroupLabel(for: $0))" }.joined(separator: "|")
+    }
+    
+    private func syncExpandedGroups() {
+        let names = Set(orderedGroupNames)
+        var next = expandedGroups
+        for name in orderedGroupNames where next[name] == nil {
+            next[name] = true
+        }
+        next = next.filter { names.contains($0.key) }
+        expandedGroups = next
+    }
     
     var body: some View {
         ZStack {
@@ -50,22 +88,39 @@ struct TasksView: View {
                             )
                             .frame(maxWidth: .infinity, minHeight: 400)
                         } else {
-                            LazyVStack(spacing: 12) {
-                                ForEach(viewModel.tasks, id: \.id) { task in
-                                    NavigationLink(value: NavigationRoute.taskDetail(task.id)) {
-                                        TaskItemView(
-                                            task: task,
-                                            onStatusChange: { newStatus in
-                                                _Concurrency.Task { @MainActor in
-                                                    await viewModel.changeTaskStatus(taskId: task.id, newStatus: newStatus)
-                                                }
+                            LazyVStack(spacing: 8) {
+                                ForEach(orderedGroupNames, id: \.self) { groupName in
+                                    let tasksInGroup = groupedTasks[groupName] ?? []
+                                    WorkgroupHeader(
+                                        title: groupName,
+                                        taskCount: tasksInGroup.count,
+                                        isExpanded: expandedGroups[groupName] != false,
+                                        onToggle: {
+                                            expandedGroups[groupName] = !(expandedGroups[groupName] ?? true)
+                                        }
+                                    )
+                                    if expandedGroups[groupName] != false {
+                                        ForEach(tasksInGroup, id: \.id) { task in
+                                            NavigationLink(value: NavigationRoute.taskDetail(task.id)) {
+                                                TaskItemView(
+                                                    task: task,
+                                                    onStatusChange: { newStatus in
+                                                        _Concurrency.Task { @MainActor in
+                                                            await viewModel.changeTaskStatus(taskId: task.id, newStatus: newStatus)
+                                                        }
+                                                    }
+                                                )
                                             }
-                                        )
+                                        }
                                     }
                                 }
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
+                            .onAppear { syncExpandedGroups() }
+                            .onChange(of: taskGroupLayoutSignature) { _, _ in
+                                syncExpandedGroups()
+                            }
                         }
                     }
                 }
@@ -119,6 +174,37 @@ struct TasksView: View {
                 await viewModel.loadTasks()
             }
         }
+    }
+}
+
+// MARK: - Workgroup header (matches Android TasksScreen)
+private struct WorkgroupHeader: View {
+    let title: String
+    let taskCount: Int
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    
+    var body: some View {
+        Button(action: onToggle) {
+            HStack {
+                Text("\(title) (\(taskCount))")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
     }
 }
 

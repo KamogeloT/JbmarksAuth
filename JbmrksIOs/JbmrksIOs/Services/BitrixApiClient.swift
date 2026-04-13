@@ -1991,20 +1991,27 @@ struct MessageFileDto: Codable {
     }
 }
 
-struct TaskResponse: Codable {
+struct TaskResponse: Decodable {
     let result: TaskResult?
 }
 
-struct TaskResult: Codable {
+struct TaskResult: Decodable {
     let task: TaskDto?
     let tasks: [TaskDto]?
 }
 
-struct TasksResponse: Codable {
+struct TasksResponse: Decodable {
     let result: [String: [TaskDto]]?
 }
 
-struct TaskDto: Codable {
+/// Nested workgroup from `tasks.task.*` (matches Android `TaskGroup` / Bitrix `group` field).
+struct TaskGroupDto: Decodable {
+    let id: String?
+    let name: String?
+}
+
+/// Task payload from Bitrix REST; `group` may be an object or a single-element array (see Android `TasksListDeserializer`).
+struct TaskDto: Decodable {
     let id: String?
     let title: String?
     let description: String?
@@ -2017,9 +2024,43 @@ struct TaskDto: Codable {
     let responsibleId: String?
     let groupId: String?
     let tags: [String]?
+    let group: TaskGroupDto?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status, priority, deadline, createdDate, closedDate
+        case createdBy, responsibleId, tags
+        case groupId
+        case group
+        case groupIdUpper = "GROUP_ID"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        priority = try c.decodeIfPresent(String.self, forKey: .priority)
+        deadline = try c.decodeIfPresent(String.self, forKey: .deadline)
+        createdDate = try c.decodeIfPresent(String.self, forKey: .createdDate)
+        closedDate = try c.decodeIfPresent(String.self, forKey: .closedDate)
+        createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)
+        responsibleId = try c.decodeIfPresent(String.self, forKey: .responsibleId)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags)
+        groupId = try c.decodeIfPresent(String.self, forKey: .groupId)
+            ?? c.decodeIfPresent(String.self, forKey: .groupIdUpper)
+        
+        if let arr = try? c.decodeIfPresent([TaskGroupDto].self, forKey: .group), let first = arr.first {
+            group = first
+        } else {
+            group = try c.decodeIfPresent(TaskGroupDto.self, forKey: .group)
+        }
+    }
     
     func toDomain() -> Task {
-        Task(
+        let name = group?.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (name?.isEmpty == false) ? name : nil
+        return Task(
             id: id ?? "",
             title: title ?? "",
             description: description ?? "",
@@ -2033,7 +2074,7 @@ struct TaskDto: Codable {
             responsibleId: responsibleId,
             responsibleName: nil,
             groupId: groupId,
-            groupName: nil,
+            groupName: resolvedName,
             commentsCount: 0,
             newCommentsCount: 0,
             tags: tags ?? []

@@ -46,8 +46,6 @@ struct ContentView: View {
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshChats"), object: nil)
             case .calendar:
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshCalendar"), object: nil)
-            case .feed:
-                NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
             }
         }
     }
@@ -147,18 +145,6 @@ struct ContentView: View {
                 Label("Calendar", systemImage: "calendar")
             }
             .tag(TabItem.calendar)
-            
-            // Feed Tab
-            NavigationStack {
-                VStack(spacing: 0) {
-                    TopNavigationBar()
-                    ActivityFeedView()
-                }
-            }
-            .tabItem {
-                Label("Feed", systemImage: "bell.fill")
-            }
-            .tag(TabItem.feed)
         }
     }
 }

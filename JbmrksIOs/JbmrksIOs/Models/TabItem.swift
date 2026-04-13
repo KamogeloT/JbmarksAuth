@@ -12,7 +12,6 @@ enum TabItem: String, CaseIterable {
     case tasks = "Tasks"
     case chat = "Chat"
     case calendar = "Calendar"
-    case feed = "Feed"
     
     var icon: String {
         switch self {
@@ -20,7 +19,6 @@ enum TabItem: String, CaseIterable {
         case .tasks: return "list.bullet"
         case .chat: return "message.fill"
         case .calendar: return "calendar"
-        case .feed: return "bell.fill"
         }
     }
 }

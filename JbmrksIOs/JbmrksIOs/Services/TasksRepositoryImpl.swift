@@ -42,8 +42,34 @@ nonisolated class TasksRepositoryImpl: TasksRepository {
         }
         
         // Flatten the dictionary values into a single array
-        let tasks = result.values.flatMap { $0 }.map { $0.toDomain() }
+        var tasks = result.values.flatMap { $0 }.map { $0.toDomain() }
+        tasks = await enrichGroupNamesIfNeeded(tasks)
         return tasks
+    }
+    
+    /// When Bitrix omits nested `group` but includes `groupId`, resolve names from the user's workgroups (same IDs Android maps via `group?.name`).
+    private func enrichGroupNamesIfNeeded(_ tasks: [Task]) async -> [Task] {
+        let missing = tasks.filter { ($0.groupName == nil || $0.groupName?.isEmpty == true) && $0.groupId != nil }
+        guard !missing.isEmpty else { return tasks }
+        guard let userRepo = RepositoryFactory.shared.userRepository() else { return tasks }
+        do {
+            let groups = try await userRepo.getUserWorkgroups()
+            var idToName: [String: String] = [:]
+            for g in groups {
+                let trimmed = g.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    idToName[g.id] = trimmed
+                }
+            }
+            return tasks.map { task in
+                guard (task.groupName == nil || task.groupName?.isEmpty == true),
+                      let gid = task.groupId,
+                      let name = idToName[gid] else { return task }
+                return task.withGroupName(name)
+            }
+        } catch {
+            return tasks
+        }
     }
     
     func getTask(id: String) async throws -> Task {

@@ -56,6 +56,29 @@ struct Task: Identifiable, Codable {
         return outputFormatter.string(from: date)
     }
     
+    /// Used when API returns `groupId` but no nested `group.name` (enrich from `sonet_group.user.groups`).
+    func withGroupName(_ name: String?) -> Task {
+        Task(
+            id: id,
+            title: title,
+            description: description,
+            status: status,
+            priority: priority,
+            deadline: deadline,
+            createdDate: createdDate,
+            closedDate: closedDate,
+            createdBy: createdBy,
+            createdByName: createdByName,
+            responsibleId: responsibleId,
+            responsibleName: responsibleName,
+            groupId: groupId,
+            groupName: name ?? groupName,
+            commentsCount: commentsCount,
+            newCommentsCount: newCommentsCount,
+            tags: tags
+        )
+    }
+    
     func isOverdue() -> Bool {
         guard let deadline = deadline, status != .completed else { return false }
         
