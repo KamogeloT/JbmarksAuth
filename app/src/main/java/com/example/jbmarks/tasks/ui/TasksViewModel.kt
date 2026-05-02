@@ -176,18 +176,19 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun changeTaskStatus(taskId: String, newStatus: TaskStatus) {
         viewModelScope.launch {
-            // Get current task status to determine correct API call
             val currentTask = (_uiState.value as? TasksUiState.Success)
                 ?.tasks?.find { it.id == taskId }
 
             val result = when (newStatus) {
                 TaskStatus.IN_PROGRESS -> {
-                    // If coming from DEFERRED, must renew first then start
+                    // DEFERRED → IN_PROGRESS requires renew (→ NEW) then start (→ IN_PROGRESS)
                     if (currentTask?.status == TaskStatus.DEFERRED) {
-                        repository.renewTask(taskId).also { renewResult ->
-                            if (renewResult.isSuccess) repository.startTask(taskId)
+                        val renewResult = repository.renewTask(taskId)
+                        if (renewResult.isSuccess) {
+                            repository.startTask(taskId)
+                        } else {
+                            renewResult // propagate the renew failure
                         }
-                        repository.startTask(taskId)
                     } else {
                         repository.startTask(taskId)
                     }
