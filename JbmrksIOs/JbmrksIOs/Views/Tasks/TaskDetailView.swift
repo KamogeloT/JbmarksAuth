@@ -100,6 +100,8 @@ struct TaskDetailView: View {
                     CommentSectionView(
                         comments: viewModel.comments,
                         isLoading: viewModel.isLoadingComments,
+                        isPosting: viewModel.isPostingComment,
+                        submissionError: viewModel.commentSubmissionError,
                         onAddComment: { text in
                             _Concurrency.Task { @MainActor in
                                 await viewModel.addComment(text)
@@ -678,17 +680,28 @@ struct FileAttachmentCard: View {
 struct CommentSectionView: View {
     let comments: [Comment]
     let isLoading: Bool
+    var isPosting: Bool = false
+    var submissionError: String? = nil
     let onAddComment: (String) -> Void
     let onTakePhoto: () -> Void
     
     @State private var commentText = ""
-    @State private var isSubmitting = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Comments (\(comments.count))")
                 .font(.headline)
                 .fontWeight(.bold)
+            
+            if let err = submissionError, !err.isEmpty {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
             
             if comments.isEmpty && !isLoading {
                 Text("No comments yet. Be the first to comment!")
@@ -724,20 +737,18 @@ struct CommentSectionView: View {
                     Spacer()
                     
                     Button(action: {
-                        if !commentText.isEmpty {
-                            isSubmitting = true
-                            onAddComment(commentText.trimmingCharacters(in: .whitespaces))
-                            commentText = ""
-                            isSubmitting = false
-                        }
+                        let trimmed = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty, !isPosting else { return }
+                        onAddComment(trimmed)
+                        commentText = ""
                     }) {
-                        if isSubmitting {
+                        if isPosting {
                             ProgressView()
                         } else {
                             Label("Post", systemImage: "paperplane.fill")
                         }
                     }
-                    .disabled(commentText.isEmpty || isSubmitting)
+                    .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPosting)
                 }
             }
             .padding()

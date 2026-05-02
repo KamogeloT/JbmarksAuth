@@ -160,31 +160,15 @@ fun StatusOptionItem(
 
 /**
  * Get available status transitions from current status
+ * Aligned with Bitrix24 actual allowed transitions
  */
 private fun getAvailableStatuses(currentStatus: TaskStatus): List<TaskStatus> {
     return when (currentStatus) {
-        TaskStatus.NEW -> listOf(
-            TaskStatus.IN_PROGRESS,
-            TaskStatus.DEFERRED
-        )
-        TaskStatus.IN_PROGRESS -> listOf(
-            TaskStatus.COMPLETED,
-            TaskStatus.DEFERRED,
-            TaskStatus.NEW
-        )
-        TaskStatus.COMPLETED -> listOf(
-            TaskStatus.NEW,
-            TaskStatus.IN_PROGRESS
-        )
-        TaskStatus.DEFERRED -> listOf(
-            TaskStatus.IN_PROGRESS,
-            TaskStatus.NEW
-        )
-        TaskStatus.SUPPOSEDLY_COMPLETED -> listOf(
-            TaskStatus.COMPLETED,
-            TaskStatus.IN_PROGRESS,
-            TaskStatus.NEW
-        )
+        TaskStatus.NEW -> listOf(TaskStatus.IN_PROGRESS)
+        TaskStatus.IN_PROGRESS -> listOf(TaskStatus.COMPLETED)
+        TaskStatus.COMPLETED -> listOf(TaskStatus.NEW)
+        TaskStatus.DEFERRED -> listOf(TaskStatus.IN_PROGRESS)
+        TaskStatus.SUPPOSEDLY_COMPLETED -> listOf(TaskStatus.COMPLETED, TaskStatus.NEW)
     }
 }
 

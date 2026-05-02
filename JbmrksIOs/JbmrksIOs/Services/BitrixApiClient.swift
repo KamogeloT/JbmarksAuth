@@ -69,8 +69,14 @@ struct BitrixApiClient {
             throw APIError.bitrixError(errorResponse.errorMessage ?? errorResponse.errorDescription ?? error)
         }
         
-        let tasksResponse = try JSONDecoder().decode(TasksResponse.self, from: data)
-        return tasksResponse
+        do {
+            return try JSONDecoder().decode(TasksResponse.self, from: data)
+        } catch {
+            let prefix = String(data: data, encoding: .utf8).map { String($0.prefix(1200)) } ?? ""
+            print("❌ tasks.task.list JSON decode failed: \(error)")
+            print("   Response prefix: \(prefix)")
+            throw APIError.decodingError
+        }
     }
     
     func getTask(id: String) async throws -> TaskResponse {
@@ -1095,6 +1101,8 @@ struct BitrixApiClient {
         return commentsResponse.result ?? []
     }
     
+    /// Bitrix `task.commentitem.add` expects a **JSON array** `[taskId, { "POST_MESSAGE": "...", "FILES": [...] }]`
+    /// (same as Android `addCommentWithOAuth`), not `{ "arFields": [...] }`.
     func addTaskComment(taskId: String, text: String, fileIds: [String]? = nil) async throws -> String {
         var components = URLComponents(string: "\(apiUrl)task.commentitem.add.json")!
         components.queryItems = [
@@ -1105,62 +1113,66 @@ struct BitrixApiClient {
             throw APIError.invalidURL
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
         guard let taskIdInt = Int(taskId) else {
-            throw APIError.invalidURL
+            throw APIError.bitrixError("Invalid task ID for comment")
         }
         
-        struct AddCommentRequest: Codable {
-            let arFields: [CommentFields]
+        var fields: [String: Any] = ["POST_MESSAGE": text]
+        if let files = fileIds, !files.isEmpty {
+            fields["FILES"] = files
         }
         
-        struct CommentFields: Codable {
-            let taskId: Int
-            let text: String
-            let files: [String]?
-            
-            enum CodingKeys: String, CodingKey {
-                case taskId = "TASK_ID"
-                case text = "POST_MESSAGE"
-                case files = "FILES"
-            }
-        }
-        
-        let body = AddCommentRequest(
-            arFields: [
-                CommentFields(
-                    taskId: taskIdInt,
-                    text: text,
-                    files: fileIds
-                )
-            ]
-        )
-        request.httpBody = try JSONEncoder().encode(body)
-        
-        let (data, response) = try await BitrixApiClient.configuredSession.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        let payload: [Any] = [taskIdInt, fields]
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: payload) else {
             throw APIError.decodingError
         }
         
-        struct CommentResponse: Codable {
-            let result: CommentResult?
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = bodyData
+        
+        let (data, response) = try await BitrixApiClient.configuredSession.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError(NSError(domain: "BitrixApiClient", code: -1))
         }
         
-        struct CommentResult: Codable {
-            let id: String?
-            
-            enum CodingKeys: String, CodingKey {
-                case id = "ID"
-            }
+        let bodyPreview = String(data: data, encoding: .utf8).map { String($0.prefix(500)) } ?? ""
+        if !(200...299).contains(httpResponse.statusCode) {
+            print("❌ task.commentitem.add HTTP \(httpResponse.statusCode): \(bodyPreview)")
+            throw APIError.httpError(httpResponse.statusCode, bodyPreview)
         }
         
-        let commentResponse = try JSONDecoder().decode(CommentResponse.self, from: data)
-        return commentResponse.result?.id ?? ""
+        if let err = try? JSONDecoder().decode(BitrixErrorResponse.self, from: data),
+           let e = err.error, !e.isEmpty {
+            print("❌ task.commentitem.add Bitrix error: \(e) — \(bodyPreview)")
+            throw APIError.bitrixError(err.errorMessage ?? err.errorDescription ?? e)
+        }
+        
+        let commentId = Self.parseCommentItemAddResult(data)
+        if commentId.isEmpty {
+            print("⚠️ task.commentitem.add: could not parse comment id from: \(bodyPreview)")
+        }
+        return commentId
+    }
+    
+    /// `result` may be a number, string, or `{ "ID": "..." }` (matches Android parsing).
+    private static func parseCommentItemAddResult(_ data: Data) -> String {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return ""
+        }
+        guard let result = obj["result"] else { return "" }
+        if let n = result as? Int { return String(n) }
+        if let n = result as? Int64 { return String(n) }
+        if let s = result as? String { return s }
+        if let d = result as? [String: Any] {
+            if let id = d["ID"] as? String { return id }
+            if let id = d["id"] as? String { return id }
+            if let id = d["ID"] as? Int { return String(id) }
+            if let id = d["id"] as? Int { return String(id) }
+        }
+        return ""
     }
     
     func getTaskFiles(taskId: String) async throws -> [TaskFileDto] {
@@ -1991,20 +2003,67 @@ struct MessageFileDto: Codable {
     }
 }
 
-struct TaskResponse: Codable {
+struct TaskResponse: Decodable {
     let result: TaskResult?
 }
 
-struct TaskResult: Codable {
+struct TaskResult: Decodable {
     let task: TaskDto?
     let tasks: [TaskDto]?
 }
 
-struct TasksResponse: Codable {
-    let result: [String: [TaskDto]]?
+/// Bitrix `tasks.task.list` wraps rows in `result.tasks` as either a JSON array or a map of id → task (same as Android `TasksListDeserializer`).
+struct TasksListResult: Decodable {
+    let tasks: [TaskDto]
+    
+    enum CodingKeys: String, CodingKey {
+        case tasks
+    }
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let arr = try? c.decodeIfPresent([TaskDto].self, forKey: .tasks) {
+            tasks = arr
+        } else if let map = try? c.decodeIfPresent([String: TaskDto].self, forKey: .tasks) {
+            tasks = Array(map.values)
+        } else {
+            tasks = []
+        }
+    }
 }
 
-struct TaskDto: Codable {
+struct TasksResponse: Decodable {
+    let result: TasksListResult?
+}
+
+/// REST often sends numbers where we expect strings; decode without failing the whole payload.
+private enum BitrixTaskJSON {
+    static func optionalString<K: CodingKey>(container: KeyedDecodingContainer<K>, key: K) -> String? {
+        if let s = try? container.decodeIfPresent(String.self, forKey: key) { return s }
+        if let i = try? container.decodeIfPresent(Int.self, forKey: key) { return String(i) }
+        if let d = try? container.decodeIfPresent(Double.self, forKey: key) { return String(Int(d)) }
+        return nil
+    }
+}
+
+/// Nested workgroup from `tasks.task.*` (matches Android `TaskGroup` / Bitrix `group` field).
+struct TaskGroupDto: Decodable {
+    let id: String?
+    let name: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name
+    }
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = BitrixTaskJSON.optionalString(container: c, key: .id)
+        name = BitrixTaskJSON.optionalString(container: c, key: .name)
+    }
+}
+
+/// Task payload from Bitrix REST; `group` may be an object or a single-element array (see Android `TasksListDeserializer`).
+struct TaskDto: Decodable {
     let id: String?
     let title: String?
     let description: String?
@@ -2017,9 +2076,45 @@ struct TaskDto: Codable {
     let responsibleId: String?
     let groupId: String?
     let tags: [String]?
+    let group: TaskGroupDto?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, status, priority, deadline, createdDate, closedDate
+        case createdBy, responsibleId, tags
+        case groupId
+        case group
+        case groupIdUpper = "GROUP_ID"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = BitrixTaskJSON.optionalString(container: c, key: .id)
+        title = BitrixTaskJSON.optionalString(container: c, key: .title)
+        description = BitrixTaskJSON.optionalString(container: c, key: .description)
+        status = BitrixTaskJSON.optionalString(container: c, key: .status)
+        priority = BitrixTaskJSON.optionalString(container: c, key: .priority)
+        deadline = BitrixTaskJSON.optionalString(container: c, key: .deadline)
+        createdDate = BitrixTaskJSON.optionalString(container: c, key: .createdDate)
+        closedDate = BitrixTaskJSON.optionalString(container: c, key: .closedDate)
+        createdBy = BitrixTaskJSON.optionalString(container: c, key: .createdBy)
+        responsibleId = BitrixTaskJSON.optionalString(container: c, key: .responsibleId)
+        tags = (try? c.decodeIfPresent([String].self, forKey: .tags)) ?? []
+        groupId = BitrixTaskJSON.optionalString(container: c, key: .groupId)
+            ?? BitrixTaskJSON.optionalString(container: c, key: .groupIdUpper)
+        
+        if let arr = try? c.decodeIfPresent([TaskGroupDto].self, forKey: .group), let first = arr.first {
+            group = first
+        } else if let g = try? c.decodeIfPresent(TaskGroupDto.self, forKey: .group) {
+            group = g
+        } else {
+            group = nil
+        }
+    }
     
     func toDomain() -> Task {
-        Task(
+        let name = group?.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = (name?.isEmpty == false) ? name : nil
+        return Task(
             id: id ?? "",
             title: title ?? "",
             description: description ?? "",
@@ -2033,7 +2128,7 @@ struct TaskDto: Codable {
             responsibleId: responsibleId,
             responsibleName: nil,
             groupId: groupId,
-            groupName: nil,
+            groupName: resolvedName,
             commentsCount: 0,
             newCommentsCount: 0,
             tags: tags ?? []

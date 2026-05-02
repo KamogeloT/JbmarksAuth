@@ -58,11 +58,12 @@ class NotificationNavigationHandler: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // Observe feed navigation
+        // Feed-style notifications: open Home (recent activity lives on dashboard; matches Android)
         NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToFeed"))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.selectedTab = .feed
+                self?.selectedTab = .dashboard
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshDashboard"), object: nil)
             }
             .store(in: &cancellables)
         

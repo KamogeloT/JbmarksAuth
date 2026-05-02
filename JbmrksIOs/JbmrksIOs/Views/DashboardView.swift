@@ -209,13 +209,6 @@ struct QuickActionsRow: View {
                     color: .orange,
                     onTap: { selectedTab = .calendar }
                 )
-                
-                QuickActionCard(
-                    title: "Activity Feed",
-                    icon: "bell.fill",
-                    color: .green,
-                    onTap: { selectedTab = .feed }
-                )
             }
             .padding(.horizontal, 20)
         }

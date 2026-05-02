@@ -93,7 +93,7 @@ data class AddCommentRequest(
 data class CommentFields(
     @SerializedName("TASK_ID") val taskId: Int, // Bitrix24 expects integer, not string
     @SerializedName("POST_MESSAGE") val text: String,
-    @SerializedName("FILES") val files: List<String>? = null,
+    @SerializedName("UF_TASK_WEBDAV_FILES") val files: List<String>? = null, // Disk file IDs attached to comment
     @SerializedName("AUTHOR_ID") val authorId: String? = null // Optional, defaults to current user
 )
 
