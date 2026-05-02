@@ -47,6 +47,8 @@ android {
         }
     }
     compileOptions {
+        // Enable core library desugaring so java.time APIs work on API 24+
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -59,6 +61,9 @@ android {
 }
 
 dependencies {
+    // Core library desugaring — enables java.time on API 24+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     // Shared KMM module
     implementation(project(":shared"))
     
