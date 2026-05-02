@@ -275,7 +275,7 @@ fun WorkgroupHeader(
                 text = restrictionMessage,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.padding(horizontal = 8.dp, top = 4.dp)
+                modifier = Modifier.padding(start = 8.dp, top = 4.dp, end = 8.dp)
             )
         }
     }
@@ -375,7 +375,8 @@ fun TaskItem(
         TaskStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer
         TaskStatus.IN_PROGRESS -> MaterialTheme.colorScheme.primaryContainer
         TaskStatus.DEFERRED -> MaterialTheme.colorScheme.secondaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        TaskStatus.SUPPOSEDLY_COMPLETED -> MaterialTheme.colorScheme.primaryContainer
+        TaskStatus.NEW -> MaterialTheme.colorScheme.surfaceVariant
     }
     
     val statusText = when (task.status) {

@@ -127,53 +127,46 @@ fun TaskDetailScreen(
                     
                     // Camera launcher for taking photos
                     var photoUri by remember { mutableStateOf<Uri?>(null) }
+                    // Pending photo state - shown as preview before posting
+                    var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
+                    var pendingPhotoPath by remember { mutableStateOf<String?>(null) }
+                    var pendingPhotoName by remember { mutableStateOf<String?>(null) }
+
                     val cameraLauncher = rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.TakePicture()
                     ) { success ->
                         if (success && photoUri != null) {
-                            // Photo was taken successfully, upload and attach to comment
+                            // Photo taken — copy to cache and show preview, don't upload yet
                             photoUri?.let { uri ->
                                 try {
-                                    // Get file name from URI
                                     var fileName: String? = null
                                     if (uri.scheme == "content") {
                                         val cursor: android.database.Cursor? = context.contentResolver.query(uri, null, null, null, null)
                                         cursor?.use {
                                             if (it.moveToFirst()) {
                                                 val nameIndex = it.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
-                                                if (nameIndex >= 0) {
-                                                    fileName = it.getString(nameIndex)
-                                                }
+                                                if (nameIndex >= 0) fileName = it.getString(nameIndex)
                                             }
                                         }
                                     }
-                                    if (fileName == null) {
-                                        fileName = "photo_${System.currentTimeMillis()}.jpg"
-                                    }
-                                    
-                                    // Copy file to app's cache directory
+                                    if (fileName == null) fileName = "photo_${System.currentTimeMillis()}.jpg"
+
                                     val cacheDir = java.io.File(context.cacheDir, "uploads")
                                     cacheDir.mkdirs()
                                     val tempFile = java.io.File(cacheDir, fileName)
-                                    
                                     context.contentResolver.openInputStream(uri)?.use { inputStream ->
                                         java.io.FileOutputStream(tempFile).use { outputStream ->
                                             inputStream.copyTo(outputStream)
                                         }
                                     }
-                                    
-                                    // Upload photo and attach to comment
-                                    viewModel.uploadPhotoAndAddComment(tempFile.absolutePath, fileName)
-                                    
-                                    // Clean up temp file after upload
-                                    tempFile.delete()
+
+                                    // Store for preview — upload happens when user taps Post
+                                    pendingPhotoPath = tempFile.absolutePath
+                                    pendingPhotoName = fileName
+                                    pendingPhotoUri = Uri.fromFile(tempFile)
                                 } catch (e: Exception) {
                                     android.util.Log.e("TaskDetailScreen", "Error handling photo", e)
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Error processing photo: ${e.message}",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
+                                    android.widget.Toast.makeText(context, "Error processing photo: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -255,11 +248,9 @@ fun TaskDetailScreen(
                                         }
                                     }
                                     
-                                    // Upload photo and attach to task (not comment)
+                                    // Upload photo and attach to task (not comment).
+                                    // Temp file cleanup is handled in the ViewModel after upload finishes.
                                     viewModel.uploadAndAttachFile(tempFile.absolutePath, fileName)
-                                    
-                                    // Clean up temp file after upload
-                                    tempFile.delete()
                                 } catch (e: Exception) {
                                     android.util.Log.e("TaskDetailScreen", "Error handling attachment photo", e)
                                     android.widget.Toast.makeText(
@@ -350,11 +341,9 @@ fun TaskDetailScreen(
                                     }
                                 }
                                 
-                                // Upload the file
+                                // Upload the file.
+                                // Temp file cleanup is handled in the ViewModel after upload finishes.
                                 viewModel.uploadAndAttachFile(tempFile.absolutePath, finalFileName)
-                                
-                                // Clean up temp file after upload
-                                tempFile.delete()
                             } catch (e: Exception) {
                                 android.util.Log.e("TaskDetailScreen", "Error handling file selection", e)
                             }
@@ -369,24 +358,35 @@ fun TaskDetailScreen(
                         isUploadingFile = isUploadingFile,
                         onCompleteTask = { viewModel.completeTask() },
                         onStartTask = { viewModel.startTask() },
-                        onDeferTask = { viewModel.deferTask() },
                         onRenewTask = { viewModel.renewTask() },
                         onDeleteTask = { viewModel.deleteTask(onNavigateBack) },
-                        onAddComment = { viewModel.addComment(it) },
+                        onResumeTask = { viewModel.resumeTask() },                        onAddComment = { text ->
+                            val path = pendingPhotoPath
+                            val name = pendingPhotoName
+                            if (path != null && name != null) {
+                                viewModel.uploadPhotoAndAddComment(path, name, caption = text)
+                                pendingPhotoPath = null
+                                pendingPhotoName = null
+                                pendingPhotoUri = null
+                            } else {
+                                viewModel.addComment(text)
+                            }
+                        },
                         onTakePhoto = {
-                            // Request camera permission and launch camera for comments
                             photoUriLauncher.launch(android.Manifest.permission.CAMERA)
                         },
                         onTakePhotoForAttachment = {
-                            // Request camera permission and launch camera for file attachments
                             attachmentPhotoUriLauncher.launch(android.Manifest.permission.CAMERA)
                         },
                         onUploadFileClick = { filePickerLauncher.launch("*/*") },
+                        pendingPhotoUri = pendingPhotoUri,
+                        onClearPendingPhoto = {
+                            pendingPhotoPath?.let { java.io.File(it).delete() }
+                            pendingPhotoUri = null
+                            pendingPhotoPath = null
+                            pendingPhotoName = null
+                        },
                         onFileClick = { file -> 
-                            // For images, ALWAYS show in-app viewer; for other files, try to open/download
-                            android.util.Log.d("TaskDetailScreen", "File clicked: name=${file.name}, type=${file.type}, downloadUrl=${file.downloadUrl}, isImage=${isImageFile(file.type)}")
-                            
-                            // Check if it's an image by type OR by file extension
                             val isImage = isImageFile(file.type) || 
                                          file.name.endsWith(".jpg", ignoreCase = true) ||
                                          file.name.endsWith(".jpeg", ignoreCase = true) ||
@@ -396,42 +396,22 @@ fun TaskDetailScreen(
                                          file.name.endsWith(".bmp", ignoreCase = true)
                             
                             if (isImage && file.downloadUrl != null) {
-                                // Show image in full screen viewer - ALWAYS for images
-                                android.util.Log.d("TaskDetailScreen", "Showing image in dialog: ${file.downloadUrl}")
                                 showImageDialog = file.downloadUrl
                             } else {
-                                android.util.Log.d("TaskDetailScreen", "Not showing image dialog - isImage: $isImage, hasUrl: ${file.downloadUrl != null}")
-                                // For non-images, try to open in browser or download
                                 file.downloadUrl?.let { url ->
                                     try {
-                                        // Check if URL is a valid HTTP/HTTPS URL (not a REST API endpoint)
                                         if (url.startsWith("http://") || url.startsWith("https://")) {
-                                            // Check if it's a REST API endpoint (contains /rest/ and method name)
                                             if (url.contains("/rest/") && (url.contains(".json") || url.contains("?"))) {
-                                                // This is a REST API endpoint, not a direct download URL
-                                                android.widget.Toast.makeText(
-                                                    context,
-                                                    "File download URL is not available. Please try again later.",
-                                                    android.widget.Toast.LENGTH_LONG
-                                                ).show()
+                                                android.widget.Toast.makeText(context, "File download URL is not available. Please try again later.", android.widget.Toast.LENGTH_LONG).show()
                                             } else {
                                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
                                                 context.startActivity(intent)
                                             }
                                         } else {
-                                            // If it's not a valid URL, show error
-                                            android.widget.Toast.makeText(
-                                                context,
-                                                "Cannot open file: Invalid URL format",
-                                                android.widget.Toast.LENGTH_SHORT
-                                            ).show()
+                                            android.widget.Toast.makeText(context, "Cannot open file: Invalid URL format", android.widget.Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(
-                                            context,
-                                            "Cannot open file: ${e.message}",
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
+                                        android.widget.Toast.makeText(context, "Cannot open file: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -474,14 +454,16 @@ fun TaskDetailContent(
     isUploadingFile: Boolean,
     onCompleteTask: () -> Unit,
     onStartTask: () -> Unit,
-    onDeferTask: () -> Unit,
     onRenewTask: () -> Unit,
     onDeleteTask: () -> Unit,
     onAddComment: (String) -> Unit,
     onUploadFileClick: () -> Unit,
     onFileClick: (com.example.jbmarks.tasks.domain.TaskFile) -> Unit,
     onTakePhoto: () -> Unit = {},
-    onTakePhotoForAttachment: () -> Unit = {}
+    onTakePhotoForAttachment: () -> Unit = {},
+    onResumeTask: () -> Unit = {},
+    pendingPhotoUri: android.net.Uri? = null,
+    onClearPendingPhoto: () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
@@ -563,8 +545,8 @@ fun TaskDetailContent(
             task = task,
             onCompleteTask = onCompleteTask,
             onStartTask = onStartTask,
-            onDeferTask = onDeferTask,
             onRenewTask = onRenewTask,
+            onResumeTask = onResumeTask,
             onDeleteTask = { showDeleteDialog = true }
         )
 
@@ -604,7 +586,9 @@ fun TaskDetailContent(
             comments = comments,
             isLoading = isLoadingComments,
             onAddComment = onAddComment,
-            onTakePhoto = onTakePhoto
+            onTakePhoto = onTakePhoto,
+            pendingPhotoUri = pendingPhotoUri,
+            onClearPendingPhoto = onClearPendingPhoto
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -899,8 +883,8 @@ fun ActionButtons(
     task: Task,
     onCompleteTask: () -> Unit,
     onStartTask: () -> Unit,
-    onDeferTask: () -> Unit,
     onRenewTask: () -> Unit,
+    onResumeTask: () -> Unit,
     onDeleteTask: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -935,15 +919,6 @@ fun ActionButtons(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Complete Task")
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onDeferTask,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.DateRange, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Defer Task")
-                }
             }
 
             TaskStatus.COMPLETED, TaskStatus.SUPPOSEDLY_COMPLETED -> {
@@ -959,7 +934,7 @@ fun ActionButtons(
 
             TaskStatus.DEFERRED -> {
                 Button(
-                    onClick = onStartTask,
+                    onClick = onResumeTask,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)

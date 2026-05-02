@@ -79,16 +79,14 @@ class TasksRepository(private val context: Context? = null) {
             // Fetch all tasks without filters - Bitrix24 will automatically return
             // only tasks the user has access to based on their permissions
             // This includes tasks where user is responsible, creator, accomplice, or auditor
-            val response = executeApiCall {
-                api.getTasks(
-                    responsibleId = null,
-                    createdBy = null,
-                    status = null
-                )
-            }
+            val response = api.getTasks(
+                responsibleId = null,
+                createdBy = null,
+                status = null
+            )
             
             // Bitrix24 API returns tasks - handle both array and map formats
-            val rawData = response.result.tasks ?: emptyList()
+            val rawData = response.result?.tasks ?: emptyList()
             
             Log.d(TAG, "Found ${rawData.size} accessible tasks from API")
             
@@ -549,14 +547,14 @@ class TasksRepository(private val context: Context? = null) {
             Log.d(TAG, "Calling task.commentitem.add with OAuth: $oauthUrl")
             
             // Build JSON array request body (same format as webhook)
-            // Bitrix24 expects: [taskId, {"POST_MESSAGE": "text", "FILES": [...]}]
+            // Bitrix24 expects: [taskId, {"POST_MESSAGE": "text", "UF_TASK_WEBDAV_FILES": [...]}]
             val commentFields = mutableMapOf<String, Any>(
                 "POST_MESSAGE" to text
             )
             
-            // Add files if provided
+            // Add files if provided - Bitrix24 requires UF_TASK_WEBDAV_FILES (disk file IDs)
             if (fileIds.isNotEmpty()) {
-                commentFields["FILES"] = fileIds
+                commentFields["UF_TASK_WEBDAV_FILES"] = fileIds
             }
             
             // Create JSON array: [taskId, {fields}]

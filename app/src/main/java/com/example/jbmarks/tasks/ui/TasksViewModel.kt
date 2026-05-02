@@ -176,19 +176,29 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun changeTaskStatus(taskId: String, newStatus: TaskStatus) {
         viewModelScope.launch {
+            // Get current task status to determine correct API call
+            val currentTask = (_uiState.value as? TasksUiState.Success)
+                ?.tasks?.find { it.id == taskId }
+
             val result = when (newStatus) {
-                TaskStatus.IN_PROGRESS -> repository.startTask(taskId)
-                TaskStatus.COMPLETED -> repository.completeTask(taskId)
-                TaskStatus.DEFERRED -> repository.deferTask(taskId)
-                TaskStatus.NEW -> repository.renewTask(taskId)
-                TaskStatus.SUPPOSEDLY_COMPLETED -> {
-                    // For supposedly completed, we complete it first
-                    repository.completeTask(taskId)
+                TaskStatus.IN_PROGRESS -> {
+                    // If coming from DEFERRED, must renew first then start
+                    if (currentTask?.status == TaskStatus.DEFERRED) {
+                        repository.renewTask(taskId).also { renewResult ->
+                            if (renewResult.isSuccess) repository.startTask(taskId)
+                        }
+                        repository.startTask(taskId)
+                    } else {
+                        repository.startTask(taskId)
+                    }
                 }
+                TaskStatus.COMPLETED -> repository.completeTask(taskId)
+                TaskStatus.DEFERRED -> Result.failure(Exception("Defer not supported"))
+                TaskStatus.NEW -> repository.renewTask(taskId)
+                TaskStatus.SUPPOSEDLY_COMPLETED -> repository.completeTask(taskId)
             }
-            
+
             result.onSuccess {
-                // Refresh task list to show updated status
                 loadTasks()
             }.onFailure { throwable ->
                 android.util.Log.e("TasksViewModel", "Failed to change task status", throwable)

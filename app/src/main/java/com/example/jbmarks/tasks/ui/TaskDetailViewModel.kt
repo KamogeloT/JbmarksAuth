@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import java.io.File
 
 sealed interface TaskDetailUiState {
     object Loading : TaskDetailUiState
@@ -119,57 +120,68 @@ class TaskDetailViewModel(
         }
     }
     
-    fun uploadPhotoAndAddComment(photoPath: String, fileName: String) {
+    fun uploadPhotoAndAddComment(photoPath: String, fileName: String, caption: String = "") {
         viewModelScope.launch {
             _isUploadingFile.value = true
-            repository.uploadFile(photoPath, fileName)
-                .onSuccess { uploadedFile ->
-                    // Add comment with the uploaded photo attached
-                    addComment("📷 Photo attached", listOf(uploadedFile.id))
-                    _isUploadingFile.value = false
-                }
-                .onFailure { throwable ->
-                    _isUploadingFile.value = false
-                    android.util.Log.e("TaskDetailViewModel", "Failed to upload photo", throwable)
-                }
+            try {
+                repository.uploadFile(photoPath, fileName)
+                    .onSuccess { uploadedFile ->
+                        // Embed the file using Bitrix24 disk BBCode tag.
+                        // Prepend caption if provided, otherwise just the tag.
+                        val message = if (caption.isNotBlank()) {
+                            "$caption\n[DISK FILE ID=${uploadedFile.id}]"
+                        } else {
+                            "[DISK FILE ID=${uploadedFile.id}]"
+                        }
+                        addComment(message)
+                    }
+                    .onFailure { throwable ->
+                        android.util.Log.e("TaskDetailViewModel", "Failed to upload photo", throwable)
+                    }
+            } finally {
+                _isUploadingFile.value = false
+                runCatching { File(photoPath).delete() }
+            }
         }
     }
     
     fun uploadAndAttachFile(filePath: String, fileName: String) {
         viewModelScope.launch {
             _isUploadingFile.value = true
-            repository.uploadFile(filePath, fileName)
-                .onSuccess { uploadedFile ->
-                    // Attach the uploaded file to the task
-                    repository.attachFileToTask(taskId, uploadedFile.id)
-                        .onSuccess {
-                            // Reload task to get updated file list
-                            loadTask()
-                            _isUploadingFile.value = false
-                            
-                            // Create notification for file attachment
-                            val currentState = _uiState.value
-                            if (currentState is TaskDetailUiState.Success) {
-                                notificationRepository?.let { repo ->
-                                    val notification = repo.createFileAttachmentNotification(
-                                        taskId = taskId,
-                                        taskTitle = currentState.task.title,
-                                        fileName = fileName
-                                    )
-                                    repo.addNotification(notification)
-                                    notificationService?.showNotification(notification)
+            try {
+                repository.uploadFile(filePath, fileName)
+                    .onSuccess { uploadedFile ->
+                        // Attach the uploaded file to the task
+                        repository.attachFileToTask(taskId, uploadedFile.id)
+                            .onSuccess {
+                                // Reload task to get updated file list
+                                loadTask()
+                                
+                                // Create notification for file attachment
+                                val currentState = _uiState.value
+                                if (currentState is TaskDetailUiState.Success) {
+                                    notificationRepository?.let { repo ->
+                                        val notification = repo.createFileAttachmentNotification(
+                                            taskId = taskId,
+                                            taskTitle = currentState.task.title,
+                                            fileName = fileName
+                                        )
+                                        repo.addNotification(notification)
+                                        notificationService?.showNotification(notification)
+                                    }
                                 }
                             }
-                        }
-                        .onFailure { throwable ->
-                            _isUploadingFile.value = false
-                            android.util.Log.e("TaskDetailViewModel", "Failed to attach file", throwable)
-                        }
-                }
-                .onFailure { throwable ->
-                    _isUploadingFile.value = false
-                    android.util.Log.e("TaskDetailViewModel", "Failed to upload file", throwable)
-                }
+                            .onFailure { throwable ->
+                                android.util.Log.e("TaskDetailViewModel", "Failed to attach file", throwable)
+                            }
+                    }
+                    .onFailure { throwable ->
+                        android.util.Log.e("TaskDetailViewModel", "Failed to upload file", throwable)
+                    }
+            } finally {
+                _isUploadingFile.value = false
+                runCatching { File(filePath).delete() }
+            }
         }
     }
     
@@ -214,17 +226,7 @@ class TaskDetailViewModel(
     }
 
     fun deferTask() {
-        viewModelScope.launch {
-            repository.deferTask(taskId)
-                .onSuccess { updatedTask ->
-                    _uiState.value = TaskDetailUiState.Success(updatedTask)
-                }
-                .onFailure { throwable ->
-                    _uiState.value = TaskDetailUiState.Error(
-                        throwable.message ?: "Failed to defer task"
-                    )
-                }
-        }
+        // Deferred feature removed
     }
 
     fun renewTask() {
@@ -237,6 +239,21 @@ class TaskDetailViewModel(
                     _uiState.value = TaskDetailUiState.Error(
                         throwable.message ?: "Failed to renew task"
                     )
+                }
+        }
+    }
+
+    // Resume = renew (DEFERRED → NEW) then start (NEW → IN_PROGRESS)
+    fun resumeTask() {
+        viewModelScope.launch {
+            repository.renewTask(taskId)
+                .onSuccess {
+                    repository.startTask(taskId)
+                        .onSuccess { updatedTask -> _uiState.value = TaskDetailUiState.Success(updatedTask) }
+                        .onFailure { throwable -> _uiState.value = TaskDetailUiState.Error(throwable.message ?: "Failed to resume task") }
+                }
+                .onFailure { throwable ->
+                    _uiState.value = TaskDetailUiState.Error(throwable.message ?: "Failed to resume task")
                 }
         }
     }
