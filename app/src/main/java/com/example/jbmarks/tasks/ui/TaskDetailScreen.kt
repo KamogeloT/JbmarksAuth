@@ -588,7 +588,8 @@ fun TaskDetailContent(
             onAddComment = onAddComment,
             onTakePhoto = onTakePhoto,
             pendingPhotoUri = pendingPhotoUri,
-            onClearPendingPhoto = onClearPendingPhoto
+            onClearPendingPhoto = onClearPendingPhoto,
+            isUploading = isUploadingFile
         )
         
         Spacer(modifier = Modifier.height(16.dp))
