@@ -87,6 +87,7 @@ fun TasksScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedStatus by viewModel.selectedStatus.collectAsState()
     val selectedPriority by viewModel.selectedPriority.collectAsState()
+    val showMyTasksOnly by viewModel.showMyTasksOnly.collectAsState()
     val workgroupMembershipKey by viewModel.workgroupMembershipSignature.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
@@ -143,9 +144,11 @@ fun TasksScreen(
                             searchQuery = searchQuery,
                             selectedStatus = selectedStatus,
                             selectedPriority = selectedPriority,
+                            showMyTasksOnly = showMyTasksOnly,
                             onSearchQueryChange = { viewModel.setSearchQuery(it) },
                             onStatusFilterChange = { viewModel.setStatusFilter(it) },
                             onPriorityFilterChange = { viewModel.setPriorityFilter(it) },
+                            onToggleMyTasks = { viewModel.toggleMyTasksOnly() },
                             onClearFilters = { viewModel.clearFilters() }
                         )
                         
@@ -697,9 +700,11 @@ fun SearchAndFilterSection(
     searchQuery: String,
     selectedStatus: TaskStatus?,
     selectedPriority: TaskPriority?,
+    showMyTasksOnly: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onStatusFilterChange: (TaskStatus?) -> Unit,
     onPriorityFilterChange: (TaskPriority?) -> Unit,
+    onToggleMyTasks: () -> Unit,
     onClearFilters: () -> Unit
 ) {
     Column(
@@ -731,12 +736,34 @@ fun SearchAndFilterSection(
                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
             )
         )
-        
-        // Filter Chips Row - Horizontal Scrollable
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Status Filters
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+            // ── My Tasks / All Tasks toggle ──────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "View:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+                TaskFilterChip(
+                    label = "All Tasks",
+                    selected = !showMyTasksOnly,
+                    onClick = { if (showMyTasksOnly) onToggleMyTasks() }
+                )
+                TaskFilterChip(
+                    label = "My Tasks",
+                    selected = showMyTasksOnly,
+                    onClick = { if (!showMyTasksOnly) onToggleMyTasks() }
+                )
+            }
+
+            // ── Status Filters ───────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -748,22 +775,16 @@ fun SearchAndFilterSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 4.dp)
                 )
-                listOf(
-                    TaskStatus.NEW,
-                    TaskStatus.IN_PROGRESS,
-                    TaskStatus.COMPLETED
-                ).forEach { status ->
+                listOf(TaskStatus.NEW, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED).forEach { status ->
                     TaskFilterChip(
                         label = status.displayName,
                         selected = selectedStatus == status,
-                        onClick = {
-                            onStatusFilterChange(if (selectedStatus == status) null else status)
-                        }
+                        onClick = { onStatusFilterChange(if (selectedStatus == status) null else status) }
                     )
                 }
             }
-            
-            // Priority Filters
+
+            // ── Priority Filters ─────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -775,33 +796,20 @@ fun SearchAndFilterSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(end = 4.dp)
                 )
-                listOf(
-                    TaskPriority.LOW,
-                    TaskPriority.NORMAL,
-                    TaskPriority.HIGH
-                ).forEach { priority ->
+                listOf(TaskPriority.LOW, TaskPriority.NORMAL, TaskPriority.HIGH).forEach { priority ->
                     TaskFilterChip(
                         label = priority.displayName,
                         selected = selectedPriority == priority,
-                        onClick = {
-                            onPriorityFilterChange(if (selectedPriority == priority) null else priority)
-                        }
+                        onClick = { onPriorityFilterChange(if (selectedPriority == priority) null else priority) }
                     )
                 }
             }
-            
-            // Clear Filters Button
-            if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+
+            // ── Clear Filters ────────────────────────────────────────────
+            if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty() || showMyTasksOnly) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onClearFilters) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Clear filters",
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.Close, contentDescription = "Clear filters", modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Clear Filters")
                     }

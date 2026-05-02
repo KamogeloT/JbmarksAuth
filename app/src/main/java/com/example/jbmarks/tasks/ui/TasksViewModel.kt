@@ -48,6 +48,13 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private val _workgroupMembershipSignature = MutableStateFlow("")
     val workgroupMembershipSignature: StateFlow<String> = _workgroupMembershipSignature.asStateFlow()
 
+    // Current user ID — used for "My Tasks" filter
+    private val _currentUserId = MutableStateFlow<String?>(null)
+
+    // My Tasks toggle — true = show only tasks assigned to me
+    private val _showMyTasksOnly = MutableStateFlow(false)
+    val showMyTasksOnly: StateFlow<Boolean> = _showMyTasksOnly.asStateFlow()
+
     init {
         loadTasks()
     }
@@ -77,6 +84,12 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun refreshWorkgroupMembership() {
         val userRepo = UserRepository(getApplication())
+
+        // Fetch current user ID for "My Tasks" filter
+        userRepo.getCurrentUser().onSuccess { user ->
+            _currentUserId.value = user.id
+        }
+
         userRepo.getUserWorkgroups()
             .onSuccess { list ->
                 _userWorkgroupIds.value = list.map { it.id }.toSet()
@@ -96,22 +109,35 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private fun applyFilters() {
         val currentState = _uiState.value
         if (currentState is TasksUiState.Success || currentState is TasksUiState.Loading) {
+            val myUserId = _currentUserId.value
             val filtered = _allTasks.value.filter { task ->
+                // "My Tasks" toggle — only show tasks assigned to the current user
+                val matchesOwnership = if (_showMyTasksOnly.value && myUserId != null) {
+                    task.responsibleId == myUserId
+                } else {
+                    true
+                }
+
                 // Search filter
-                val matchesSearch = _searchQuery.value.isBlank() || 
+                val matchesSearch = _searchQuery.value.isBlank() ||
                     task.title.contains(_searchQuery.value, ignoreCase = true) ||
                     task.description.contains(_searchQuery.value, ignoreCase = true)
-                
+
                 // Status filter
                 val matchesStatus = _selectedStatus.value == null || task.status == _selectedStatus.value
-                
+
                 // Priority filter
                 val matchesPriority = _selectedPriority.value == null || task.priority == _selectedPriority.value
-                
-                matchesSearch && matchesStatus && matchesPriority
+
+                matchesOwnership && matchesSearch && matchesStatus && matchesPriority
             }
             _uiState.value = TasksUiState.Success(filtered)
         }
+    }
+
+    fun toggleMyTasksOnly() {
+        _showMyTasksOnly.value = !_showMyTasksOnly.value
+        applyFilters()
     }
 
     fun loadTasks() {
@@ -168,6 +194,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         _searchQuery.value = ""
         _selectedStatus.value = null
         _selectedPriority.value = null
+        _showMyTasksOnly.value = false
         applyFilters()
     }
     
