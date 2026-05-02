@@ -91,22 +91,15 @@ fun AppNavigation() {
             var workgroups by remember { mutableStateOf<List<Workgroup>>(emptyList()) }
             var isLoadingUser by remember { mutableStateOf(true) }
             
-            // Fetch user data
-            val scope = rememberCoroutineScope()
+            // Fetch user data — LaunchedEffect already provides a coroutine scope
             LaunchedEffect(Unit) {
-                scope.launch {
-                    userRepository.getCurrentUser().onSuccess { fetchedUser ->
-                        user = fetchedUser
-                    }.onFailure {
-                    }
-
-                    userRepository.getUserWorkgroups().onSuccess { fetchedGroups ->
-                        workgroups = fetchedGroups
-                    }.onFailure {
-                    }
-
-                    isLoadingUser = false
+                userRepository.getCurrentUser().onSuccess { fetchedUser ->
+                    user = fetchedUser
                 }
+                userRepository.getUserWorkgroups().onSuccess { fetchedGroups ->
+                    workgroups = fetchedGroups
+                }
+                isLoadingUser = false
             }
             
             Box(
@@ -190,7 +183,7 @@ fun AppNavigation() {
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = user!!.fullName,
+                                        text = user?.fullName ?: "",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -210,9 +203,9 @@ fun AppNavigation() {
                                     }
                                 }
                                 
-                                if (!user!!.position.isNullOrEmpty()) {
+                                if (!user?.position.isNullOrEmpty()) {
                                     Text(
-                                        text = user!!.position!!,
+                                        text = user?.position ?: "",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -220,9 +213,9 @@ fun AppNavigation() {
                                     )
                                 }
                                 
-                                if (!user!!.email.isNullOrEmpty()) {
+                                if (!user?.email.isNullOrEmpty()) {
                                     Text(
-                                        text = user!!.email!!,
+                                        text = user?.email ?: "",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
