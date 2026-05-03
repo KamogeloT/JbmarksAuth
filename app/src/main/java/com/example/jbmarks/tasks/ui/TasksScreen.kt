@@ -2,6 +2,8 @@ package com.example.jbmarks.tasks.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -690,43 +692,37 @@ fun SearchAndFilterSection(
             )
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
 
             // ── My Tasks / All Tasks toggle ──────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "View:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TaskFilterChip(
-                    label = "All Tasks",
-                    selected = !showMyTasksOnly,
-                    onClick = { if (showMyTasksOnly) onToggleMyTasks() }
-                )
-                TaskFilterChip(
-                    label = "My Tasks",
-                    selected = showMyTasksOnly,
-                    onClick = { if (!showMyTasksOnly) onToggleMyTasks() }
-                )
+                TaskFilterChip(label = "All", selected = !showMyTasksOnly, onClick = { if (showMyTasksOnly) onToggleMyTasks() })
+                TaskFilterChip(label = "Mine", selected = showMyTasksOnly, onClick = { if (!showMyTasksOnly) onToggleMyTasks() })
             }
 
             // ── Status Filters ───────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Status:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 listOf(TaskStatus.NEW, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED).forEach { status ->
                     TaskFilterChip(
@@ -739,15 +735,16 @@ fun SearchAndFilterSection(
 
             // ── Priority Filters ─────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Priority:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 listOf(TaskPriority.LOW, TaskPriority.NORMAL, TaskPriority.HIGH).forEach { priority ->
                     TaskFilterChip(
@@ -761,10 +758,10 @@ fun SearchAndFilterSection(
             // ── Clear Filters ────────────────────────────────────────────
             if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty() || showMyTasksOnly) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onClearFilters) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear filters", modifier = Modifier.size(18.dp))
+                    TextButton(onClick = onClearFilters, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear filters", modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Clear Filters")
+                        Text("Clear", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -780,7 +777,13 @@ fun TaskFilterChip(
 ) {
     FilterChip(
         onClick = onClick,
-        label = { Text(label) },
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        },
         selected = selected,
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
