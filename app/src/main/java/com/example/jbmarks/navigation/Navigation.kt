@@ -421,8 +421,12 @@ fun AppNavigation() {
                 NotificationsScreen(
                     onNotificationClick = { actionUrl ->
                         if (!actionUrl.isNullOrBlank()) {
-                            navController.navigate(actionUrl) {
-                                launchSingleTop = true
+                            try {
+                                navController.navigate(actionUrl) {
+                                    launchSingleTop = true
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("Navigation", "Failed to navigate to $actionUrl", e)
                             }
                         }
                     }

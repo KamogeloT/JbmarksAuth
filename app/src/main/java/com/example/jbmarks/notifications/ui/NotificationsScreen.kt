@@ -73,6 +73,8 @@ fun NotificationsScreen(
             )
         }
     ) { padding ->
+        val scope = rememberCoroutineScope()
+
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -88,15 +90,12 @@ fun NotificationsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(notifications, key = { it.id }) { notification ->
-                    // Workgroup invite gets special Accept/Decline UI
                     if (notification.id.startsWith("invite_") && !notification.isRead) {
                         WorkgroupInviteNotificationItem(
                             notification = notification,
                             onAccept = {
                                 val groupId = notification.relatedId ?: return@WorkgroupInviteNotificationItem
                                 viewModel.markAsRead(notification.id)
-                                // Accept via UserRepository
-                                val scope = kotlinx.coroutines.MainScope()
                                 scope.launch {
                                     UserRepository(context).acceptInvitation(groupId)
                                     viewModel.syncLiveNotifications()
@@ -105,7 +104,6 @@ fun NotificationsScreen(
                             onDecline = {
                                 val groupId = notification.relatedId ?: return@WorkgroupInviteNotificationItem
                                 viewModel.deleteNotification(notification.id)
-                                val scope = kotlinx.coroutines.MainScope()
                                 scope.launch {
                                     UserRepository(context).declineInvitation(groupId)
                                 }
@@ -116,7 +114,11 @@ fun NotificationsScreen(
                             notification = notification,
                             onClick = {
                                 viewModel.markAsRead(notification.id)
-                                onNotificationClick(notification.actionUrl)
+                                // Only navigate if there's a valid actionUrl
+                                val url = notification.actionUrl
+                                if (!url.isNullOrBlank()) {
+                                    onNotificationClick(url)
+                                }
                             },
                             onDelete = { viewModel.deleteNotification(notification.id) }
                         )
