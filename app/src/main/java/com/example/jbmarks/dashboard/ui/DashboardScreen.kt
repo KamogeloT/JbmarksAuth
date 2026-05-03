@@ -67,13 +67,15 @@ fun DashboardScreen(
         }
         
         is DashboardUiState.Success -> {
-            // Log the stats to verify they're being passed
             android.util.Log.d("DashboardScreen", "Displaying stats: activeTasks=${state.stats.activeTasks}, completedToday=${state.stats.completedToday}, unreadMessages=${state.stats.unreadMessages}, upcomingEvents=${state.stats.upcomingEvents}")
-            
+
             DashboardContent(
                 stats = state.stats,
                 recentActivity = state.recentActivity,
+                pendingInvitations = state.pendingInvitations,
                 onRefresh = { viewModel.loadDashboard() },
+                onAcceptInvitation = { groupId -> viewModel.acceptInvitation(groupId) },
+                onDeclineInvitation = { groupId -> viewModel.declineInvitation(groupId) },
                 onNavigateTo = onNavigateTo
             )
         }
@@ -91,15 +93,31 @@ fun DashboardScreen(
 fun DashboardContent(
     stats: DashboardStats,
     recentActivity: List<BlogPost>,
+    pendingInvitations: List<com.example.jbmarks.user.data.Workgroup> = emptyList(),
     onRefresh: () -> Unit,
+    onAcceptInvitation: (String) -> Unit = {},
+    onDeclineInvitation: (String) -> Unit = {},
     onNavigateTo: (String) -> Unit
 ) {
     LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(vertical = 16.dp)
-        ) {
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+
+        // ── Pending Invitations (shown only when there are invites) ──────
+        if (pendingInvitations.isNotEmpty()) {
+            item {
+                PendingInvitationsCard(
+                    invitations = pendingInvitations,
+                    onAccept = onAcceptInvitation,
+                    onDecline = onDeclineInvitation
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+
         // Stats Cards
         item {
             Text(
@@ -112,7 +130,7 @@ fun DashboardContent(
             StatsGrid(stats = stats, onNavigateTo = onNavigateTo)
             Spacer(modifier = Modifier.height(24.dp))
         }
-        
+
         // Quick Actions
         item {
             Text(
@@ -125,7 +143,7 @@ fun DashboardContent(
             QuickActionsRow(onNavigateTo = onNavigateTo)
             Spacer(modifier = Modifier.height(24.dp))
         }
-        
+
         // Recent Activity
         item {
             Text(
@@ -136,7 +154,7 @@ fun DashboardContent(
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
-        
+
         if (recentActivity.isEmpty()) {
             item {
                 Card(
@@ -539,6 +557,110 @@ fun TaskStatCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = contentColor.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PendingInvitationsCard(
+    invitations: List<com.example.jbmarks.user.data.Workgroup>,
+    onAccept: (String) -> Unit,
+    onDecline: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "Workgroup Invitation${if (invitations.size > 1) "s" else ""} (${invitations.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "You have been invited to join the following workgroup${if (invitations.size > 1) "s" else ""}:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // One row per invitation
+            invitations.forEach { group ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Group name
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Decline button
+                    OutlinedButton(
+                        onClick = { onDecline(group.id) },
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Decline", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Accept button
+                    Button(
+                        onClick = { onAccept(group.id) },
+                        modifier = Modifier.height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text("Accept", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                if (group != invitations.last()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
                     )
                 }
             }
