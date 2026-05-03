@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +30,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +69,8 @@ import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
+import com.example.jbmarks.notifications.data.NotificationRepository
+import com.example.jbmarks.notifications.ui.NotificationsScreen
 import com.example.jbmarks.tasks.ui.TaskDetailScreen
 import com.example.jbmarks.tasks.ui.TaskFormScreen
 import com.example.jbmarks.tasks.ui.TasksScreen
@@ -80,8 +85,14 @@ fun AppNavigation() {
         Screen.Dashboard,
         Screen.Tasks,
         Screen.Chat,
-        Screen.Calendar
+        Screen.Calendar,
+        Screen.Notifications
     )
+
+    // Track unread notification count for badge
+    val context = LocalContext.current
+    val notificationRepo = remember { NotificationRepository(context) }
+    val unreadCount by notificationRepo.unreadCount.collectAsState()
 
     Scaffold(
         topBar = {
@@ -303,13 +314,24 @@ fun AppNavigation() {
                         )
                         
                         NavigationBarItem(
-                            icon = { 
-                                Image(
-                                    painter = painterResource(id = screen.iconResId),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                )
+                            icon = {
+                                if (screen == Screen.Notifications && unreadCount > 0) {
+                                    BadgedBox(badge = {
+                                        Badge { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) }
+                                    }) {
+                                        Image(
+                                            painter = painterResource(id = screen.iconResId),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(64.dp)
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(id = screen.iconResId),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                }
                             },
                             label = { 
                                 Text(
@@ -394,6 +416,18 @@ fun AppNavigation() {
                 )
             }
             composable(Screen.Calendar.route) { CalendarScreen() }
+
+            composable(Screen.Notifications.route) {
+                NotificationsScreen(
+                    onNotificationClick = { actionUrl ->
+                        if (!actionUrl.isNullOrBlank()) {
+                            navController.navigate(actionUrl) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
+            }
 
             // Task Detail Screen
             composable(

@@ -117,28 +117,7 @@ fun TasksScreen(
                 }
 
                 is TasksUiState.Success -> {
-                    val groupedTasks = remember(state.tasks) {
-                        state.tasks.groupBy { task ->
-                            task.groupName?.trim().takeUnless { it.isNullOrEmpty() } ?: "No Workgroup"
-                        }
-                    }
-                    val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
-
-                    LaunchedEffect(groupedTasks.keys, workgroupMembershipKey) {
-                        groupedTasks.forEach { (groupName, tasksInGroup) ->
-                            if (!viewModel.isUserMemberOfGroup(groupName, tasksInGroup)) {
-                                expandedGroups[groupName] = true
-                            } else if (expandedGroups[groupName] == null) {
-                                expandedGroups[groupName] = false
-                            }
-                        }
-                        val staleKeys = expandedGroups.keys.toList().filter { it !in groupedTasks.keys }
-                        staleKeys.forEach { expandedGroups.remove(it) }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         // Search and Filter Section
                         SearchAndFilterSection(
                             searchQuery = searchQuery,
@@ -151,56 +130,30 @@ fun TasksScreen(
                             onToggleMyTasks = { viewModel.toggleMyTasksOnly() },
                             onClearFilters = { viewModel.clearFilters() }
                         )
-                        
-                        // Tasks List
-                    if (state.tasks.isEmpty() && !isRefreshing) {
+
+                        if (state.tasks.isEmpty() && !isRefreshing) {
                             EmptyState()
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            groupedTasks.forEach { (groupName, tasksInGroup) ->
-                                item(key = "group_header_$groupName") {
-                                    val canToggle = viewModel.isUserMemberOfGroup(groupName, tasksInGroup)
-                                    WorkgroupHeader(
-                                        title = groupName,
-                                        taskCount = tasksInGroup.size,
-                                        isExpanded = expandedGroups[groupName] == true,
-                                        canToggle = canToggle,
-                                        restrictionMessage = if (canToggle) {
-                                            null
-                                        } else {
-                                            "You are not a member of this workgroup. You can view tasks shared with you, but you cannot collapse this section."
-                                        },
-                                        onToggle = {
-                                            if (canToggle) {
-                                                expandedGroups[groupName] = !(expandedGroups[groupName] ?: false)
-                                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                items(state.tasks, key = { it.id }) { task ->
+                                    TaskItem(
+                                        task = task,
+                                        onClick = { onTaskClick(task.id) },
+                                        onStatusChange = { newStatus ->
+                                            viewModel.changeTaskStatus(task.id, newStatus)
                                         }
                                     )
                                 }
-
-                                if (expandedGroups[groupName] == true) {
-                                    items(tasksInGroup, key = { it.id }) { task ->
-                                        android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
-                                        TaskItem(
-                                            task = task,
-                                                onClick = { onTaskClick(task.id) },
-                                                onStatusChange = { newStatus ->
-                                                    viewModel.changeTaskStatus(task.id, newStatus)
-                                                }
-                                        )
-                                    }
-                                }
                             }
                         }
-                    }
-                }
-                }
+                    } // end Column
+                } // end Success
 
                 is TasksUiState.Error -> {
                     ErrorState(errorMessage = state.message, onRetryClick = { viewModel.loadTasks() })
