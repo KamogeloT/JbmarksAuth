@@ -48,6 +48,11 @@ class TaskDetailViewModel(
     private val _isUploadingFile = MutableStateFlow(false)
     val isUploadingFile: StateFlow<Boolean> = _isUploadingFile
 
+    private val _uploadError = MutableStateFlow<String?>(null)
+    val uploadError: StateFlow<String?> = _uploadError
+
+    fun clearUploadError() { _uploadError.value = null }
+
     fun loadTask() {
         viewModelScope.launch {
             _uiState.value = TaskDetailUiState.Loading
@@ -148,16 +153,18 @@ class TaskDetailViewModel(
     fun uploadAndAttachFile(filePath: String, fileName: String) {
         viewModelScope.launch {
             _isUploadingFile.value = true
+            _uploadError.value = null
             try {
                 repository.uploadFile(filePath, fileName)
                     .onSuccess { uploadedFile ->
-                        // Attach the uploaded file to the task
+                        // Show the file in the UI immediately (optimistic update)
+                        _files.value = _files.value + uploadedFile
+
+                        // Try to attach to task via API
                         repository.attachFileToTask(taskId, uploadedFile.id)
                             .onSuccess {
-                                // Reload task to get updated file list
-                                loadTask()
-                                
-                                // Create notification for file attachment
+                                // Reload task to get the official file list from server
+                                loadFiles()
                                 val currentState = _uiState.value
                                 if (currentState is TaskDetailUiState.Success) {
                                     notificationRepository?.let { repo ->
@@ -172,11 +179,15 @@ class TaskDetailViewModel(
                                 }
                             }
                             .onFailure { throwable ->
-                                android.util.Log.e("TaskDetailViewModel", "Failed to attach file", throwable)
+                                android.util.Log.e("TaskDetailViewModel", "Failed to attach file to task: ${throwable.message}", throwable)
+                                // File was uploaded to disk but couldn't be attached to task
+                                // Keep it visible in UI (already added above) but show a warning
+                                _uploadError.value = "Photo uploaded but could not be attached to task. You may not have permission to edit this task."
                             }
                     }
                     .onFailure { throwable ->
                         android.util.Log.e("TaskDetailViewModel", "Failed to upload file", throwable)
+                        _uploadError.value = "Failed to upload photo: ${throwable.message}"
                     }
             } finally {
                 _isUploadingFile.value = false

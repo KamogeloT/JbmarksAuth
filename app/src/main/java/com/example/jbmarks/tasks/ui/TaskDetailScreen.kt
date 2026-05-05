@@ -121,6 +121,19 @@ fun TaskDetailScreen(
                     val isLoadingComments by viewModel.isLoadingComments.collectAsState()
                     val files by viewModel.files.collectAsState()
                     val isUploadingFile by viewModel.isUploadingFile.collectAsState()
+                    val uploadError by viewModel.uploadError.collectAsState()
+                    val snackbarHostState = remember { SnackbarHostState() }
+
+                    // Show snackbar when upload error occurs
+                    LaunchedEffect(uploadError) {
+                        if (!uploadError.isNullOrBlank()) {
+                            snackbarHostState.showSnackbar(
+                                message = uploadError!!,
+                                duration = SnackbarDuration.Long
+                            )
+                            viewModel.clearUploadError()
+                        }
+                    }
                     
                     // State for image viewer dialog
                     var showImageDialog by remember { mutableStateOf<String?>(null) }
@@ -425,6 +438,12 @@ fun TaskDetailScreen(
                             onDismiss = { showImageDialog = null }
                         )
                     }
+
+                    // Snackbar for upload errors
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
 
                 is TaskDetailUiState.Error -> {
