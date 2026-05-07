@@ -2,6 +2,7 @@ package com.example.jbmarks.navigation
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,7 @@ import com.example.jbmarks.chat.ui.MessageScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
 import com.example.jbmarks.notifications.data.NotificationRepository
 import com.example.jbmarks.notifications.ui.NotificationsScreen
+import com.example.jbmarks.profile.ProfileScreen
 import com.example.jbmarks.tasks.ui.TaskDetailScreen
 import com.example.jbmarks.tasks.ui.TaskFormScreen
 import com.example.jbmarks.tasks.ui.TasksScreen
@@ -166,7 +168,10 @@ fun AppNavigation() {
                     } else if (user != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.clickable {
+                                navController.navigate("profile")
+                            }
                         ) {
                             // User avatar
                             Box(
@@ -431,6 +436,11 @@ fun AppNavigation() {
                         }
                     }
                 )
+            }
+
+            // Profile Screen
+            composable("profile") {
+                ProfileScreen(onNavigateBack = { navController.popBackStack() })
             }
 
             // Task Detail Screen
