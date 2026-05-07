@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.jbmarks"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
+        versionCode = 5
         versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -66,6 +66,9 @@ dependencies {
 
     // Shared KMM module
     implementation(project(":shared"))
+
+    // ExifInterface for image rotation correction
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
