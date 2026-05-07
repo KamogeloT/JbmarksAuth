@@ -8,8 +8,10 @@
 set -e
 
 STORAGE_ACCOUNT="jbmarksoauthredirecb0ce"
+STORAGE_KEY="AAZCWTc1g2Ol6yaPMu2EFiC7tR21KcOp8cgyRY78lVrDGIDdaFSXMUbidlNKxB/0S/U6rE9ZYQxp+AStokw8Kg=="
 CONTAINER="jbmarks-releases"
 GRADLE_FILE="app/build.gradle.kts"
+WORKSPACE="$(dirname "$0")"
 APK_PATH="app/build/outputs/apk/debug/jbmarks.apk"
 
 # ── 1. Get release notes ─────────────────────────────────────
@@ -32,11 +34,11 @@ echo "Building APK..."
 echo "Uploading APK to Azure..."
 az storage blob upload \
   --account-name "$STORAGE_ACCOUNT" \
+  --account-key "$STORAGE_KEY" \
   --container-name "$CONTAINER" \
   --name "jbmarks.apk" \
   --file "$APK_PATH" \
-  --overwrite \
-  --auth-mode login
+  --overwrite
 
 APK_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${CONTAINER}/jbmarks.apk"
 
@@ -53,15 +55,15 @@ VERSION_JSON=$(cat <<EOF
 EOF
 )
 
-echo "$VERSION_JSON" > /tmp/version.json
+echo "$VERSION_JSON" > "$WORKSPACE/version.json"
 az storage blob upload \
   --account-name "$STORAGE_ACCOUNT" \
+  --account-key "$STORAGE_KEY" \
   --container-name "$CONTAINER" \
   --name "version.json" \
-  --file "/tmp/version.json" \
+  --file "$WORKSPACE/version.json" \
   --overwrite \
-  --content-type "application/json" \
-  --auth-mode login
+  --content-type "application/json"
 
 # ── 6. Commit version bump ───────────────────────────────────
 echo "Committing version bump..."

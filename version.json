@@ -1,0 +1,7 @@
+{
+  "version_code": 2,
+  "version_name": "1.0.2",
+  "apk_url": "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk",
+  "release_notes": "Bug fixes: task filtering, notifications, photo comments, workgroup invitations",
+  "force_update": true
+}
