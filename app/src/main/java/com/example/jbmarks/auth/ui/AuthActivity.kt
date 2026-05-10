@@ -423,6 +423,41 @@ class AuthActivity : ComponentActivity() {
                     }
                 }
             },
+            onSwitchAccountClick = { portalUrl ->
+                android.util.Log.d("AuthActivity", "Switch account clicked - clearing local tokens before fresh auth")
+                tokenManager.clearTokens()
+                RetrofitInstance.refreshRetrofitInstance()
+                
+                // Reset state and launch login immediately
+                errorMessage = null
+                sharedErrorMessage = null
+                processedCode = null
+                lastProcessedCode = null
+                isProcessingOAuth = false
+                isAuthInProgress = true
+                lastAuthStartedAt = System.currentTimeMillis()
+                isLoading = true
+                
+                scope.launch {
+                    try {
+                        val normalizedUrl = normalizePortalUrl(portalUrl)
+                        tokenManager.savePortalUrl(normalizedUrl)
+                        val authUrl = Config.buildAuthorizationUrl(
+                            portalUrl = normalizedUrl,
+                            clientId = Config.BITRIX_CLIENT_ID
+                        )
+                        val customTabsIntent = CustomTabsIntent.Builder()
+                            .setShowTitle(true)
+                            .build()
+                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
+                    } catch (e: Exception) {
+                        android.util.Log.e("AuthActivity", "Failed to start switch-account login", e)
+                        errorMessage = e.message ?: "Failed to start login"
+                        isLoading = false
+                        isAuthInProgress = false
+                    }
+                }
+            },
             isLoading = isLoading,
             errorMessage = errorMessage
         )

@@ -78,12 +78,12 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
 // ── Composable ───────────────────────────────────────────────────────────────
 
 /**
- * Drop this into SplashActivity or MainActivity.
- * It auto-checks for updates on first composition.
- * With force_update = true the dialog cannot be dismissed.
+ * Returns true when navigation should be blocked
+ * (update check in progress, update available, or downloading).
+ * SplashActivity uses this to hold navigation until the update flow is resolved.
  */
 @Composable
-fun UpdateDialogHost() {
+fun UpdateDialogHost(onReadyToNavigate: (() -> Unit)? = null) {
     val context = LocalContext.current
     val vm: UpdateViewModel = viewModel(
         factory = ViewModelProvider.AndroidViewModelFactory.getInstance(
@@ -95,12 +95,18 @@ fun UpdateDialogHost() {
     // Kick off check once
     LaunchedEffect(Unit) { vm.checkForUpdate() }
 
+    // When check is done and no update needed, unblock navigation
+    LaunchedEffect(state) {
+        if (state == UpdateUiState.UpToDate) {
+            onReadyToNavigate?.invoke()
+        }
+    }
+
     when (val s = state) {
         is UpdateUiState.UpdateAvailable -> {
             UpdateAvailableDialog(
                 info = s.info,
                 onUpdate = { vm.downloadAndInstall(s.info) }
-                // No onDismiss — force_update is always true per requirements
             )
         }
         is UpdateUiState.Downloading -> {
@@ -110,15 +116,18 @@ fun UpdateDialogHost() {
             ReadyToInstallDialog(onInstall = { vm.retryInstall() })
         }
         is UpdateUiState.Error -> {
+            // On error, don't block the user — let them proceed
             UpdateErrorDialog(
                 message = s.message,
-                onRetry = {
-                    val prev = (state as? UpdateUiState.Error)
-                    vm.checkForUpdate()
-                }
+                onRetry = { vm.checkForUpdate() },
+                onSkip = { onReadyToNavigate?.invoke() }
             )
         }
-        else -> { /* Idle / Checking / UpToDate — show nothing */ }
+        // Idle or Checking — show a subtle loading indicator, block navigation
+        is UpdateUiState.Checking -> {
+            CheckingDialog()
+        }
+        else -> { /* UpToDate handled via LaunchedEffect above */ }
     }
 }
 
@@ -190,15 +199,33 @@ private fun ReadyToInstallDialog(onInstall: () -> Unit) {
 }
 
 @Composable
-private fun UpdateErrorDialog(message: String, onRetry: () -> Unit) {
+private fun CheckingDialog() {
     AlertDialog(
-        onDismissRequest = { /* force update */ },
-        title = { Text("Update Failed", fontWeight = FontWeight.Bold) },
-        text = { Text(message, style = MaterialTheme.typography.bodyMedium) },
+        onDismissRequest = { /* cannot dismiss while checking */ },
+        title = { Text("Checking for updates…", fontWeight = FontWeight.Bold) },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        },
+        confirmButton = {},
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+private fun UpdateErrorDialog(message: String, onRetry: () -> Unit, onSkip: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onSkip() },
+        title = { Text("Update Check Failed", fontWeight = FontWeight.Bold) },
+        text = { Text("Could not check for updates. You can retry or continue without updating.", style = MaterialTheme.typography.bodyMedium) },
         confirmButton = {
             Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
                 Text("Retry")
             }
+        },
+        dismissButton = {
+            TextButton(onClick = onSkip) { Text("Continue Anyway") }
         },
         shape = RoundedCornerShape(16.dp)
     )

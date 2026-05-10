@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -30,11 +34,19 @@ class SplashActivity : ComponentActivity() {
             JBmarksTheme {
                 val context = LocalContext.current
 
-                // Check for updates on every launch — force update blocks navigation
-                UpdateDialogHost()
+                // Gate: only navigate when update check is resolved
+                var readyToNavigate by remember { mutableStateOf(false) }
 
-                LaunchedEffect(Unit) {
-                    delay(2000)
+                // Update check — blocks navigation until resolved
+                UpdateDialogHost(
+                    onReadyToNavigate = { readyToNavigate = true }
+                )
+
+                // Navigate only after update check says it's OK
+                LaunchedEffect(readyToNavigate) {
+                    if (!readyToNavigate) return@LaunchedEffect
+
+                    delay(300) // brief pause so splash is visible
 
                     val tokenManager = com.example.jbmarks.auth.data.TokenManager(context)
                     val hasValidToken = tokenManager.getAccessToken() != null &&

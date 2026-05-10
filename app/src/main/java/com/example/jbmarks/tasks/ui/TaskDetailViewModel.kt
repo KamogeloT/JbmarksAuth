@@ -9,6 +9,7 @@ import com.example.jbmarks.notifications.data.NotificationRepository
 import com.example.jbmarks.notifications.service.NotificationService
 import com.example.jbmarks.tasks.data.TasksRepository
 import com.example.jbmarks.tasks.domain.Comment
+import com.example.jbmarks.tasks.domain.ElapsedTimeEntry
 import com.example.jbmarks.tasks.domain.Task
 import com.example.jbmarks.tasks.domain.TaskFile
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +52,21 @@ class TaskDetailViewModel(
     private val _uploadError = MutableStateFlow<String?>(null)
     val uploadError: StateFlow<String?> = _uploadError
 
+    // ── Time Tracking ────────────────────────────────────────────────────────
+    private val _timeEntries = MutableStateFlow<List<ElapsedTimeEntry>>(emptyList())
+    val timeEntries: StateFlow<List<ElapsedTimeEntry>> = _timeEntries
+
+    private val _isLoadingTimeEntries = MutableStateFlow(false)
+    val isLoadingTimeEntries: StateFlow<Boolean> = _isLoadingTimeEntries
+
+    private val _isLoggingTime = MutableStateFlow(false)
+    val isLoggingTime: StateFlow<Boolean> = _isLoggingTime
+
+    private val _timeTrackingError = MutableStateFlow<String?>(null)
+    val timeTrackingError: StateFlow<String?> = _timeTrackingError
+
+    fun clearTimeTrackingError() { _timeTrackingError.value = null }
+
     fun clearUploadError() { _uploadError.value = null }
 
     fun loadTask() {
@@ -62,6 +78,7 @@ class TaskDetailViewModel(
                     // Load comments and files when task is loaded
                     loadComments()
                     loadFiles()
+                    loadTimeEntries()
                 }
                 .onFailure { throwable ->
                     _uiState.value = TaskDetailUiState.Error(
@@ -204,6 +221,44 @@ class TaskDetailViewModel(
                 }
                 .onFailure { throwable ->
                     android.util.Log.e("TaskDetailViewModel", "Failed to load files", throwable)
+                }
+        }
+    }
+
+    // ── Time Tracking ────────────────────────────────────────────────────────
+
+    fun loadTimeEntries() {
+        viewModelScope.launch {
+            _isLoadingTimeEntries.value = true
+            repository.getElapsedTimeEntries(taskId)
+                .onSuccess { entries ->
+                    _timeEntries.value = entries
+                    _isLoadingTimeEntries.value = false
+                }
+                .onFailure { throwable ->
+                    _isLoadingTimeEntries.value = false
+                    android.util.Log.e("TaskDetailViewModel", "Failed to load time entries", throwable)
+                }
+        }
+    }
+
+    fun logTime(hours: Int, minutes: Int, comment: String) {
+        if (hours == 0 && minutes == 0) {
+            _timeTrackingError.value = "Please enter a time greater than zero"
+            return
+        }
+        viewModelScope.launch {
+            _isLoggingTime.value = true
+            repository.addElapsedTime(taskId, hours, minutes, comment.takeIf { it.isNotBlank() })
+                .onSuccess {
+                    _isLoggingTime.value = false
+                    // Reload entries to show the new one
+                    loadTimeEntries()
+                }
+                .onFailure { throwable ->
+                    _isLoggingTime.value = false
+                    _timeTrackingError.value = throwable.message ?: "Failed to log time"
+                    android.util.Log.e("TaskDetailViewModel", "Failed to log time", throwable)
                 }
         }
     }

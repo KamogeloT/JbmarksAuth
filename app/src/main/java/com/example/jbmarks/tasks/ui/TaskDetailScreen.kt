@@ -122,6 +122,10 @@ fun TaskDetailScreen(
                     val files by viewModel.files.collectAsState()
                     val isUploadingFile by viewModel.isUploadingFile.collectAsState()
                     val uploadError by viewModel.uploadError.collectAsState()
+                    val timeEntries by viewModel.timeEntries.collectAsState()
+                    val isLoadingTimeEntries by viewModel.isLoadingTimeEntries.collectAsState()
+                    val isLoggingTime by viewModel.isLoggingTime.collectAsState()
+                    val timeTrackingError by viewModel.timeTrackingError.collectAsState()
                     val snackbarHostState = remember { SnackbarHostState() }
 
                     // Show snackbar when upload error occurs
@@ -132,6 +136,17 @@ fun TaskDetailScreen(
                                 duration = SnackbarDuration.Long
                             )
                             viewModel.clearUploadError()
+                        }
+                    }
+
+                    // Show snackbar when time tracking error occurs
+                    LaunchedEffect(timeTrackingError) {
+                        if (!timeTrackingError.isNullOrBlank()) {
+                            snackbarHostState.showSnackbar(
+                                message = timeTrackingError!!,
+                                duration = SnackbarDuration.Long
+                            )
+                            viewModel.clearTimeTrackingError()
                         }
                     }
                     
@@ -369,6 +384,12 @@ fun TaskDetailScreen(
                         isLoadingComments = isLoadingComments,
                         files = files,
                         isUploadingFile = isUploadingFile,
+                        timeEntries = timeEntries,
+                        isLoadingTimeEntries = isLoadingTimeEntries,
+                        isLoggingTime = isLoggingTime,
+                        onLogTime = { hours, minutes, comment ->
+                            viewModel.logTime(hours, minutes, comment)
+                        },
                         onCompleteTask = { viewModel.completeTask() },
                         onStartTask = { viewModel.startTask() },
                         onRenewTask = { viewModel.renewTask() },
@@ -471,6 +492,10 @@ fun TaskDetailContent(
     isLoadingComments: Boolean,
     files: List<com.example.jbmarks.tasks.domain.TaskFile>,
     isUploadingFile: Boolean,
+    timeEntries: List<com.example.jbmarks.tasks.domain.ElapsedTimeEntry>,
+    isLoadingTimeEntries: Boolean,
+    isLoggingTime: Boolean,
+    onLogTime: (hours: Int, minutes: Int, comment: String) -> Unit,
     onCompleteTask: () -> Unit,
     onStartTask: () -> Unit,
     onRenewTask: () -> Unit,
@@ -594,6 +619,20 @@ fun TaskDetailContent(
             )
         }
         
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        HorizontalDivider()
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Time Tracking Section
+        TimeTrackingSection(
+            entries = timeEntries,
+            isLoading = isLoadingTimeEntries,
+            isLoggingTime = isLoggingTime,
+            onLogTime = onLogTime
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
         
         HorizontalDivider()

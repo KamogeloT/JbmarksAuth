@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun LoginScreen(
     onLoginClick: (portalUrl: String) -> Unit,
+    onSwitchAccountClick: (portalUrl: String) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -176,6 +177,21 @@ fun LoginScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
+                        }
+
+                        OutlinedButton(
+                            onClick = { onSwitchAccountClick(portalUrl.text) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            enabled = !isLoading && portalUrl.text.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "Switch Account",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
