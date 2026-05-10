@@ -121,6 +121,34 @@ fun TaskDetailScreen(
                     val isLoadingComments by viewModel.isLoadingComments.collectAsState()
                     val files by viewModel.files.collectAsState()
                     val isUploadingFile by viewModel.isUploadingFile.collectAsState()
+                    val uploadError by viewModel.uploadError.collectAsState()
+                    val timeEntries by viewModel.timeEntries.collectAsState()
+                    val isLoadingTimeEntries by viewModel.isLoadingTimeEntries.collectAsState()
+                    val isLoggingTime by viewModel.isLoggingTime.collectAsState()
+                    val timeTrackingError by viewModel.timeTrackingError.collectAsState()
+                    val snackbarHostState = remember { SnackbarHostState() }
+
+                    // Show snackbar when upload error occurs
+                    LaunchedEffect(uploadError) {
+                        if (!uploadError.isNullOrBlank()) {
+                            snackbarHostState.showSnackbar(
+                                message = uploadError!!,
+                                duration = SnackbarDuration.Long
+                            )
+                            viewModel.clearUploadError()
+                        }
+                    }
+
+                    // Show snackbar when time tracking error occurs
+                    LaunchedEffect(timeTrackingError) {
+                        if (!timeTrackingError.isNullOrBlank()) {
+                            snackbarHostState.showSnackbar(
+                                message = timeTrackingError!!,
+                                duration = SnackbarDuration.Long
+                            )
+                            viewModel.clearTimeTrackingError()
+                        }
+                    }
                     
                     // State for image viewer dialog
                     var showImageDialog by remember { mutableStateOf<String?>(null) }
@@ -356,6 +384,12 @@ fun TaskDetailScreen(
                         isLoadingComments = isLoadingComments,
                         files = files,
                         isUploadingFile = isUploadingFile,
+                        timeEntries = timeEntries,
+                        isLoadingTimeEntries = isLoadingTimeEntries,
+                        isLoggingTime = isLoggingTime,
+                        onLogTime = { hours, minutes, comment ->
+                            viewModel.logTime(hours, minutes, comment)
+                        },
                         onCompleteTask = { viewModel.completeTask() },
                         onStartTask = { viewModel.startTask() },
                         onRenewTask = { viewModel.renewTask() },
@@ -425,6 +459,12 @@ fun TaskDetailScreen(
                             onDismiss = { showImageDialog = null }
                         )
                     }
+
+                    // Snackbar for upload errors
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
 
                 is TaskDetailUiState.Error -> {
@@ -452,6 +492,10 @@ fun TaskDetailContent(
     isLoadingComments: Boolean,
     files: List<com.example.jbmarks.tasks.domain.TaskFile>,
     isUploadingFile: Boolean,
+    timeEntries: List<com.example.jbmarks.tasks.domain.ElapsedTimeEntry>,
+    isLoadingTimeEntries: Boolean,
+    isLoggingTime: Boolean,
+    onLogTime: (hours: Int, minutes: Int, comment: String) -> Unit,
     onCompleteTask: () -> Unit,
     onStartTask: () -> Unit,
     onRenewTask: () -> Unit,
@@ -581,6 +625,20 @@ fun TaskDetailContent(
         
         Spacer(modifier = Modifier.height(16.dp))
         
+        // Time Tracking Section
+        TimeTrackingSection(
+            entries = timeEntries,
+            isLoading = isLoadingTimeEntries,
+            isLoggingTime = isLoggingTime,
+            onLogTime = onLogTime
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        HorizontalDivider()
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
         // Comments Section
         CommentSection(
             comments = comments,
@@ -588,7 +646,8 @@ fun TaskDetailContent(
             onAddComment = onAddComment,
             onTakePhoto = onTakePhoto,
             pendingPhotoUri = pendingPhotoUri,
-            onClearPendingPhoto = onClearPendingPhoto
+            onClearPendingPhoto = onClearPendingPhoto,
+            isUploading = isUploadingFile
         )
         
         Spacer(modifier = Modifier.height(16.dp))

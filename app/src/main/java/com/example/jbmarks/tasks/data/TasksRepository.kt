@@ -769,13 +769,28 @@ class TasksRepository(private val context: Context? = null) {
      */
     suspend fun uploadFile(filePath: String, fileName: String): Result<DomainTaskFile> {
         return try {
-            // Read file and convert to Base64
             val file = File(filePath)
             if (!file.exists()) {
                 return Result.failure(Exception("File not found: $filePath"))
             }
-            
-            val fileBytes = file.readBytes()
+
+            // Compress images before upload to avoid HTTP 413 (Request Entity Too Large)
+            val compressedFileName = if (fileName.lowercase().let {
+                    it.endsWith(".jpg") || it.endsWith(".jpeg") ||
+                    it.endsWith(".png") || it.endsWith(".webp") || it.endsWith(".bmp")
+                }) {
+                fileName.substringBeforeLast(".") + "_compressed.jpg"
+            } else {
+                fileName
+            }
+            val cacheDir = File(file.parent ?: context?.cacheDir?.path ?: filePath).also { it.mkdirs() }
+            val compressedFile = com.example.jbmarks.utils.ImageCompressor.compress(
+                inputPath = filePath,
+                outputFile = File(cacheDir, compressedFileName)
+            )
+
+            val fileBytes = compressedFile.readBytes()
+            Log.d(TAG, "Uploading file: ${compressedFile.name}, size: ${fileBytes.size / 1024}KB")
             val base64Content = Base64.encodeToString(fileBytes, Base64.NO_WRAP)
             
             // Upload to Bitrix24 root folder using disk.storage.uploadfile
@@ -834,9 +849,18 @@ class TasksRepository(private val context: Context? = null) {
                 
                 Result.success(taskFile)
             } else {
-                val error = response.errorBody()?.string() ?: "Unknown error"
-                Log.e(TAG, "Failed to upload file: $error")
-                Result.failure(Exception("Failed to upload file: $error"))
+                val rawError = response.errorBody()?.string() ?: "Unknown error"
+                // Strip HTML tags from error response (e.g. 413 pages return HTML)
+                val cleanError = rawError.replace(Regex("<[^>]+>"), "").trim()
+                    .replace(Regex("\\s+"), " ")
+                    .take(200)
+                val statusCode = response.code()
+                val userMessage = when (statusCode) {
+                    413 -> "Photo is too large to upload. Please try a smaller image."
+                    else -> "Upload failed ($statusCode): $cleanError"
+                }
+                Log.e(TAG, "Failed to upload file ($statusCode): $rawError")
+                Result.failure(Exception(userMessage))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading file", e)
@@ -1192,6 +1216,112 @@ class TasksRepository(private val context: Context? = null) {
         }
     }
     
+    // ===== TIME TRACKING =====
+
+    /**
+     * Get elapsed time entries for a task.
+     * Bitrix24 API: task.elapseditem.getlist
+     */
+    suspend fun getElapsedTimeEntries(taskId: String): Result<List<com.example.jbmarks.tasks.domain.ElapsedTimeEntry>> {
+        return try {
+            val request = mapOf("TASK_ID" to taskId)
+            val response = executeApiCall {
+                api.getElapsedTimeEntries(request)
+            }
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                // Bitrix24 returns { "result": [ {...}, {...} ] }
+                val items: List<ElapsedTimeItem> = body["result"] ?: emptyList()
+
+                // Collect unique user IDs to resolve names
+                val userIds = items.mapNotNull { it.userId }.distinct()
+                val userMap = mutableMapOf<String, String>()
+                userIds.forEach { uid ->
+                    try {
+                        val userResponse = api.getUser(uid)
+                        userResponse.result?.firstOrNull()?.let { user ->
+                            userMap[uid] = user.fullName
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not fetch user $uid for time entry: ${e.message}")
+                    }
+                }
+
+                val entries = items.mapNotNull { item ->
+                    val id = item.id ?: return@mapNotNull null
+                    val secs = item.seconds?.toLongOrNull()
+                        ?: item.minutes?.toLongOrNull()?.times(60)
+                        ?: 0L
+                    com.example.jbmarks.tasks.domain.ElapsedTimeEntry(
+                        id = id,
+                        taskId = item.taskId ?: taskId,
+                        userId = item.userId ?: "",
+                        userName = item.userId?.let { userMap[it] },
+                        seconds = secs,
+                        comment = item.comment,
+                        createdDate = item.createdDate
+                    )
+                }
+                Log.d(TAG, "Loaded ${entries.size} time entries for task $taskId")
+                Result.success(entries)
+            } else {
+                val error = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Failed to get elapsed time entries: $error")
+                Result.failure(Exception("Failed to get time entries: $error"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting elapsed time entries", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Add an elapsed time entry to a task.
+     * Bitrix24 API: task.elapseditem.add
+     * @param taskId  Task ID
+     * @param hours   Hours component (>= 0)
+     * @param minutes Minutes component (0-59)
+     * @param comment Optional comment describing the work done
+     */
+    suspend fun addElapsedTime(
+        taskId: String,
+        hours: Int,
+        minutes: Int,
+        comment: String? = null
+    ): Result<String> {
+        return try {
+            val totalSeconds = (hours * 3600) + (minutes * 60)
+            if (totalSeconds <= 0) {
+                return Result.failure(Exception("Time must be greater than zero"))
+            }
+
+            val request = AddElapsedTimeRequest(
+                taskId = taskId,
+                seconds = totalSeconds,
+                comment = comment?.takeIf { it.isNotBlank() }
+            )
+            val response = executeApiCall {
+                api.addElapsedTime(request)
+            }
+
+            if (response.isSuccessful && response.body()?.result?.id != null) {
+                val newId = response.body()!!.result!!.id!!
+                Log.d(TAG, "Elapsed time added, entry ID: $newId")
+                Result.success(newId)
+            } else {
+                val error = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Failed to add elapsed time: $error")
+                Result.failure(Exception("Failed to log time: $error"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error adding elapsed time", e)
+            Result.failure(e)
+        }
+    }
+
+    // ===== END TIME TRACKING =====
+
     /**
      * Map Comment data model to domain model
      */

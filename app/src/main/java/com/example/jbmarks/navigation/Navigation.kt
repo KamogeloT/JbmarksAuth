@@ -2,6 +2,7 @@ package com.example.jbmarks.navigation
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +31,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +70,9 @@ import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
+import com.example.jbmarks.notifications.data.NotificationRepository
+import com.example.jbmarks.notifications.ui.NotificationsScreen
+import com.example.jbmarks.profile.ProfileScreen
 import com.example.jbmarks.tasks.ui.TaskDetailScreen
 import com.example.jbmarks.tasks.ui.TaskFormScreen
 import com.example.jbmarks.tasks.ui.TasksScreen
@@ -80,8 +87,14 @@ fun AppNavigation() {
         Screen.Dashboard,
         Screen.Tasks,
         Screen.Chat,
-        Screen.Calendar
+        Screen.Calendar,
+        Screen.Notifications
     )
+
+    // Track unread notification count for badge
+    val context = LocalContext.current
+    val notificationRepo = remember { NotificationRepository(context) }
+    val unreadCount by notificationRepo.unreadCount.collectAsState()
 
     Scaffold(
         topBar = {
@@ -91,22 +104,15 @@ fun AppNavigation() {
             var workgroups by remember { mutableStateOf<List<Workgroup>>(emptyList()) }
             var isLoadingUser by remember { mutableStateOf(true) }
             
-            // Fetch user data
-            val scope = rememberCoroutineScope()
+            // Fetch user data — LaunchedEffect already provides a coroutine scope
             LaunchedEffect(Unit) {
-                scope.launch {
-                    userRepository.getCurrentUser().onSuccess { fetchedUser ->
-                        user = fetchedUser
-                    }.onFailure {
-                    }
-
-                    userRepository.getUserWorkgroups().onSuccess { fetchedGroups ->
-                        workgroups = fetchedGroups
-                    }.onFailure {
-                    }
-
-                    isLoadingUser = false
+                userRepository.getCurrentUser().onSuccess { fetchedUser ->
+                    user = fetchedUser
                 }
+                userRepository.getUserWorkgroups().onSuccess { fetchedGroups ->
+                    workgroups = fetchedGroups
+                }
+                isLoadingUser = false
             }
             
             Box(
@@ -162,7 +168,10 @@ fun AppNavigation() {
                     } else if (user != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.clickable {
+                                navController.navigate("profile")
+                            }
                         ) {
                             // User avatar
                             Box(
@@ -190,7 +199,7 @@ fun AppNavigation() {
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Text(
-                                        text = user!!.fullName,
+                                        text = user?.fullName ?: "",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -210,9 +219,9 @@ fun AppNavigation() {
                                     }
                                 }
                                 
-                                if (!user!!.position.isNullOrEmpty()) {
+                                if (!user?.position.isNullOrEmpty()) {
                                     Text(
-                                        text = user!!.position!!,
+                                        text = user?.position ?: "",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -220,9 +229,9 @@ fun AppNavigation() {
                                     )
                                 }
                                 
-                                if (!user!!.email.isNullOrEmpty()) {
+                                if (!user?.email.isNullOrEmpty()) {
                                     Text(
-                                        text = user!!.email!!,
+                                        text = user?.email ?: "",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         maxLines = 1,
@@ -310,13 +319,24 @@ fun AppNavigation() {
                         )
                         
                         NavigationBarItem(
-                            icon = { 
-                                Image(
-                                    painter = painterResource(id = screen.iconResId),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                )
+                            icon = {
+                                if (screen == Screen.Notifications && unreadCount > 0) {
+                                    BadgedBox(badge = {
+                                        Badge { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) }
+                                    }) {
+                                        Image(
+                                            painter = painterResource(id = screen.iconResId),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(64.dp)
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(id = screen.iconResId),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp)
+                                    )
+                                }
                             },
                             label = { 
                                 Text(
@@ -401,6 +421,27 @@ fun AppNavigation() {
                 )
             }
             composable(Screen.Calendar.route) { CalendarScreen() }
+
+            composable(Screen.Notifications.route) {
+                NotificationsScreen(
+                    onNotificationClick = { actionUrl ->
+                        if (!actionUrl.isNullOrBlank()) {
+                            try {
+                                navController.navigate(actionUrl) {
+                                    launchSingleTop = true
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("Navigation", "Failed to navigate to $actionUrl", e)
+                            }
+                        }
+                    }
+                )
+            }
+
+            // Profile Screen
+            composable("profile") {
+                ProfileScreen(onNavigateBack = { navController.popBackStack() })
+            }
 
             // Task Detail Screen
             composable(

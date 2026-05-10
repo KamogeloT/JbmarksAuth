@@ -2,6 +2,8 @@ package com.example.jbmarks.tasks.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,6 +89,7 @@ fun TasksScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedStatus by viewModel.selectedStatus.collectAsState()
     val selectedPriority by viewModel.selectedPriority.collectAsState()
+    val showMyTasksOnly by viewModel.showMyTasksOnly.collectAsState()
     val workgroupMembershipKey by viewModel.workgroupMembershipSignature.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
@@ -116,88 +119,43 @@ fun TasksScreen(
                 }
 
                 is TasksUiState.Success -> {
-                    val groupedTasks = remember(state.tasks) {
-                        state.tasks.groupBy { task ->
-                            task.groupName?.trim().takeUnless { it.isNullOrEmpty() } ?: "No Workgroup"
-                        }
-                    }
-                    val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
-
-                    LaunchedEffect(groupedTasks.keys, workgroupMembershipKey) {
-                        groupedTasks.forEach { (groupName, tasksInGroup) ->
-                            if (!viewModel.isUserMemberOfGroup(groupName, tasksInGroup)) {
-                                expandedGroups[groupName] = true
-                            } else if (expandedGroups[groupName] == null) {
-                                expandedGroups[groupName] = false
-                            }
-                        }
-                        val staleKeys = expandedGroups.keys.toList().filter { it !in groupedTasks.keys }
-                        staleKeys.forEach { expandedGroups.remove(it) }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         // Search and Filter Section
                         SearchAndFilterSection(
                             searchQuery = searchQuery,
                             selectedStatus = selectedStatus,
                             selectedPriority = selectedPriority,
+                            showMyTasksOnly = showMyTasksOnly,
                             onSearchQueryChange = { viewModel.setSearchQuery(it) },
                             onStatusFilterChange = { viewModel.setStatusFilter(it) },
                             onPriorityFilterChange = { viewModel.setPriorityFilter(it) },
+                            onToggleMyTasks = { viewModel.toggleMyTasksOnly() },
                             onClearFilters = { viewModel.clearFilters() }
                         )
-                        
-                        // Tasks List
-                    if (state.tasks.isEmpty() && !isRefreshing) {
+
+                        if (state.tasks.isEmpty() && !isRefreshing) {
                             EmptyState()
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
-                        ) {
-                            groupedTasks.forEach { (groupName, tasksInGroup) ->
-                                item(key = "group_header_$groupName") {
-                                    val canToggle = viewModel.isUserMemberOfGroup(groupName, tasksInGroup)
-                                    WorkgroupHeader(
-                                        title = groupName,
-                                        taskCount = tasksInGroup.size,
-                                        isExpanded = expandedGroups[groupName] == true,
-                                        canToggle = canToggle,
-                                        restrictionMessage = if (canToggle) {
-                                            null
-                                        } else {
-                                            "You are not a member of this workgroup. You can view tasks shared with you, but you cannot collapse this section."
-                                        },
-                                        onToggle = {
-                                            if (canToggle) {
-                                                expandedGroups[groupName] = !(expandedGroups[groupName] ?: false)
-                                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                items(state.tasks, key = { it.id }) { task ->
+                                    TaskItem(
+                                        task = task,
+                                        onClick = { onTaskClick(task.id) },
+                                        onStatusChange = { newStatus ->
+                                            viewModel.changeTaskStatus(task.id, newStatus)
                                         }
                                     )
                                 }
-
-                                if (expandedGroups[groupName] == true) {
-                                    items(tasksInGroup, key = { it.id }) { task ->
-                                        android.util.Log.d("TasksScreen", "Rendering task: id=${task.id}, title='${task.title}', description='${task.description}', responsibleName='${task.responsibleName}', createdByName='${task.createdByName}'")
-                                        TaskItem(
-                                            task = task,
-                                                onClick = { onTaskClick(task.id) },
-                                                onStatusChange = { newStatus ->
-                                                    viewModel.changeTaskStatus(task.id, newStatus)
-                                                }
-                                        )
-                                    }
-                                }
                             }
                         }
-                    }
-                }
-                }
+                    } // end Column
+                } // end Success
 
                 is TasksUiState.Error -> {
                     ErrorState(errorMessage = state.message, onRetryClick = { viewModel.loadTasks() })
@@ -697,9 +655,11 @@ fun SearchAndFilterSection(
     searchQuery: String,
     selectedStatus: TaskStatus?,
     selectedPriority: TaskPriority?,
+    showMyTasksOnly: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onStatusFilterChange: (TaskStatus?) -> Unit,
     onPriorityFilterChange: (TaskPriority?) -> Unit,
+    onToggleMyTasks: () -> Unit,
     onClearFilters: () -> Unit
 ) {
     Column(
@@ -731,79 +691,77 @@ fun SearchAndFilterSection(
                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
             )
         )
-        
-        // Filter Chips Row - Horizontal Scrollable
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Status Filters
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+
+            // ── My Tasks / All Tasks toggle ──────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "View:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TaskFilterChip(label = "All", selected = !showMyTasksOnly, onClick = { if (showMyTasksOnly) onToggleMyTasks() })
+                TaskFilterChip(label = "Mine", selected = showMyTasksOnly, onClick = { if (!showMyTasksOnly) onToggleMyTasks() })
+            }
+
+            // ── Status Filters ───────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Status:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                listOf(
-                    TaskStatus.NEW,
-                    TaskStatus.IN_PROGRESS,
-                    TaskStatus.COMPLETED
-                ).forEach { status ->
+                listOf(TaskStatus.NEW, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED).forEach { status ->
                     TaskFilterChip(
                         label = status.displayName,
                         selected = selectedStatus == status,
-                        onClick = {
-                            onStatusFilterChange(if (selectedStatus == status) null else status)
-                        }
+                        onClick = { onStatusFilterChange(if (selectedStatus == status) null else status) }
                     )
                 }
             }
-            
-            // Priority Filters
+
+            // ── Priority Filters ─────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "Priority:",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                listOf(
-                    TaskPriority.LOW,
-                    TaskPriority.NORMAL,
-                    TaskPriority.HIGH
-                ).forEach { priority ->
+                listOf(TaskPriority.LOW, TaskPriority.NORMAL, TaskPriority.HIGH).forEach { priority ->
                     TaskFilterChip(
                         label = priority.displayName,
                         selected = selectedPriority == priority,
-                        onClick = {
-                            onPriorityFilterChange(if (selectedPriority == priority) null else priority)
-                        }
+                        onClick = { onPriorityFilterChange(if (selectedPriority == priority) null else priority) }
                     )
                 }
             }
-            
-            // Clear Filters Button
-            if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onClearFilters) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Clear filters",
-                            modifier = Modifier.size(18.dp)
-                        )
+
+            // ── Clear Filters ────────────────────────────────────────────
+            if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty() || showMyTasksOnly) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onClearFilters, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear filters", modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Clear Filters")
+                        Text("Clear", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -819,7 +777,13 @@ fun TaskFilterChip(
 ) {
     FilterChip(
         onClick = onClick,
-        label = { Text(label) },
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
+        },
         selected = selected,
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

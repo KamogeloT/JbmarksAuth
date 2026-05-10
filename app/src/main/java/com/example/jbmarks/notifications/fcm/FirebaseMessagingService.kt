@@ -21,17 +21,19 @@ import kotlinx.coroutines.launch
  * Handles incoming push notifications from Firebase
  */
 class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
-    
+
     private val TAG = "FCMService"
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
-    private lateinit var notificationService: NotificationService
-    private lateinit var notificationRepository: NotificationRepository
-    
+
+    // Lazy init — safe to call before onCreate() since applicationContext is always available
+    private val notificationService by lazy { NotificationService(applicationContext) }
+    private val notificationRepository by lazy { NotificationRepository(applicationContext) }
+
     override fun onCreate() {
         super.onCreate()
-        notificationService = NotificationService(applicationContext)
-        notificationRepository = NotificationRepository(applicationContext)
+        // Trigger lazy init early so first access is fast
+        notificationService
+        notificationRepository
     }
     
     /**

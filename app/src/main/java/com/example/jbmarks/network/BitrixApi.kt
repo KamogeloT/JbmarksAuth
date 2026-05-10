@@ -155,6 +155,25 @@ interface BitrixApi {
     
     @GET("sonet_group.user.groups.json")
     suspend fun getUserWorkgroups(): BitrixResponse<List<Workgroup>>
+
+    /**
+     * Accept a workgroup invitation
+     * Bitrix24 API: sonet_group.user.request with CONFIRM=Y
+     */
+    @POST("sonet_group.user.request.json")
+    suspend fun acceptWorkgroupInvitation(
+        @Query("GROUP_ID") groupId: String,
+        @Query("CONFIRM") confirm: String = "Y"
+    ): Response<BitrixResponse<Boolean>>
+
+    /**
+     * Decline a workgroup invitation
+     * Bitrix24 API: sonet_group.user.delete
+     */
+    @POST("sonet_group.user.delete.json")
+    suspend fun declineWorkgroupInvitation(
+        @Query("GROUP_ID") groupId: String
+    ): Response<BitrixResponse<Boolean>>
     
     // ===== TASK CRUD OPERATIONS =====
     

@@ -22,10 +22,9 @@ class AuthRepositoryImpl(
 ) : AuthRepository {
     
     override suspend fun isAuthenticated(): Boolean {
-        // TokenStorage methods are now synchronous, but we're in a suspend context
-        // so this is fine - the suspend is for the repository operation itself
         val token = tokenStorage.getAccessToken()
-        return token != null && tokenStorage.isTokenExpired()
+        // Authenticated = token exists AND is NOT expired
+        return token != null && !tokenStorage.isTokenExpired()
     }
     
     override suspend fun getAccessToken(): String? {

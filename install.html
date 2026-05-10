@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JBmarks – Install</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(160deg, #1B5E20 0%, #2E7D32 60%, #388E3C 100%);
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      padding: 32px 16px 28px;
+    }
+    .logo {
+      width: 200px;
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      margin-bottom: 16px;
+    }
+    .header h1 {
+      font-size: 30px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    .header p {
+      font-size: 15px;
+      color: rgba(255,255,255,0.8);
+      margin-top: 4px;
+    }
+    .version-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-top: 10px;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* ── QR Section ── */
+    .qr-section {
+      background: #fff;
+      border-radius: 24px;
+      padding: 32px 24px;
+      margin: 0 auto 20px;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+    .qr-section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1B5E20;
+      margin-bottom: 6px;
+    }
+    .qr-section .qr-sub {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 24px;
+    }
+    .qr-frame {
+      background: #fff;
+      border: 3px solid #1B5E20;
+      border-radius: 16px;
+      padding: 12px;
+      display: inline-block;
+      box-shadow: 0 4px 16px rgba(27,94,32,0.15);
+    }
+    .qr-frame img {
+      width: 260px;
+      height: 260px;
+      display: block;
+    }
+    .qr-hint {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 14px;
+    }
+
+    /* ── Download Section ── */
+    .download-section {
+      background: #fff;
+      border-radius: 24px;
+      padding: 28px 24px;
+      margin: 0 auto 20px;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+    .download-section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1B5E20;
+      margin-bottom: 6px;
+    }
+    .download-section .dl-sub {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+    .download-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #1B5E20, #2E7D32);
+      color: white;
+      text-decoration: none;
+      padding: 18px 32px;
+      border-radius: 14px;
+      font-size: 18px;
+      font-weight: 700;
+      box-shadow: 0 6px 20px rgba(27,94,32,0.45);
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .download-btn:active { transform: scale(0.97); opacity: 0.9; }
+    .file-info {
+      font-size: 12px;
+      color: #bbb;
+      margin-top: 10px;
+    }
+
+    /* ── Steps Section ── */
+    .steps-section {
+      background: #fff;
+      border-radius: 24px;
+      padding: 28px 24px;
+      margin: 0 auto 20px;
+      max-width: 420px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    }
+    .steps-section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1B5E20;
+      margin-bottom: 18px;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .step:last-child { margin-bottom: 0; }
+    .step-num {
+      background: #1B5E20;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .step-text {
+      font-size: 14px;
+      color: #444;
+      line-height: 1.6;
+      padding-top: 3px;
+    }
+    .step-text strong { color: #1B5E20; }
+
+    /* ── Note ── */
+    .note-section {
+      background: #FFF8E1;
+      border-radius: 24px;
+      padding: 20px 24px;
+      margin: 0 auto 20px;
+      max-width: 420px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+      border-left: 5px solid #F9A825;
+    }
+    .note-section strong { color: #E65100; }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <img class="logo" src="data:image/jpeg;base64,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" alt="JBmarks">
+    <h1>JBmarks</h1>
+    <p>Municipal Task Management</p>
+    <div class="version-badge" id="version-badge">Loading…</div>
+  </div>
+
+  <!-- QR Code -->
+  <div class="qr-section">
+    <h2>📱 Scan to Install</h2>
+    <p class="qr-sub">Open your phone camera and point it at the QR code</p>
+    <div class="qr-frame">
+      <img id="qr-img" src="" alt="QR Code">
+    </div>
+    <p class="qr-hint">Works with iPhone and Android camera apps</p>
+  </div>
+
+  <!-- Download Button -->
+  <div class="download-section">
+    <h2>⬇️ Direct Download</h2>
+    <p class="dl-sub">Tap the button below on your Android phone</p>
+    <a class="download-btn" id="download-btn" href="https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk" download="jbmarks.apk">
+      <span>⬇️</span> Download APK
+    </a>
+    <p class="file-info">Android only · ~20 MB</p>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps-section">
+    <h2>🔧 How to Install</h2>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Tap <strong>Download APK</strong> above and wait for it to finish downloading</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Open your <strong>Downloads</strong> folder and tap <strong>jbmarks.apk</strong></div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">If prompted, go to <strong>Settings → Install unknown apps</strong> and allow your browser</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">Tap <strong>Install</strong> and wait for it to complete</div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-text">Open <strong>JBmarks</strong> and log in with your Bitrix24 credentials</div>
+    </div>
+  </div>
+
+  <!-- Note -->
+  <div class="note-section">
+    ⚠️ <strong>Already have JBmarks installed?</strong><br>
+    The app checks for updates automatically every time you open it. You will be prompted to update when a new version is available — no need to reinstall manually.
+  </div>
+
+  <p class="footer">JBmarks © 2026 · T3 Systems</p>
+
+  <script>
+    const INSTALL_URL = "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/install.html";
+    const VERSION_URL = "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/version.json";
+    const APK_URL     = "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk";
+
+    // QR code points to THIS install page (not the APK directly)
+    const encoded = encodeURIComponent(INSTALL_URL);
+    document.getElementById('qr-img').src =
+      'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=' + encoded;
+
+    // Load version info
+    fetch(VERSION_URL)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('version-badge').textContent =
+          'v' + data.version_name + ' (build ' + data.version_code + ')';
+        document.getElementById('download-btn').href = data.apk_url;
+      })
+      .catch(() => {
+        document.getElementById('version-badge').textContent = 'v1.0.2';
+        document.getElementById('download-btn').href = APK_URL;
+      });
+  </script>
+</body>
+</html>

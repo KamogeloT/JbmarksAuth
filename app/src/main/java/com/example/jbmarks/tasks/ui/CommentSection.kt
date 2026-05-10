@@ -30,7 +30,6 @@ import coil.request.ImageRequest
 import com.example.jbmarks.auth.data.TokenManager
 import com.example.jbmarks.network.RetrofitInstance
 import com.example.jbmarks.tasks.domain.Comment
-import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.text.SimpleDateFormat
@@ -44,14 +43,18 @@ fun CommentSection(
     isLoading: Boolean,
     onAddComment: (String) -> Unit,
     onTakePhoto: () -> Unit = {},
-    // Pending photo URI set by TaskDetailScreen after camera returns
     pendingPhotoUri: Uri? = null,
-    onClearPendingPhoto: () -> Unit = {}
+    onClearPendingPhoto: () -> Unit = {},
+    isUploading: Boolean = false  // driven by ViewModel isUploadingFile
 ) {
     var commentText by remember { mutableStateOf("") }
-    var isSubmitting by remember { mutableStateOf(false) }
 
-    // Whether the post button should be enabled
+    // Reset text field when upload completes
+    LaunchedEffect(isUploading) {
+        if (!isUploading) commentText = ""
+    }
+
+    val isSubmitting = isUploading
     val canPost = (commentText.isNotBlank() || pendingPhotoUri != null) && !isSubmitting
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -191,10 +194,8 @@ fun CommentSection(
                     Button(
                         onClick = {
                             if (canPost) {
-                                isSubmitting = true
                                 onAddComment(commentText.trim())
-                                commentText = ""
-                                isSubmitting = false
+                                // commentText reset via LaunchedEffect(isUploading)
                             }
                         },
                         enabled = canPost,
@@ -225,7 +226,6 @@ fun CommentSection(
 @Composable
 fun CommentItem(comment: Comment) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // Extract [DISK FILE ID=xxx] tags from message
     val diskFileIds = remember(comment.text) { extractDiskFileIds(comment.text) }
@@ -236,24 +236,33 @@ fun CommentItem(comment: Comment) {
     }
 
     // Resolve download URLs for each disk file ID
-    val imageUrls = remember(diskFileIds) { mutableStateListOf<String>() }
+    // Use a single state var (not mutableStateListOf) to avoid concurrent write crashes
+    var imageUrls by remember(diskFileIds) { mutableStateOf<List<String>>(emptyList()) }
+    var isLoadingImages by remember(diskFileIds) { mutableStateOf(diskFileIds.isNotEmpty()) }
+
     LaunchedEffect(diskFileIds) {
-        imageUrls.clear()
+        if (diskFileIds.isEmpty()) {
+            isLoadingImages = false
+            return@LaunchedEffect
+        }
+        isLoadingImages = true
+        // Resolve all URLs sequentially — no concurrent writes
+        val resolved = mutableListOf<String>()
         diskFileIds.forEach { fileId ->
-            scope.launch {
-                try {
-                    val api = RetrofitInstance.api
-                    val response = api.getFileDetails(fileId)
-                    if (response.isSuccessful) {
-                        val result = response.body()?.result
-                        val url = result?.getDownloadUrlValue()
-                        if (!url.isNullOrBlank()) imageUrls.add(url)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("CommentItem", "Failed to fetch file $fileId: ${e.message}")
+            try {
+                val api = RetrofitInstance.api
+                val response = api.getFileDetails(fileId)
+                if (response.isSuccessful) {
+                    val url = response.body()?.result?.getDownloadUrlValue()
+                    if (!url.isNullOrBlank()) resolved.add(url)
                 }
+            } catch (e: Exception) {
+                android.util.Log.e("CommentItem", "Failed to fetch file $fileId: ${e.message}")
             }
         }
+        // Single atomic assignment — no race condition
+        imageUrls = resolved
+        isLoadingImages = false
     }
 
     // Full-screen image viewer state
@@ -336,7 +345,7 @@ fun CommentItem(comment: Comment) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-            } else if (diskFileIds.isNotEmpty()) {
+            } else if (isLoadingImages) {
                 // Still loading
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
