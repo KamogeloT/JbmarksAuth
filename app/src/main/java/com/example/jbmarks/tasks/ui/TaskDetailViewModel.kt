@@ -65,6 +65,22 @@ class TaskDetailViewModel(
     private val _timeTrackingError = MutableStateFlow<String?>(null)
     val timeTrackingError: StateFlow<String?> = _timeTrackingError
 
+    // ── Delegation ───────────────────────────────────────────────────────────
+    private val _showDelegateSheet = MutableStateFlow(false)
+    val showDelegateSheet: StateFlow<Boolean> = _showDelegateSheet
+
+    fun showDelegateSheet() { _showDelegateSheet.value = true }
+    fun hideDelegateSheet() { _showDelegateSheet.value = false }
+
+    /**
+     * Called after a successful delegation from [DelegateTaskSheet].
+     * Updates the task in the UI state and closes the sheet.
+     */
+    fun onTaskDelegated(updatedTask: Task) {
+        _uiState.value = TaskDetailUiState.Success(updatedTask)
+        _showDelegateSheet.value = false
+    }
+
     fun clearTimeTrackingError() { _timeTrackingError.value = null }
 
     fun clearUploadError() { _uploadError.value = null }

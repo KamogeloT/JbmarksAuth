@@ -55,3 +55,30 @@ data class BitrixResponse<T>(
     @SerializedName("total")
     val total: Int? = null
 )
+
+/**
+ * A member of a Bitrix24 workgroup, returned by sonet_group.user.get
+ */
+data class WorkgroupMember(
+    @SerializedName("USER_ID")
+    val userId: String,
+
+    @SerializedName("USER_NAME")
+    val name: String? = null,
+
+    @SerializedName("USER_LAST_NAME")
+    val lastName: String? = null,
+
+    @SerializedName("ROLE")
+    val role: String? = null,
+
+    @SerializedName("USER_PHOTO")
+    val photoUrl: String? = null
+) {
+    val fullName: String
+        get() = listOfNotNull(name, lastName).joinToString(" ").ifBlank { "User $userId" }
+
+    /** Active members only — exclude pending invitations (role "K") */
+    val isActive: Boolean
+        get() = role != "K"
+}

@@ -127,6 +127,7 @@ fun TaskDetailScreen(
                     val isLoggingTime by viewModel.isLoggingTime.collectAsState()
                     val timeTrackingError by viewModel.timeTrackingError.collectAsState()
                     val snackbarHostState = remember { SnackbarHostState() }
+                    val showDelegateSheet by viewModel.showDelegateSheet.collectAsState()
 
                     // Show snackbar when upload error occurs
                     LaunchedEffect(uploadError) {
@@ -394,7 +395,9 @@ fun TaskDetailScreen(
                         onStartTask = { viewModel.startTask() },
                         onRenewTask = { viewModel.renewTask() },
                         onDeleteTask = { viewModel.deleteTask(onNavigateBack) },
-                        onResumeTask = { viewModel.resumeTask() },                        onAddComment = { text ->
+                        onResumeTask = { viewModel.resumeTask() },
+                        onDelegateTask = { viewModel.showDelegateSheet() },
+                        onAddComment = { text ->
                             val path = pendingPhotoPath
                             val name = pendingPhotoName
                             if (path != null && name != null) {
@@ -460,6 +463,17 @@ fun TaskDetailScreen(
                         )
                     }
 
+                    // Show delegate sheet when requested
+                    if (showDelegateSheet) {
+                        DelegateTaskSheet(
+                            task = state.task,
+                            onDismiss = { viewModel.hideDelegateSheet() },
+                            onDelegated = { updatedTask ->
+                                viewModel.onTaskDelegated(updatedTask)
+                            }
+                        )
+                    }
+
                     // Snackbar for upload errors
                     SnackbarHost(
                         hostState = snackbarHostState,
@@ -500,6 +514,7 @@ fun TaskDetailContent(
     onStartTask: () -> Unit,
     onRenewTask: () -> Unit,
     onDeleteTask: () -> Unit,
+    onDelegateTask: () -> Unit = {},
     onAddComment: (String) -> Unit,
     onUploadFileClick: () -> Unit,
     onFileClick: (com.example.jbmarks.tasks.domain.TaskFile) -> Unit,
@@ -591,7 +606,8 @@ fun TaskDetailContent(
             onStartTask = onStartTask,
             onRenewTask = onRenewTask,
             onResumeTask = onResumeTask,
-            onDeleteTask = { showDeleteDialog = true }
+            onDeleteTask = { showDeleteDialog = true },
+            onDelegateTask = onDelegateTask
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -944,7 +960,8 @@ fun ActionButtons(
     onStartTask: () -> Unit,
     onRenewTask: () -> Unit,
     onResumeTask: () -> Unit,
-    onDeleteTask: () -> Unit
+    onDeleteTask: () -> Unit,
+    onDelegateTask: () -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -1003,7 +1020,22 @@ fun ActionButtons(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Delegate button — only shown when task belongs to a workgroup
+        if (!task.groupId.isNullOrBlank()) {
+            OutlinedButton(
+                onClick = onDelegateTask,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Person, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Delegate Task")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
         Divider()
         Spacer(modifier = Modifier.height(8.dp))
 

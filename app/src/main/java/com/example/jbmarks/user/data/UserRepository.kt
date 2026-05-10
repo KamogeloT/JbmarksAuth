@@ -68,4 +68,19 @@ class UserRepository(context: Context) {
             Result.failure(e)
         }
     }
+
+    /**
+     * Get active members of a workgroup.
+     * Filters out pending invitations (role = "K") so only real members are returned.
+     * Used for task delegation — you can only delegate to members of the same workgroup.
+     */
+    suspend fun getWorkgroupMembers(groupId: String): Result<List<WorkgroupMember>> {
+        return try {
+            val response = RetrofitInstance.api.getWorkgroupMembers(groupId)
+            val activeMembers = response.result.filter { it.isActive }
+            Result.success(activeMembers)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
