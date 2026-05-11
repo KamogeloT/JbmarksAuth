@@ -350,29 +350,24 @@ fun TaskItem(
         TaskPriority.LOW -> MaterialTheme.colorScheme.surfaceVariant
     }
 
-    // Parse address and phone numbers out of the description.
-    // Convention: lines starting with common address/phone patterns are extracted.
-    val descriptionLines = task.description.lines().map { it.trim() }.filter { it.isNotEmpty() }
-    val phoneRegex = remember { Regex("""[\+\d][\d\s\-\(\)]{6,}""") }
-    val addressKeywords = remember { listOf("street", "st ", "ave", "road", "rd ", "drive", "dr ",
-        "lane", "ln ", "blvd", "close", "crescent", "place", "pl ", "unit", "flat",
-        "no.", "no ", "stand", "erf", "plot", "farm", "section", "ext ", "extension") }
+    // Parse structured fields from the description.
+    // Expected format (each on its own line, case-insensitive):
+    //   Reported by: <name>
+    //   Contact: <number>
+    //   Location: <address>
+    //   Specific issue: <issue text>
+    fun parseField(label: String): String? {
+        val pattern = Regex("(?i)^${Regex.escape(label)}\\s*:?\\s*(.+)")
+        return task.description.lines()
+            .firstNotNullOfOrNull { line -> pattern.find(line.trim())?.groupValues?.get(1)?.trim() }
+            ?.takeIf { it.isNotEmpty() }
+    }
 
-    val phoneLines = descriptionLines.filter { line ->
-        phoneRegex.containsMatchIn(line) &&
-        line.count { it.isDigit() } >= 7
-    }.take(2)
-
-    val addressLines = descriptionLines.filter { line ->
-        val lower = line.lowercase()
-        addressKeywords.any { lower.contains(it) } && line !in phoneLines
-    }.take(2)
-
-    // Remaining description lines (not phone/address) for the preview
-    val previewLines = descriptionLines
-        .filter { it !in phoneLines && it !in addressLines }
-        .take(2)
-        .joinToString(" ")
+    val reportedBy  = parseField("Reported by")
+    val contact     = parseField("Contact")
+    val location    = parseField("Location")
+    val specificIssue = parseField("Specific issue")
+    val assignedTo  = task.responsibleName ?: task.responsibleId?.let { "User $it" }
 
     Row(modifier = Modifier.fillMaxWidth()) {
         // Coloured left-edge status bar
@@ -478,56 +473,12 @@ fun TaskItem(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // ── Info rows ────────────────────────────────────────────
-                // Logged by (created by)
-                val loggedBy = task.createdByName ?: task.createdBy?.let { "User $it" }
-                if (loggedBy != null) {
-                    TaskInfoRow(
-                        icon = Icons.Default.Person,
-                        label = "Logged by",
-                        value = loggedBy
-                    )
-                }
-
-                // Assigned to
-                val assignedTo = task.responsibleName ?: task.responsibleId?.let { "User $it" }
-                if (assignedTo != null) {
-                    TaskInfoRow(
-                        icon = Icons.Default.Person,
-                        label = "Assigned to",
-                        value = assignedTo
-                    )
-                }
-
-                // Address lines extracted from description
-                if (addressLines.isNotEmpty()) {
-                    TaskInfoRow(
-                        icon = Icons.Default.Info,
-                        label = "Address",
-                        value = addressLines.joinToString(", ")
-                    )
-                }
-
-                // Phone numbers extracted from description
-                phoneLines.forEach { phone ->
-                    TaskInfoRow(
-                        icon = Icons.Default.Info,
-                        label = "Contact",
-                        value = phone
-                    )
-                }
-
-                // Description preview (non-address, non-phone lines)
-                if (previewLines.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = previewLines,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // ── Structured info rows ──────────────────────────────────
+                if (reportedBy != null)    TaskInfoRow(Icons.Default.Person,  "Reported by",    reportedBy)
+                if (contact != null)       TaskInfoRow(Icons.Default.Info,    "Contact",        contact)
+                if (location != null)      TaskInfoRow(Icons.Default.Info,    "Location",       location)
+                if (specificIssue != null) TaskInfoRow(Icons.Default.Warning, "Specific issue", specificIssue)
+                if (assignedTo != null)    TaskInfoRow(Icons.Default.Person,  "Assigned to",    assignedTo)
 
                 Spacer(modifier = Modifier.height(10.dp))
 
