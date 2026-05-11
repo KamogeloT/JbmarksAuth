@@ -202,9 +202,9 @@ fun WorkgroupHeader(
             ) {
                 Text(
                     text = "$title ($taskCount)",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -329,6 +329,7 @@ fun TaskItem(
 ) {
     var showStatusDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
     val statusColor = when (task.status) {
         TaskStatus.COMPLETED -> MaterialTheme.colorScheme.tertiaryContainer
         TaskStatus.IN_PROGRESS -> MaterialTheme.colorScheme.primaryContainer
@@ -336,7 +337,6 @@ fun TaskItem(
         TaskStatus.SUPPOSEDLY_COMPLETED -> MaterialTheme.colorScheme.primaryContainer
         TaskStatus.NEW -> MaterialTheme.colorScheme.surfaceVariant
     }
-    
     val statusText = when (task.status) {
         TaskStatus.COMPLETED -> "Completed"
         TaskStatus.IN_PROGRESS -> "In Progress"
@@ -344,18 +344,38 @@ fun TaskItem(
         TaskStatus.SUPPOSEDLY_COMPLETED -> "Awaiting Approval"
         else -> "New"
     }
-    
     val priorityColor = when (task.priority) {
         TaskPriority.HIGH -> MaterialTheme.colorScheme.errorContainer
         TaskPriority.NORMAL -> MaterialTheme.colorScheme.primaryContainer
         TaskPriority.LOW -> MaterialTheme.colorScheme.surfaceVariant
     }
-    
-    // Status Color Bar on Left Edge
-    Row(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        // Colored Status Bar
+
+    // Parse address and phone numbers out of the description.
+    // Convention: lines starting with common address/phone patterns are extracted.
+    val descriptionLines = task.description.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val phoneRegex = remember { Regex("""[\+\d][\d\s\-\(\)]{6,}""") }
+    val addressKeywords = remember { listOf("street", "st ", "ave", "road", "rd ", "drive", "dr ",
+        "lane", "ln ", "blvd", "close", "crescent", "place", "pl ", "unit", "flat",
+        "no.", "no ", "stand", "erf", "plot", "farm", "section", "ext ", "extension") }
+
+    val phoneLines = descriptionLines.filter { line ->
+        phoneRegex.containsMatchIn(line) &&
+        line.count { it.isDigit() } >= 7
+    }.take(2)
+
+    val addressLines = descriptionLines.filter { line ->
+        val lower = line.lowercase()
+        addressKeywords.any { lower.contains(it) } && line !in phoneLines
+    }.take(2)
+
+    // Remaining description lines (not phone/address) for the preview
+    val previewLines = descriptionLines
+        .filter { it !in phoneLines && it !in addressLines }
+        .take(2)
+        .joinToString(" ")
+
+    Row(modifier = Modifier.fillMaxWidth()) {
+        // Coloured left-edge status bar
         Box(
             modifier = Modifier
                 .width(6.dp)
@@ -363,289 +383,260 @@ fun TaskItem(
                 .background(
                     color = statusColor,
                     shape = RoundedCornerShape(
-                        topStart = 20.dp,
-                        bottomStart = 20.dp,
-                        topEnd = 0.dp,
-                        bottomEnd = 0.dp
+                        topStart = 20.dp, bottomStart = 20.dp,
+                        topEnd = 0.dp, bottomEnd = 0.dp
                     )
                 )
         )
-    
-    Card(
-        modifier = Modifier
+
+        Card(
+            modifier = Modifier
                 .weight(1f)
                 .padding(horizontal = 4.dp, vertical = 6.dp),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 4.dp,
-            pressedElevation = 8.dp
-        ),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(20.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 8.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            // Top Row: Status Badge and Menu
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(16.dp)
             ) {
-                AssistChip(
-                    onClick = { /* Status is informational */ },
-                    label = { 
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        ) 
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = statusColor,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                )
-                
-                // Menu Button for Status Change
-                if (onStatusChange != null) {
-                    Box {
-                        IconButton(
-                            onClick = { showMenu = true },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "More options",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Change Status") },
-                                onClick = {
-                                    showMenu = false
-                                    showStatusDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Info, contentDescription = null)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Main Content Row: Status Icon + Title/Description
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                // Status Indicator Circle with Icon
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            color = statusColor,
-                            shape = RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when (task.status) {
-                            TaskStatus.COMPLETED -> Icons.Default.CheckCircle
-                            TaskStatus.IN_PROGRESS -> Icons.Default.PlayArrow
-                            TaskStatus.DEFERRED -> Icons.Default.DateRange
-                            TaskStatus.NEW -> Icons.Default.Star
-                            TaskStatus.SUPPOSEDLY_COMPLETED -> Icons.Default.CheckCircle
-                        },
-                        contentDescription = "Status",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // Title and Description Column
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    // Title - Always show, even if empty
-                    Text(
-                        text = task.title.ifEmpty { "No Title" },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        minLines = 1
-                    )
-                
-                    // Description - Always show
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = task.description.ifEmpty { "No description" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        minLines = 1
-                    )
-                
-                    Spacer(modifier = Modifier.height(8.dp))
-                
-                    // Assigned To
-                    if (task.responsibleName != null || task.responsibleId != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Assigned to",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Assigned to: ${task.responsibleName ?: "User ${task.responsibleId}"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                
-                    // Created By
-                    if (task.createdByName != null || task.createdBy != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = "Created by",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Created by: ${task.createdByName ?: "User ${task.createdBy}"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Priority, Deadline Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Priority Badge
-                AssistChip(
-                    onClick = { /* Priority is informational */ },
-                    label = { Text(task.priority.displayName) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = priorityColor,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                )
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                // Deadline
-                if (task.deadline != null) {
-                    val formattedDeadline = task.getFormattedDeadline() ?: task.deadline
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = "Deadline",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = formattedDeadline,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-            
-            // Comments count if available
-            if (task.commentsCount > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
+                // ── Top row: Ref # · Status chip · Menu ──────────────────
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Comments",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    // Reference number — prominent, muted colour
                     Text(
-                        text = "${task.commentsCount} comment${if (task.commentsCount != 1) "s" else ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Ref #${task.id}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    if (task.newCommentsCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Badge {
-                            Text("${task.newCommentsCount} new")
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    text = statusText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = statusColor,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        if (onStatusChange != null) {
+                            Box {
+                                IconButton(
+                                    onClick = { showMenu = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "More options",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Change Status") },
+                                        onClick = { showMenu = false; showStatusDialog = true },
+                                        leadingIcon = { Icon(Icons.Default.Info, null) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // ── Title ────────────────────────────────────────────────
+                Text(
+                    text = task.title.ifEmpty { "No Title" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // ── Info rows ────────────────────────────────────────────
+                // Logged by (created by)
+                val loggedBy = task.createdByName ?: task.createdBy?.let { "User $it" }
+                if (loggedBy != null) {
+                    TaskInfoRow(
+                        icon = Icons.Default.Person,
+                        label = "Logged by",
+                        value = loggedBy
+                    )
+                }
+
+                // Assigned to
+                val assignedTo = task.responsibleName ?: task.responsibleId?.let { "User $it" }
+                if (assignedTo != null) {
+                    TaskInfoRow(
+                        icon = Icons.Default.Person,
+                        label = "Assigned to",
+                        value = assignedTo
+                    )
+                }
+
+                // Address lines extracted from description
+                if (addressLines.isNotEmpty()) {
+                    TaskInfoRow(
+                        icon = Icons.Default.Info,
+                        label = "Address",
+                        value = addressLines.joinToString(", ")
+                    )
+                }
+
+                // Phone numbers extracted from description
+                phoneLines.forEach { phone ->
+                    TaskInfoRow(
+                        icon = Icons.Default.Info,
+                        label = "Contact",
+                        value = phone
+                    )
+                }
+
+                // Description preview (non-address, non-phone lines)
+                if (previewLines.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = previewLines,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // ── Bottom row: Priority · Deadline · Comments ───────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(task.priority.displayName, style = MaterialTheme.typography.labelSmall) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = priorityColor,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    if (task.deadline != null) {
+                        val formattedDeadline = task.getFormattedDeadline() ?: task.deadline
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.DateRange,
+                                contentDescription = "Deadline",
+                                modifier = Modifier.size(14.dp),
+                                tint = if (task.isOverdue()) MaterialTheme.colorScheme.error
+                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = formattedDeadline,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (task.isOverdue()) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (task.isOverdue()) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+
+                    if (task.commentsCount > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "Comments",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "${task.commentsCount}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (task.newCommentsCount > 0) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Badge { Text("${task.newCommentsCount}") }
+                            }
                         }
                     }
                 }
             }
         }
     }
-    }
-    
-    // Status Change Dialog
+
     if (showStatusDialog && onStatusChange != null) {
         StatusChangeDialog(
             currentStatus = task.status,
-            onStatusSelected = { newStatus ->
-                onStatusChange(newStatus)
-            },
+            onStatusSelected = { newStatus -> onStatusChange(newStatus) },
             onDismiss = { showStatusDialog = false }
+        )
+    }
+}
+
+/** Compact single-line info row used inside a task tile. */
+@Composable
+private fun TaskInfoRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "$label: ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
