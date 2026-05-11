@@ -1,7 +1,7 @@
 {
-  "version_code": 5,
-  "version_name": "1.0.2",
+  "version_code": 6,
+  "version_name": "1.0.3",
   "apk_url": "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk",
-  "release_notes": "Fix: compress photos before upload to fix HTTP 413 Request Entity Too Large error. Clean error messages without HTML tags.",
-  "force_update": true
+  "release_notes": "Task delegation to workgroup members. Enriched task tiles with Ref #, Reported by, Contact, Location, Specific issue and Assigned to fields. Workgroup heading made smaller for cleaner layout.",
+  "force_update": false
 }
