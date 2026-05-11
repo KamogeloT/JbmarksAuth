@@ -160,11 +160,13 @@ interface BitrixApi {
     /**
      * Get members of a specific workgroup
      * Bitrix24 API: sonet_group.user.get
-     * Returns users who are active members of the group (excludes pending invitations)
+     * Requires POST with body: {"ID": <groupId>}
+     * Returns: [{"USER_ID": "123", "ROLE": "A|E|K"}, ...]
+     * Roles: A=owner, E=moderator, K=participant (all are active members)
      */
-    @GET("sonet_group.user.get.json")
+    @POST("sonet_group.user.get.json")
     suspend fun getWorkgroupMembers(
-        @Query("GROUP_ID") groupId: String
+        @Body request: Map<String, String>
     ): BitrixResponse<List<WorkgroupMember>>
 
     /**
