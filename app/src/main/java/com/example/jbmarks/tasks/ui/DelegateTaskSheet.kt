@@ -257,6 +257,12 @@ private fun MemberRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
+                } else if (!member.roleDisplayName.isNullOrBlank()) {
+                    Text(
+                        text = member.roleDisplayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
