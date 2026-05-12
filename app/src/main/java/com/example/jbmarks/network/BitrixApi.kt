@@ -36,6 +36,7 @@ import com.example.jbmarks.tasks.data.UpdateElapsedTimeRequest
 import com.example.jbmarks.user.data.BitrixResponse
 import com.example.jbmarks.user.data.User
 import com.example.jbmarks.user.data.Workgroup
+import com.example.jbmarks.user.data.WorkgroupMember
 import retrofit2.Response
 import retrofit2.http.*
 import com.example.jbmarks.tasks.data.FileUploadRequest
@@ -155,6 +156,18 @@ interface BitrixApi {
     
     @GET("sonet_group.user.groups.json")
     suspend fun getUserWorkgroups(): BitrixResponse<List<Workgroup>>
+
+    /**
+     * Get members of a specific workgroup
+     * Bitrix24 API: sonet_group.user.get
+     * Requires POST with body: {"ID": <groupId>}
+     * Returns: [{"USER_ID": "123", "ROLE": "A|E|K"}, ...]
+     * Roles: A=owner, E=moderator, K=participant (all are active members)
+     */
+    @POST("sonet_group.user.get.json")
+    suspend fun getWorkgroupMembers(
+        @Body request: Map<String, String>
+    ): BitrixResponse<List<WorkgroupMember>>
 
     /**
      * Accept a workgroup invitation

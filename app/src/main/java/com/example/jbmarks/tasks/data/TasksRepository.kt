@@ -282,6 +282,53 @@ class TasksRepository(private val context: Context? = null) {
     }
 
     /**
+     * Delegate a task to a different user by updating the RESPONSIBLE_ID.
+     * The new responsible user must be a member of the task's workgroup.
+     * Validation is enforced in the ViewModel before calling this method.
+     *
+     * @param taskId         ID of the task to delegate
+     * @param taskTitle      Current title of the task (required by the update API)
+     * @param newResponsibleId  User ID of the new responsible person
+     */
+    suspend fun delegateTask(
+        taskId: String,
+        taskTitle: String,
+        newResponsibleId: String
+    ): Result<Task> {
+        return try {
+            val request = TaskCreateRequest(
+                fields = TaskFields(
+                    title = taskTitle,
+                    description = null,
+                    deadline = null,
+                    priority = null,
+                    responsibleId = newResponsibleId,
+                    groupId = null,
+                    parentId = null,
+                    tags = null,
+                    ufTaskWebdavFiles = null
+                )
+            )
+            val response = executeApiCall {
+                api.updateTask(taskId, request)
+            }
+            if (response.isSuccessful && response.body()?.result?.task != null) {
+                val taskDto = response.body()!!.result!!.task!!
+                val task = mapDtoToDomain(taskDto)
+                Log.d(TAG, "Task $taskId delegated to user $newResponsibleId")
+                Result.success(task)
+            } else {
+                val error = response.errorBody()?.string() ?: "Unknown error"
+                Log.e(TAG, "Failed to delegate task: $error")
+                Result.failure(Exception("Failed to delegate task: $error"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error delegating task", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Delete a task
      */
     suspend fun deleteTask(taskId: String): Result<Boolean> {

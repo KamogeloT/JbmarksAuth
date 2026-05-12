@@ -68,4 +68,36 @@ class UserRepository(context: Context) {
             Result.failure(e)
         }
     }
+
+    /**
+     * Get active members of a workgroup, enriched with user names.
+     * Step 1: sonet_group.user.get returns USER_ID + ROLE for all active members.
+     * Step 2: user.get is called for each member to resolve their display name.
+     * All roles (A=owner, E=moderator, K=participant) are active members.
+     */
+    suspend fun getWorkgroupMembers(groupId: String): Result<List<WorkgroupMember>> {
+        return try {
+            val response = RetrofitInstance.api.getWorkgroupMembers(mapOf("ID" to groupId))
+            val members = response.result
+
+            // Enrich each member with their display name via user.get
+            members.forEach { member ->
+                try {
+                    val userResponse = RetrofitInstance.api.getUser(member.userId)
+                    val user = userResponse.result?.firstOrNull()
+                    if (user != null) {
+                        member.name = user.name
+                        member.lastName = user.lastName
+                        member.photoUrl = user.photoUrl
+                    }
+                } catch (e: Exception) {
+                    // Name stays blank — fullName falls back to "User {id}"
+                }
+            }
+
+            Result.success(members)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
