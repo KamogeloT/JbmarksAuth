@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_18"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = ["npm install --production"]
@@ -9,3 +9,4 @@ cmds = []
 
 [start]
 cmd = "node server-simple.js"
+
