@@ -986,6 +986,7 @@ Reference Number: ${faultReport.refNumber}
 Reported By: ${faultReport.fullName}
 Contact: ${faultReport.contactNumber}
 Email: ${faultReport.email || 'Not provided'}
+Municipal Account: ${faultReport.municipalAccount || 'Not provided'}
 ${areaInfo}Location: ${faultReport.address}
 
 Issue Type: ${faultReport.formType}

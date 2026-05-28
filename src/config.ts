@@ -123,7 +123,7 @@ export const defaultConfig: AppConfig = {
     },
   },
   app: {
-    name: 'SDINMOTION',
+    name: 'JBMarks Community App',
     version: '1.7.9',
     versionCode: 19,
     supportEmail: 'admin@t3ssystems.co.za',

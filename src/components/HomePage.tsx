@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { App } from '@capacitor/app';
+import React from 'react';
 import { WaterIcon, PowerIcon, RoadIcon, TrashIcon, PhoneIcon, MailIcon, ListIcon, PlusIcon } from './icons';
 import { config } from '../config';
 

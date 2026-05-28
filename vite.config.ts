@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Municipal Fault Reporting',
-        short_name: 'FaultReport',
-        description: 'Report municipal issues quickly and easily',
+        name: 'JBMarks Community App',
+        short_name: 'JBMarks',
+        description: 'Report municipal issues to JB Marks Municipality quickly and easily',
         theme_color: '#1e3a8a',
         background_color: '#ffffff',
         display: 'standalone',

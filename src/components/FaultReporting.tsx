@@ -422,6 +422,7 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
     fullName: '',
     contactNumber: '',
     email: '',
+    municipalAccount: '',
     specificField: '',
     area: '',
     city: '',
@@ -439,6 +440,7 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
         fullName: draft.fullName || '',
         contactNumber: draft.contactNumber || '',
         email: draft.email || '',
+        municipalAccount: (draft as any).municipalAccount || '',
         specificField: draft.specificField || '',
         area: draft.area || '',
         city: draft.city || '',
@@ -457,7 +459,8 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
           city: formData.city as 'Ventersdorp' | 'Potchefstroom' | undefined,
           address,
           formType,
-        });
+          municipalAccount: formData.municipalAccount,
+        } as any);
       }
     }, 1000);
 
@@ -491,6 +494,7 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
       fullName: formData.fullName,
       contactNumber: formData.contactNumber,
       email: formData.email,
+      municipalAccount: formData.municipalAccount || undefined,
       formType,
       specificField: formData.specificField,
       area: undefined, // Area is hidden for now
@@ -595,6 +599,15 @@ const FaultForm: React.FC<FaultFormProps> = ({ formType, onSuccess }) => {
         value={formData.email}
         onChange={handleChange}
         placeholder="you@example.com"
+      />
+
+      <FormField
+        id="municipalAccount"
+        label="Municipal Account Number"
+        required={false}
+        value={formData.municipalAccount}
+        onChange={handleChange}
+        placeholder="e.g., ACC-123456"
       />
 
       <SelectField

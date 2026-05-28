@@ -6,6 +6,7 @@ export interface FaultReport {
   fullName: string;
   contactNumber: string;
   email?: string;
+  municipalAccount?: string;
   formType: 'Water' | 'Electricity' | 'Roads' | 'Waste';
   specificField: string;
   area?: 'Township' | 'Town'; // Area type selection
