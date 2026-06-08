@@ -1,7 +1,7 @@
 {
-  "version_code": 7,
-  "version_name": "1.0.4",
+  "version_code": 8,
+  "version_name": "1.0.5",
   "apk_url": "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk",
-  "release_notes": "Task delegation to workgroup members. Enriched task tiles with Ref #, Reported by, Contact, Location, Specific issue and Assigned to. Workgroup heading made smaller. Fix for workgroup members 400 error. Deployment procedure saved.",
-  "force_update": false
+  "release_notes": "Push notifications now working. FCM token registration fixed to send actual user ID. First-run notification spam fixed. Polling interval reduced to 5 minutes.",
+  "force_update": true
 }
