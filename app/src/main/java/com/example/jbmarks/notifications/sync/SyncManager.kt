@@ -21,7 +21,7 @@ class SyncManager(private val context: Context) {
     private var isRunning = false
     
     companion object {
-        private const val SYNC_INTERVAL_MS = 30_000L // 30 seconds
+        private const val SYNC_INTERVAL_MS = 300_000L // 5 minutes
     }
     
     /**
