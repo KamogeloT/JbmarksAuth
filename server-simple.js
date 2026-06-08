@@ -9,6 +9,7 @@ const { URL } = require('url');
 const { Pool } = require('pg');
 const apn = require('apn');
 const fs = require('fs');
+const admin = require('firebase-admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,15 +40,27 @@ async function setupDatabase() {
             CREATE TABLE IF NOT EXISTS push_tokens (
                 id SERIAL PRIMARY KEY,
                 user_id VARCHAR(255) NOT NULL,
-                apns_token TEXT NOT NULL,
+                apns_token TEXT,
+                fcm_token TEXT,
                 platform VARCHAR(10) DEFAULT 'ios',
                 portal_url VARCHAR(500),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, apns_token)
+                UNIQUE(user_id, apns_token),
+                UNIQUE(user_id, fcm_token)
             );
         `);
         console.log('✅ push_tokens table created/verified');
+        
+        // Add fcm_token column if it doesn't exist (migration for existing deployments)
+        await pool.query(`
+            ALTER TABLE push_tokens ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+        `).catch(() => { /* column may already exist */ });
+        
+        // Add unique constraint for fcm_token if not exists
+        await pool.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_user_fcm_token ON push_tokens(user_id, fcm_token) WHERE fcm_token IS NOT NULL;
+        `).catch(() => { /* index may already exist */ });
         
         // Create index if it doesn't exist
         await pool.query(`
@@ -109,6 +122,33 @@ function initAPNs() {
 // Initialize APNs on startup
 initAPNs();
 
+// ============================================
+// FIREBASE ADMIN (FCM) SETUP
+// ============================================
+let firebaseInitialized = false;
+
+function initFirebase() {
+    try {
+        const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+        if (!credentialsJson) {
+            console.warn('⚠️ GOOGLE_APPLICATION_CREDENTIALS_JSON not set - FCM push notifications disabled');
+            return;
+        }
+        
+        const serviceAccount = JSON.parse(credentialsJson);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        
+        firebaseInitialized = true;
+        console.log('✅ Firebase Admin SDK initialized (FCM ready)');
+    } catch (error) {
+        console.error('❌ Failed to initialize Firebase Admin:', error.message);
+    }
+}
+
+initFirebase();
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -127,11 +167,15 @@ app.use((req, res, next) => {
 // Health check
 app.get('/health', (req, res) => {
     const dbStatus = pool ? 'connected' : 'not configured';
+    const apnsStatus = apnProvider ? 'ready' : 'not configured';
+    const fcmStatus = firebaseInitialized ? 'ready' : 'not configured';
     res.json({ 
         status: 'healthy', 
         service: 'jbmarks-token-exchange',
-        version: '1.0.0',
+        version: '1.1.0',
         database: dbStatus,
+        apns: apnsStatus,
+        fcm: fcmStatus,
         timestamp: new Date().toISOString() 
     });
 });
@@ -334,17 +378,13 @@ app.post('/api/exchangetoken', async (req, res) => {
 
 /**
  * POST /api/push/register-token
- * Register APNs token from iOS device
+ * Register push token from iOS (APNs) or Android (FCM) device
+ * Accepts: { apns_token, fcm_token, platform, portal_url, user_id }
  */
 app.post('/api/push/register-token', async (req, res) => {
     try {
-        // Database is optional - if not configured, log warning but return success
-        // This allows the app to continue working even if push notifications aren't fully set up
         if (!pool) {
             console.warn('⚠️ Push token registration attempted but database not configured');
-            console.warn('   Token registration skipped - app will continue to work');
-            // Return success so the app doesn't retry unnecessarily
-            // The token will be registered when database is available
             return res.json({ 
                 success: true, 
                 message: 'Token registration skipped (database not configured)',
@@ -352,36 +392,47 @@ app.post('/api/push/register-token', async (req, res) => {
             });
         }
         
-        const { apns_token, platform, portal_url, user_id } = req.body;
+        const { apns_token, fcm_token, platform, portal_url, user_id } = req.body;
+        const token = apns_token || fcm_token;
         
-        if (!apns_token || !user_id) {
+        if (!token || !user_id) {
             return res.status(400).json({ 
-                error: 'Missing required fields: apns_token and user_id' 
+                error: 'Missing required fields: (apns_token or fcm_token) and user_id' 
             });
         }
         
-        console.log(`📱 Registering push token for user: ${user_id}`);
+        const detectedPlatform = platform || (fcm_token ? 'android' : 'ios');
+        console.log(`📱 Registering ${detectedPlatform} push token for user: ${user_id}`);
         
-        const query = `
-            INSERT INTO push_tokens (user_id, apns_token, platform, portal_url, updated_at)
-            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-            ON CONFLICT (user_id, apns_token) 
-            DO UPDATE SET updated_at = CURRENT_TIMESTAMP, portal_url = $4
-            RETURNING id;
-        `;
+        let query, params;
+        if (detectedPlatform === 'android') {
+            query = `
+                INSERT INTO push_tokens (user_id, fcm_token, platform, portal_url, updated_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, fcm_token) 
+                DO UPDATE SET updated_at = CURRENT_TIMESTAMP, portal_url = $4
+                RETURNING id;
+            `;
+            params = [user_id, fcm_token || token, detectedPlatform, portal_url || null];
+        } else {
+            query = `
+                INSERT INTO push_tokens (user_id, apns_token, platform, portal_url, updated_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, apns_token) 
+                DO UPDATE SET updated_at = CURRENT_TIMESTAMP, portal_url = $4
+                RETURNING id;
+            `;
+            params = [user_id, apns_token || token, detectedPlatform, portal_url || null];
+        }
         
-        const result = await pool.query(query, [
-            user_id,
-            apns_token,
-            platform || 'ios',
-            portal_url || null
-        ]);
+        const result = await pool.query(query, params);
         
-        console.log(`✅ Token registered successfully for user: ${user_id}`);
+        console.log(`✅ ${detectedPlatform} token registered successfully for user: ${user_id}`);
         
         res.json({ 
             success: true, 
             message: 'Token registered successfully',
+            platform: detectedPlatform,
             id: result.rows[0].id
         });
         
@@ -568,21 +619,31 @@ app.post('/api/bitrix/webhook', async (req, res) => {
         if (notificationData) {
             console.log('📤 Sending push notification:', notificationData);
             
-            // Call internal push send function
-            if (!pool || !apnProvider) {
-                console.warn('⚠️ Push notifications not configured - skipping');
+            if (!pool) {
+                console.warn('⚠️ Database not configured - skipping push');
                 return res.json({ 
                     success: true, 
-                    message: 'Webhook received but push notifications not configured' 
+                    message: 'Webhook received but database not configured' 
                 });
             }
             
-            // Get user's APNs token(s)
-            const query = 'SELECT apns_token FROM push_tokens WHERE user_id = $1';
+            // Get ALL tokens for this user (both APNs and FCM)
+            const query = 'SELECT apns_token, fcm_token, platform FROM push_tokens WHERE user_id = $1';
             const result = await pool.query(query, [notificationData.user_id]);
             
-            if (result.rows.length > 0) {
-                // Create notification
+            if (result.rows.length === 0) {
+                console.log(`⚠️ No push token found for user: ${notificationData.user_id}`);
+                return res.json({ success: true, message: 'No tokens for user' });
+            }
+            
+            let apnsSent = 0, apnsFailed = 0, fcmSent = 0, fcmFailed = 0;
+            
+            // ── Send via APNs (iOS) ──────────────────────────────────
+            const apnsTokens = result.rows
+                .filter(r => r.apns_token && r.platform !== 'android')
+                .map(r => r.apns_token);
+            
+            if (apnsTokens.length > 0 && apnProvider) {
                 const notification = new apn.Notification();
                 notification.alert = { 
                     title: notificationData.title, 
@@ -594,22 +655,67 @@ app.post('/api/bitrix/webhook', async (req, res) => {
                 notification.payload = notificationData.data || {};
                 notification.expiry = Math.floor(Date.now() / 1000) + 3600;
                 
-                // Send to all tokens for this user
-                const tokens = result.rows.map(row => row.apns_token);
-                const response = await apnProvider.send(notification, tokens);
-                
-                console.log(`✅ Push notification sent: ${response.sent.length} successful, ${response.failed.length} failed`);
+                const apnsResponse = await apnProvider.send(notification, apnsTokens);
+                apnsSent = apnsResponse.sent.length;
+                apnsFailed = apnsResponse.failed.length;
                 
                 // Clean up invalid tokens
-                response.failed.forEach(failure => {
+                apnsResponse.failed.forEach(failure => {
                     if (failure.error === 'BadDeviceToken' || failure.error === 'Unregistered') {
                         pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [failure.device])
-                            .catch(err => console.error('Error deleting token:', err));
+                            .catch(err => console.error('Error deleting APNs token:', err));
                     }
                 });
-            } else {
-                console.log(`⚠️ No push token found for user: ${notificationData.user_id}`);
             }
+            
+            // ── Send via FCM (Android) ───────────────────────────────
+            const fcmTokens = result.rows
+                .filter(r => r.fcm_token && (r.platform === 'android' || !r.apns_token))
+                .map(r => r.fcm_token);
+            
+            if (fcmTokens.length > 0 && firebaseInitialized) {
+                for (const fcmToken of fcmTokens) {
+                    try {
+                        const message = {
+                            token: fcmToken,
+                            notification: {
+                                title: notificationData.title,
+                                body: notificationData.body
+                            },
+                            data: {
+                                ...(notificationData.data || {}),
+                                // Ensure all values are strings (FCM requirement)
+                                type: String(notificationData.data?.notification_type || notificationData.data?.type || 'GENERAL'),
+                                related_id: String(notificationData.data?.task_id || notificationData.data?.dialog_id || ''),
+                                title: notificationData.title,
+                                message: notificationData.body
+                            },
+                            android: {
+                                priority: 'high',
+                                notification: {
+                                    sound: 'default',
+                                    channelId: 'tasks'
+                                }
+                            }
+                        };
+                        
+                        await admin.messaging().send(message);
+                        fcmSent++;
+                        console.log(`✅ FCM sent to: ${fcmToken.substring(0, 20)}...`);
+                    } catch (fcmError) {
+                        fcmFailed++;
+                        console.error(`❌ FCM failed: ${fcmError.message}`);
+                        // Remove invalid tokens
+                        if (fcmError.code === 'messaging/registration-token-not-registered' ||
+                            fcmError.code === 'messaging/invalid-registration-token') {
+                            pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [fcmToken])
+                                .catch(err => console.error('Error deleting FCM token:', err));
+                        }
+                    }
+                }
+            }
+            
+            console.log(`📊 Push results: APNs ${apnsSent}/${apnsSent+apnsFailed}, FCM ${fcmSent}/${fcmSent+fcmFailed}`);
         } else {
             console.log('ℹ️ No notification data generated for this event type');
         }
