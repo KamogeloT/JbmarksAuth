@@ -76,19 +76,27 @@ class FCMTokenManager(private val context: Context) {
     
     
     /**
-     * Register with Railway backend endpoint (match iOS)
-     * Uses Railway push notification registration endpoint
+     * Register with Railway backend endpoint
+     * Sends FCM token + user_id so the server can route push notifications.
      */
     private suspend fun registerWithBackend(token: String, accessToken: String) {
         try {
             val portalUrl = tokenManager.getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
-            val userId = tokenManager.getAccessToken()?.let { 
-                // Extract user ID from token or get from user repository
-                // For now, we'll use a placeholder - you may need to get actual user ID
+            
+            // Get current user ID from Bitrix24
+            val userId = try {
+                val userRepository = com.example.jbmarks.user.data.UserRepository(context)
+                userRepository.getCurrentUser().getOrNull()?.id
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not fetch user ID for token registration", e)
                 null
             }
             
-            // Use Railway endpoint (match iOS)
+            if (userId == null) {
+                Log.w(TAG, "Cannot register FCM token - user ID not available")
+                return
+            }
+            
             val railwayUrl = "https://jbmarksauth-production.up.railway.app/api/push/register-token"
             val url = URL(railwayUrl)
             val connection = url.openConnection() as HttpURLConnection
@@ -99,21 +107,22 @@ class FCMTokenManager(private val context: Context) {
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
             
-            // Match iOS payload structure
             val json = """
                 {
                     "fcm_token": "$token",
                     "platform": "android",
                     "portal_url": "$portalUrl",
-                    "user_id": "${userId ?: ""}"
+                    "user_id": "$userId"
                 }
             """.trimIndent()
+            
+            Log.d(TAG, "Registering FCM token for user $userId")
             
             connection.outputStream.use { it.write(json.toByteArray()) }
             
             val responseCode = connection.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_CREATED) {
-                Log.d(TAG, "✅ Token registered successfully with Railway backend")
+                Log.d(TAG, "✅ Token registered successfully with Railway backend for user $userId")
                 sharedPreferences.edit()
                     .putBoolean(KEY_TOKEN_REGISTERED, true)
                     .apply()
