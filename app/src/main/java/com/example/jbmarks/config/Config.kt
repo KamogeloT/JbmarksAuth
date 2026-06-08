@@ -25,7 +25,7 @@ object Config {
     
     // HTTPS Redirect URI - must match what's configured in Bitrix24 Local Application
     // This is the intermediate redirect server URL (HTTPS)
-    const val BITRIX_REDIRECT_URI_HTTPS = "https://jbmarks-oauth-redirect-e9deetemhta3caef.southafricanorth-01.azurewebsites.net/oauth_redirect"
+    const val BITRIX_REDIRECT_URI_HTTPS = "https://jbmarks-oauth-redirect-prod.azurewebsites.net/oauth_redirect"
     
     // Deep link URI - used by the app to receive the final redirect
     // This is what the intermediate server redirects to
@@ -44,15 +44,13 @@ object Config {
     const val BITRIX_OAUTH_TOKEN_SERVER = "https://oauth.bitrix.info"
     
     // BFF API URL for token exchange (for Bitrix24 Box/on-prem)
-    // Backend-for-Frontend API hosted on Azure App Service
-    // Note: Update this URL after deploying the BFF API
-    const val BFF_API_TOKEN_EXCHANGE_URL = "https://jbmarks-bff-api.azurewebsites.net/api/auth/bitrix/exchange"
+    // Backend-for-Frontend API hosted on Azure App Service (client's Azure)
+    const val BFF_API_TOKEN_EXCHANGE_URL = "https://jbmarks-api-prod.azurewebsites.net/api/auth/bitrix/exchange"
     
-    // Azure Function URL for token exchange (FIXED v2 - no function key needed, uses oauth_code parameter)
-    const val AZURE_FUNCTION_TOKEN_EXCHANGE_URL = "https://jbmarks-token-exchange-v2.azurewebsites.net/api/exchangetoken"
+    // Token exchange endpoint on client's Azure App Service
+    const val AZURE_FUNCTION_TOKEN_EXCHANGE_URL = "https://jbmarks-api-prod.azurewebsites.net/api/exchangetoken"
     
-    // NEW: Simple Express Token Exchange Server (Railway deployment)
-    // Deployed to Railway - no auth key required, works reliably!
+    // Railway Token Exchange Server (fallback)
     const val TOKEN_EXCHANGE_URL = "https://jbmarksauth-production.up.railway.app/api/exchangetoken"
     
     // OAuth Scopes - permissions requested from Bitrix24
