@@ -19,8 +19,8 @@ android {
         applicationId = "com.example.jbmarks"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.4"
+        versionCode = 9
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

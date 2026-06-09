@@ -35,22 +35,42 @@ class UpdateSyncService(private val context: Context) {
         private const val KEY_LAST_TASK_SYNC = "last_task_sync"
         private const val KEY_LAST_FEED_POST_ID = "last_feed_post_id"
         private const val KEY_LAST_CHAT_MESSAGE_ID = "last_chat_message_id"
+        private const val KEY_INITIAL_SYNC_DONE = "initial_sync_done"
+    }
+
+    /** True after the first full sync seeds the "last seen" markers without notifying. */
+    private val isInitialSyncDone: Boolean
+        get() = prefs.getBoolean(KEY_INITIAL_SYNC_DONE, false)
+
+    private fun markInitialSyncDone() {
+        prefs.edit().putBoolean(KEY_INITIAL_SYNC_DONE, true).apply()
     }
     
     /**
-     * Sync all modules and check for updates
+     * Sync all modules and check for updates.
+     * On the very first run, seeds "last seen" markers without firing notifications
+     * to avoid spamming the user with existing data.
      */
     fun syncAll() {
         scope.launch {
             try {
-                Log.d(TAG, "Starting sync for all modules...")
+                val silent = !isInitialSyncDone
+                if (silent) {
+                    Log.d(TAG, "First sync — seeding markers silently (no notifications)")
+                } else {
+                    Log.d(TAG, "Starting sync for all modules...")
+                }
                 
-                // Sync in parallel
-                syncFeed()
-                syncChat()
-                syncTasks()
+                syncFeed(silent)
+                syncChat(silent)
+                syncTasks(silent)
                 
-                Log.d(TAG, "Sync completed")
+                if (silent) {
+                    markInitialSyncDone()
+                    Log.d(TAG, "Initial sync seeding complete")
+                } else {
+                    Log.d(TAG, "Sync completed")
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during sync", e)
             }
@@ -60,7 +80,7 @@ class UpdateSyncService(private val context: Context) {
     /**
      * Sync feed and check for new posts
      */
-    private suspend fun syncFeed() {
+    private suspend fun syncFeed(silent: Boolean = false) {
         try {
             val repository = ActivityFeedRepository()
             val currentPosts = repository.getFeed()
@@ -69,31 +89,24 @@ class UpdateSyncService(private val context: Context) {
                 val lastPostId = prefs.getString(KEY_LAST_FEED_POST_ID, null)
                 val latestPost = currentPosts.firstOrNull()
                 
-                // Check if there's a new post
                 if (latestPost != null && latestPost.id != lastPostId) {
-                    // New post detected - get author name if possible
-                    var authorName = "Someone"
-                    try {
-                        val userRepository = UserRepository(context)
-                        val authorResult = userRepository.getCurrentUser() // Try to get user info
-                        // For now, use authorId - could enhance to fetch actual name
-                        authorName = "User ${latestPost.authorId}"
-                    } catch (e: Exception) {
-                        // Use default
+                    if (!silent) {
+                        var authorName = "Someone"
+                        try {
+                            val userRepository = UserRepository(context)
+                            authorName = "User ${latestPost.authorId}"
+                        } catch (e: Exception) { }
+                        
+                        val notification = notificationRepository.createFeedPostNotification(
+                            postId = latestPost.id,
+                            authorName = authorName,
+                            postTitle = latestPost.title
+                        )
+                        notificationRepository.addNotification(notification)
+                        notificationService.showNotification(notification)
+                        Log.d(TAG, "New feed post detected: ${latestPost.id}")
                     }
                     
-                    val notification = notificationRepository.createFeedPostNotification(
-                        postId = latestPost.id,
-                        authorName = authorName,
-                        postTitle = latestPost.title
-                    )
-                    
-                    notificationRepository.addNotification(notification)
-                    notificationService.showNotification(notification)
-                    
-                    Log.d(TAG, "New feed post detected: ${latestPost.id}")
-                    
-                    // Update last post ID
                     prefs.edit().putString(KEY_LAST_FEED_POST_ID, latestPost.id).apply()
                 }
             }
@@ -107,12 +120,11 @@ class UpdateSyncService(private val context: Context) {
     /**
      * Sync chat and check for new messages
      */
-    private suspend fun syncChat() {
+    private suspend fun syncChat(silent: Boolean = false) {
         try {
             val repository = ChatRepository(context)
             val recentChats = repository.getRecentChats()
             
-            // Check each chat for new messages
             recentChats.forEach { chat ->
                 try {
                     val messages = repository.getChatMessages(chat.id, limit = 1)
@@ -121,28 +133,24 @@ class UpdateSyncService(private val context: Context) {
                         val lastMessageKey = "${KEY_LAST_CHAT_MESSAGE_ID}_${chat.id}"
                         val lastMessageId = prefs.getString(lastMessageKey, null)
                         
-                        // Check if there's a new message
                         if (latestMessage.id != lastMessageId) {
-                            // Get current user ID to avoid notifying about own messages
-                            val userRepository = UserRepository(context)
-                            val currentUser = userRepository.getCurrentUser().getOrNull()
-                            
-                            // Only notify if message is not from current user
-                            if (currentUser == null || latestMessage.senderId != currentUser.id) {
-                                val notification = notificationRepository.createChatMessageNotification(
-                                    chatId = chat.id,
-                                    chatName = chat.name,
-                                    senderName = latestMessage.senderName ?: "Someone",
-                                    message = latestMessage.text
-                                )
+                            if (!silent) {
+                                val userRepository = UserRepository(context)
+                                val currentUser = userRepository.getCurrentUser().getOrNull()
                                 
-                                notificationRepository.addNotification(notification)
-                                notificationService.showNotification(notification)
-                                
-                                Log.d(TAG, "New chat message detected in ${chat.name}: ${latestMessage.id}")
+                                if (currentUser == null || latestMessage.senderId != currentUser.id) {
+                                    val notification = notificationRepository.createChatMessageNotification(
+                                        chatId = chat.id,
+                                        chatName = chat.name,
+                                        senderName = latestMessage.senderName ?: "Someone",
+                                        message = latestMessage.text
+                                    )
+                                    notificationRepository.addNotification(notification)
+                                    notificationService.showNotification(notification)
+                                    Log.d(TAG, "New chat message detected in ${chat.name}: ${latestMessage.id}")
+                                }
                             }
                             
-                            // Update last message ID
                             prefs.edit().putString(lastMessageKey, latestMessage.id).apply()
                         }
                     }
@@ -160,32 +168,29 @@ class UpdateSyncService(private val context: Context) {
     /**
      * Sync tasks and check for updates
      */
-    private suspend fun syncTasks() {
+    private suspend fun syncTasks(silent: Boolean = false) {
         try {
             val repository = TasksRepository(context)
             val tasks = repository.getTasks()
             
-            // Check for new tasks assigned to user
             val userRepository = UserRepository(context)
             val currentUser = userRepository.getCurrentUser().getOrNull()
             
             if (currentUser != null) {
                 tasks.forEach { task ->
-                    // Check if task was recently created/assigned
-                    // This is a simplified check - in production, you'd want to track task IDs
                     val taskKey = "task_${task.id}_notified"
                     if (!prefs.getBoolean(taskKey, false)) {
-                        // New task detected
-                        val notification = notificationRepository.createTaskAssignedNotification(
-                            taskId = task.id,
-                            taskTitle = task.title
-                        )
-                        
-                        notificationRepository.addNotification(notification)
-                        notificationService.showNotification(notification)
+                        if (!silent) {
+                            val notification = notificationRepository.createTaskAssignedNotification(
+                                taskId = task.id,
+                                taskTitle = task.title
+                            )
+                            notificationRepository.addNotification(notification)
+                            notificationService.showNotification(notification)
+                            Log.d(TAG, "New task detected: ${task.id}")
+                        }
                         
                         prefs.edit().putBoolean(taskKey, true).apply()
-                        Log.d(TAG, "New task detected: ${task.id}")
                     }
                 }
             }
