@@ -130,7 +130,7 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                 val matchesPriority = _selectedPriority.value == null || task.priority == _selectedPriority.value
 
                 matchesOwnership && matchesSearch && matchesStatus && matchesPriority
-            }
+            }.sortedByDescending { it.createdDate }
             _uiState.value = TasksUiState.Success(filtered)
         }
     }

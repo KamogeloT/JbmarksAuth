@@ -75,7 +75,16 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
         }
 
         Log.d(TAG, "Deserialized ${tasks.size} tasks")
-        return TasksListResponse(ResultObject(tasks))
+        
+        // Parse pagination fields from root response
+        val total = jsonObject.get("total")?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asInt
+        val next = jsonObject.get("next")?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asInt
+        
+        if (total != null) {
+            Log.d(TAG, "Total tasks available: $total, next offset: $next")
+        }
+        
+        return TasksListResponse(ResultObject(tasks), total = total, next = next)
     }
     
     private fun parseTaskManually(jsonObject: JsonObject): Task? {

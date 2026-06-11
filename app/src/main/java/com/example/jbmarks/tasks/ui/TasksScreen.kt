@@ -653,52 +653,8 @@ fun SearchAndFilterSection(
                 TaskFilterChip(label = "Mine", selected = showMyTasksOnly, onClick = { if (!showMyTasksOnly) onToggleMyTasks() })
             }
 
-            // ── Status Filters ───────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Status:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                listOf(TaskStatus.NEW, TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED).forEach { status ->
-                    TaskFilterChip(
-                        label = status.displayName,
-                        selected = selectedStatus == status,
-                        onClick = { onStatusFilterChange(if (selectedStatus == status) null else status) }
-                    )
-                }
-            }
-
-            // ── Priority Filters ─────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Priority:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                listOf(TaskPriority.LOW, TaskPriority.NORMAL, TaskPriority.HIGH).forEach { priority ->
-                    TaskFilterChip(
-                        label = priority.displayName,
-                        selected = selectedPriority == priority,
-                        onClick = { onPriorityFilterChange(if (selectedPriority == priority) null else priority) }
-                    )
-                }
-            }
-
             // ── Clear Filters ────────────────────────────────────────────
-            if (selectedStatus != null || selectedPriority != null || searchQuery.isNotEmpty() || showMyTasksOnly) {
+            if (searchQuery.isNotEmpty() || showMyTasksOnly) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onClearFilters, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
                         Icon(Icons.Default.Close, contentDescription = "Clear filters", modifier = Modifier.size(14.dp))
