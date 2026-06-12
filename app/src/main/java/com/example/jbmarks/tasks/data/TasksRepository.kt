@@ -76,43 +76,31 @@ class TasksRepository(private val context: Context? = null) {
                 Log.w(TAG, "Could not get current user ID, fetching all accessible tasks")
             }
             
-            // Fetch all tasks without filters - Bitrix24 will automatically return
-            // only tasks the user has access to based on their permissions
-            // This includes tasks where user is responsible, creator, accomplice, or auditor
-            val response = api.getTasks(
-                responsibleId = null,
-                createdBy = null,
-                status = null
-            )
+            // Fetch ALL tasks with pagination - Bitrix24 returns max 50 per page
+            val allRawData = mutableListOf<com.example.jbmarks.tasks.data.Task>()
+            var start: Int? = 0
             
-            // Bitrix24 API returns tasks - handle both array and map formats
-            val rawData = response.result?.tasks ?: emptyList()
-            
-            Log.d(TAG, "Found ${rawData.size} accessible tasks from API")
-            
-            // Bitrix24 API already filters by permissions including workgroups
-            // Trust the API and return all tasks it provides
-            // Log workgroup information for debugging
-            if (userWorkgroups.isNotEmpty()) {
-                Log.d(TAG, "User is in workgroups: $userWorkgroups")
-                rawData.forEach { task ->
-                    if (task.groupId != null) {
-                        if (userWorkgroups.contains(task.groupId)) {
-                            Log.d(TAG, "✓ Task ${task.id} '${task.title}' is in workgroup ${task.groupId}")
-                        } else {
-                            Log.d(TAG, "  Task ${task.id} '${task.title}' has groupId ${task.groupId} (not in user workgroups)")
-                        }
-                    } else {
-                        Log.d(TAG, "  Task ${task.id} '${task.title}' has no groupId")
-                    }
-                }
+            while (start != null) {
+                val response = api.getTasks(
+                    responsibleId = null,
+                    createdBy = null,
+                    status = null,
+                    start = if (start == 0) null else start
+                )
+                
+                val rawData = response.result?.tasks ?: emptyList()
+                allRawData.addAll(rawData)
+                
+                Log.d(TAG, "Fetched ${rawData.size} tasks (offset: $start, total so far: ${allRawData.size}, server total: ${response.total})")
+                
+                // If there's a next page, continue; otherwise stop
+                start = response.next
             }
             
-            // Return all tasks from API - Bitrix24 already filtered by permissions
-            // This includes tasks from user's workgroups, tasks assigned to user, etc.
-            // The API respects Bitrix24 permissions automatically
+            Log.d(TAG, "Found ${allRawData.size} total accessible tasks from API (all pages)")
+            
             // Filter out tasks with invalid IDs (null or "0")
-            val validTasks = rawData.mapNotNull { dataTask ->
+            val validTasks = allRawData.mapNotNull { dataTask ->
                 val taskId = dataTask.id
                 if (taskId.isNullOrBlank() || taskId == "0") {
                     Log.w(TAG, "Skipping task with invalid ID: $taskId, title: ${dataTask.title}")
@@ -121,7 +109,7 @@ class TasksRepository(private val context: Context? = null) {
                     mapDataToDomain(dataTask)
                 }
             }
-            Log.d(TAG, "Returning ${validTasks.size} valid tasks from ${rawData.size} API tasks (Bitrix24 already filtered by permissions including workgroups)")
+            Log.d(TAG, "Returning ${validTasks.size} valid tasks from ${allRawData.size} API tasks")
             validTasks
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching tasks", e)

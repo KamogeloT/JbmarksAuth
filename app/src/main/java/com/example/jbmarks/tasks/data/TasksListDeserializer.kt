@@ -75,7 +75,16 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
         }
 
         Log.d(TAG, "Deserialized ${tasks.size} tasks")
-        return TasksListResponse(ResultObject(tasks))
+        
+        // Parse pagination fields from root response
+        val total = jsonObject.get("total")?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asInt
+        val next = jsonObject.get("next")?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.asInt
+        
+        if (total != null) {
+            Log.d(TAG, "Total tasks available: $total, next offset: $next")
+        }
+        
+        return TasksListResponse(ResultObject(tasks), total = total, next = next)
     }
     
     private fun parseTaskManually(jsonObject: JsonObject): Task? {
@@ -200,6 +209,8 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
                 accomplices = accomplicesList,
                 auditors = auditorsList,
                 deadline = getStringOrNull(jsonObject.get("deadline")),
+                createdDate = getStringOrNull(jsonObject.get("createdDate")),
+                closedDate = getStringOrNull(jsonObject.get("closedDate")),
                 status = getStringOrNull(jsonObject.get("status")),
                 priority = getStringOrNull(jsonObject.get("priority")),
                 groupId = getStringOrNull(jsonObject.get("groupId")),
