@@ -55,6 +55,10 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private val _showMyTasksOnly = MutableStateFlow(false)
     val showMyTasksOnly: StateFlow<Boolean> = _showMyTasksOnly.asStateFlow()
 
+    // Sort order — true = newest first (descending), false = oldest first (ascending)
+    private val _sortNewestFirst = MutableStateFlow(true)
+    val sortNewestFirst: StateFlow<Boolean> = _sortNewestFirst.asStateFlow()
+
     init {
         loadTasks()
     }
@@ -130,13 +134,24 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                 val matchesPriority = _selectedPriority.value == null || task.priority == _selectedPriority.value
 
                 matchesOwnership && matchesSearch && matchesStatus && matchesPriority
-            }.sortedByDescending { it.createdDate }
+            }.let { list ->
+                if (_sortNewestFirst.value) {
+                    list.sortedByDescending { it.createdDate ?: it.id }
+                } else {
+                    list.sortedBy { it.createdDate ?: it.id }
+                }
+            }
             _uiState.value = TasksUiState.Success(filtered)
         }
     }
 
     fun toggleMyTasksOnly() {
         _showMyTasksOnly.value = !_showMyTasksOnly.value
+        applyFilters()
+    }
+
+    fun toggleSortOrder() {
+        _sortNewestFirst.value = !_sortNewestFirst.value
         applyFilters()
     }
 

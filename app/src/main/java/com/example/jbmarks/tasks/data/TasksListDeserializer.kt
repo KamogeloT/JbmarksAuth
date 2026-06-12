@@ -209,6 +209,8 @@ class TasksListDeserializer : JsonDeserializer<TasksListResponse> {
                 accomplices = accomplicesList,
                 auditors = auditorsList,
                 deadline = getStringOrNull(jsonObject.get("deadline")),
+                createdDate = getStringOrNull(jsonObject.get("createdDate")),
+                closedDate = getStringOrNull(jsonObject.get("closedDate")),
                 status = getStringOrNull(jsonObject.get("status")),
                 priority = getStringOrNull(jsonObject.get("priority")),
                 groupId = getStringOrNull(jsonObject.get("groupId")),

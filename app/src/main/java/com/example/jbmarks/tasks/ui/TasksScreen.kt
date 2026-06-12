@@ -90,6 +90,7 @@ fun TasksScreen(
     val selectedStatus by viewModel.selectedStatus.collectAsState()
     val selectedPriority by viewModel.selectedPriority.collectAsState()
     val showMyTasksOnly by viewModel.showMyTasksOnly.collectAsState()
+    val sortNewestFirst by viewModel.sortNewestFirst.collectAsState()
     val workgroupMembershipKey by viewModel.workgroupMembershipSignature.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
@@ -126,10 +127,12 @@ fun TasksScreen(
                             selectedStatus = selectedStatus,
                             selectedPriority = selectedPriority,
                             showMyTasksOnly = showMyTasksOnly,
+                            sortNewestFirst = sortNewestFirst,
                             onSearchQueryChange = { viewModel.setSearchQuery(it) },
                             onStatusFilterChange = { viewModel.setStatusFilter(it) },
                             onPriorityFilterChange = { viewModel.setPriorityFilter(it) },
                             onToggleMyTasks = { viewModel.toggleMyTasksOnly() },
+                            onToggleSortOrder = { viewModel.toggleSortOrder() },
                             onClearFilters = { viewModel.clearFilters() }
                         )
 
@@ -598,10 +601,12 @@ fun SearchAndFilterSection(
     selectedStatus: TaskStatus?,
     selectedPriority: TaskPriority?,
     showMyTasksOnly: Boolean,
+    sortNewestFirst: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onStatusFilterChange: (TaskStatus?) -> Unit,
     onPriorityFilterChange: (TaskPriority?) -> Unit,
     onToggleMyTasks: () -> Unit,
+    onToggleSortOrder: () -> Unit,
     onClearFilters: () -> Unit
 ) {
     Column(
@@ -651,6 +656,19 @@ fun SearchAndFilterSection(
                 )
                 TaskFilterChip(label = "All", selected = !showMyTasksOnly, onClick = { if (showMyTasksOnly) onToggleMyTasks() })
                 TaskFilterChip(label = "Mine", selected = showMyTasksOnly, onClick = { if (!showMyTasksOnly) onToggleMyTasks() })
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = "Sort:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TaskFilterChip(
+                    label = if (sortNewestFirst) "Newest ↓" else "Oldest ↑",
+                    selected = true,
+                    onClick = onToggleSortOrder
+                )
             }
 
             // ── Clear Filters ────────────────────────────────────────────

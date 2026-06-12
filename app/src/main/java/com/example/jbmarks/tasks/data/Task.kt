@@ -13,6 +13,8 @@ data class Task(
     @SerializedName("accomplices") val accomplices: List<String>?,
     @SerializedName("auditors") val auditors: List<String>?,
     @SerializedName("deadline") val deadline: String?,
+    @SerializedName("createdDate") val createdDate: String?,
+    @SerializedName("closedDate") val closedDate: String?,
     @SerializedName("status") val status: String?,
     // Added the missing priority field
     @SerializedName("priority") val priority: String?,
