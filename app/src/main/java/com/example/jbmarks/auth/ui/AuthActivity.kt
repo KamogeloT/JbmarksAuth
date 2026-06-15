@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.example.jbmarks.MainActivity
@@ -301,6 +300,8 @@ class AuthActivity : ComponentActivity() {
         val context = LocalContext.current
         var isLoading by remember { mutableStateOf(false) }
         var errorMessage by remember { mutableStateOf<String?>(errorMessageOverride) }
+        var showWebView by remember { mutableStateOf(false) }
+        var authUrl by remember { mutableStateOf("") }
         val scope = rememberCoroutineScope()
         
         // Update error message when override changes
@@ -328,139 +329,147 @@ class AuthActivity : ComponentActivity() {
                 kotlinx.coroutines.delay(30000) // 30 seconds
                 if (isLoading && !isProcessingOAuth) {
                     android.util.Log.w("AuthActivity", "OAuth timeout - no callback received")
-                    errorMessage = "Authentication timed out. Please try again. Make sure you completed the login in the browser."
+                    errorMessage = "Authentication timed out. Please try again."
                     isLoading = false
+                    showWebView = false
                 }
             }
         }
         
-        // Handle OAuth callback - process ONLY once per code
-        // Use processedCode check to prevent double processing
+        // Handle OAuth callback from deep link (fallback if WebView misses the redirect)
         LaunchedEffect(initialIntent?.data?.getQueryParameter("code")) {
             if (!skipLaunchedEffect && initialIntent != null) {
                 val data = initialIntent.data
                 val code = data?.getQueryParameter("code")
-                // Only process if code exists, hasn't been processed, and we're not already processing
                 if (data != null && data.scheme == "jbmarks" && data.host == "oauth_redirect" && 
                     code != null && processedCode != code && !isProcessingOAuth) {
                     android.util.Log.d("AuthActivity", "LaunchedEffect - Processing OAuth callback")
                     processedCode = code
                     isProcessingOAuth = true
                     isLoading = true
+                    showWebView = false
                     errorMessage = null
                     handleOAuthCallback(initialIntent, scope, 
                         { isProcessingOAuth = it }, 
                         { isLoading = it }, 
                         { errorMessage = it })
-                } else if (code != null && processedCode == code) {
-                    android.util.Log.w("AuthActivity", "LaunchedEffect - Code already processed, skipping")
                 }
             }
         }
-        
-        LoginScreen(
-            onLoginClick = { portalUrl ->
-                android.util.Log.d("AuthActivity", "Login button clicked - Resetting state for fresh auth attempt")
-                
-                // RESET ALL ERROR STATES to allow retry
-                errorMessage = null
-                sharedErrorMessage = null // Clear shared error state
-                processedCode = null
-                lastProcessedCode = null
-                isProcessingOAuth = false
-                
-                // CRITICAL: Prevent duplicate auth launches ONLY if currently loading
-                if (isAuthInProgress && isLoading) {
-                    android.util.Log.w("AuthActivity", "Auth already in progress, ignoring duplicate login click")
-                    return@LoginScreen
-                }
-                
-                // Allow retry if there was an error (even within 10 seconds)
-                val timeSinceLastAuth = System.currentTimeMillis() - lastAuthStartedAt
-                if (timeSinceLastAuth < 10000 && !errorMessage.isNullOrEmpty()) {
-                    android.util.Log.d("AuthActivity", "Previous auth had error, allowing retry despite recent attempt")
-                } else if (timeSinceLastAuth < 10000) {
-                    android.util.Log.w("AuthActivity", "Auth launched too recently (${timeSinceLastAuth}ms ago), ignoring")
-                    return@LoginScreen
-                }
-                
-                // Set flags to prevent duplicate launches
-                isAuthInProgress = true
-                lastAuthStartedAt = System.currentTimeMillis()
-                isLoading = true
-                errorMessage = null
-                
-                android.util.Log.d("AuthActivity", "=== Starting OAuth Flow ===")
-                
-                scope.launch {
-                    try {
-                        // Normalize portal URL (remove trailing slash, add https if missing)
-                        val normalizedUrl = normalizePortalUrl(portalUrl)
-                        tokenManager.savePortalUrl(normalizedUrl)
-                        
-                        // Build authorization URL
-                        val authUrl = Config.buildAuthorizationUrl(
-                            portalUrl = normalizedUrl,
-                            clientId = Config.BITRIX_CLIENT_ID
+
+        if (showWebView) {
+            // Full-screen WebView for Bitrix24 login
+            WebViewLoginScreen(
+                authUrl = authUrl,
+                redirectUriPrefix = Config.BITRIX_REDIRECT_URI_HTTPS,
+                onCodeReceived = { code, domain, memberId ->
+                    android.util.Log.d("AuthActivity", "WebView intercepted code")
+                    showWebView = false
+                    isLoading = true
+                    processedCode = code
+                    isProcessingOAuth = true
+                    
+                    scope.launch {
+                        exchangeCodeForTokens(
+                            code = code,
+                            domain = domain,
+                            memberId = memberId,
+                            setIsLoading = { isLoading = it },
+                            setErrorMessage = { errorMessage = it },
+                            setIsProcessing = { isProcessingOAuth = it }
                         )
-                        
-                        android.util.Log.d("AuthActivity", "Opening browser with auth URL")
-                        
-                        // Open Custom Tab or browser for OAuth
-                        val customTabsIntent = CustomTabsIntent.Builder()
-                            .setShowTitle(true)
-                            .build()
-                        
-                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
-                        
-                        // Note: Token exchange will happen in onNewIntent/onResume
-                        // when the deep link is received
-                    } catch (e: Exception) {
-                        android.util.Log.e("AuthActivity", "Failed to start login", e)
-                        errorMessage = e.message ?: "Failed to start login"
-                        isLoading = false
-                        isAuthInProgress = false
                     }
+                },
+                onError = { error ->
+                    android.util.Log.e("AuthActivity", "WebView login error: $error")
+                    showWebView = false
+                    isLoading = false
+                    isAuthInProgress = false
+                    errorMessage = error
+                },
+                onDismiss = {
+                    showWebView = false
+                    isLoading = false
+                    isAuthInProgress = false
                 }
-            },
-            onSwitchAccountClick = { portalUrl ->
-                android.util.Log.d("AuthActivity", "Switch account clicked - clearing local tokens before fresh auth")
-                tokenManager.clearTokens()
-                RetrofitInstance.refreshRetrofitInstance()
-                
-                // Reset state and launch login immediately
-                errorMessage = null
-                sharedErrorMessage = null
-                processedCode = null
-                lastProcessedCode = null
-                isProcessingOAuth = false
-                isAuthInProgress = true
-                lastAuthStartedAt = System.currentTimeMillis()
-                isLoading = true
-                
-                scope.launch {
-                    try {
-                        val normalizedUrl = normalizePortalUrl(portalUrl)
-                        tokenManager.savePortalUrl(normalizedUrl)
-                        val authUrl = Config.buildAuthorizationUrl(
-                            portalUrl = normalizedUrl,
-                            clientId = Config.BITRIX_CLIENT_ID
-                        )
-                        val customTabsIntent = CustomTabsIntent.Builder()
-                            .setShowTitle(true)
-                            .build()
-                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
-                    } catch (e: Exception) {
-                        android.util.Log.e("AuthActivity", "Failed to start switch-account login", e)
-                        errorMessage = e.message ?: "Failed to start login"
-                        isLoading = false
-                        isAuthInProgress = false
+            )
+        } else {
+            // Login screen with Sign In button
+            LoginScreen(
+                onLoginClick = { portalUrl ->
+                    android.util.Log.d("AuthActivity", "Login button clicked")
+                    
+                    errorMessage = null
+                    sharedErrorMessage = null
+                    processedCode = null
+                    lastProcessedCode = null
+                    isProcessingOAuth = false
+                    
+                    if (isAuthInProgress && isLoading) {
+                        return@LoginScreen
                     }
-                }
-            },
-            isLoading = isLoading,
-            errorMessage = errorMessage
-        )
+                    
+                    val timeSinceLastAuth = System.currentTimeMillis() - lastAuthStartedAt
+                    if (timeSinceLastAuth < 5000 && errorMessage == null) {
+                        return@LoginScreen
+                    }
+                    
+                    isAuthInProgress = true
+                    lastAuthStartedAt = System.currentTimeMillis()
+                    
+                    scope.launch {
+                        try {
+                            val normalizedUrl = normalizePortalUrl(portalUrl)
+                            tokenManager.savePortalUrl(normalizedUrl)
+                            
+                            authUrl = Config.buildAuthorizationUrl(
+                                portalUrl = normalizedUrl,
+                                clientId = Config.BITRIX_CLIENT_ID
+                            )
+                            
+                            showWebView = true
+                        } catch (e: Exception) {
+                            android.util.Log.e("AuthActivity", "Failed to start login", e)
+                            errorMessage = e.message ?: "Failed to start login"
+                            isAuthInProgress = false
+                        }
+                    }
+                },
+                onSwitchAccountClick = { portalUrl ->
+                    android.util.Log.d("AuthActivity", "Switch account clicked")
+                    tokenManager.clearTokens()
+                    RetrofitInstance.refreshRetrofitInstance()
+                    
+                    errorMessage = null
+                    sharedErrorMessage = null
+                    processedCode = null
+                    lastProcessedCode = null
+                    isProcessingOAuth = false
+                    isAuthInProgress = true
+                    lastAuthStartedAt = System.currentTimeMillis()
+                    
+                    scope.launch {
+                        try {
+                            val normalizedUrl = normalizePortalUrl(portalUrl)
+                            tokenManager.savePortalUrl(normalizedUrl)
+                            
+                            authUrl = Config.buildAuthorizationUrl(
+                                portalUrl = normalizedUrl,
+                                clientId = Config.BITRIX_CLIENT_ID
+                            )
+                            
+                            showWebView = true
+                        } catch (e: Exception) {
+                            android.util.Log.e("AuthActivity", "Failed to start switch-account login", e)
+                            errorMessage = e.message ?: "Failed to start login"
+                            isAuthInProgress = false
+                        }
+                    }
+                },
+                isLoading = isLoading,
+                errorMessage = errorMessage
+            )
+        }
     }
     
     private suspend fun exchangeCodeForTokens(

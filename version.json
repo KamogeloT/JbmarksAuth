@@ -1,7 +1,7 @@
 {
-  "version_code": 10,
-  "version_name": "1.0.7",
-  "apk_url": "https://jbmarksoauthredirecb0ce.blob.core.windows.net/jbmarks-releases/jbmarks.apk",
-  "release_notes": "Tasks: Removed status/priority filters for cleaner UI. Fixed 50-task limit — all tasks now load. Tasks sorted by newest first.",
-  "force_update": false
+  "version_code": 11,
+  "version_name": "1.1.0",
+  "apk_url": "https://jbmarksreleases.blob.core.windows.net/jbmarks-releases/jbmarks.apk",
+  "release_notes": "New login screen with logo, removed portal URL field. Login now opens in-app mobile-friendly WebView instead of desktop browser.",
+  "force_update": true
 }
