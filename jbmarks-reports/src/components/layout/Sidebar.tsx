@@ -16,7 +16,7 @@ const navItems: { id: ReportView; label: string; icon: string }[] = [
 
 export function Sidebar({ activeReport, onNavigate }: SidebarProps) {
   return (
-    <aside className="w-[260px] bg-white/60 backdrop-blur-2xl border-r border-ios-separator flex flex-col">
+    <aside className="w-[260px] h-full bg-white/95 backdrop-blur-2xl border-r border-ios-separator flex flex-col">
       {/* Logo */}
       <div className="p-5 flex items-center gap-3">
         <div className="w-9 h-9 rounded-[10px] overflow-hidden shadow-ios bg-white p-0.5">

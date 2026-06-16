@@ -15,6 +15,7 @@ export type ReportView = 'task-summary' | 'overdue' | 'time-tracking' | 'team-wo
 export default function Home() {
   const { isAuthenticated, user, login, logout, loading } = useAuth()
   const [activeReport, setActiveReport] = useState<ReportView>('task-summary')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   if (loading) {
     return (
@@ -35,18 +36,35 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f5f5f7]">
-      <Sidebar activeReport={activeReport} onNavigate={setActiveReport} />
+      {/* Sidebar — hidden on mobile, visible on lg+ */}
+      <div className="hidden lg:block">
+        <Sidebar activeReport={activeReport} onNavigate={setActiveReport} />
+      </div>
+
+      {/* Mobile menu overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <div className="relative w-[280px] h-full">
+            <Sidebar
+              activeReport={activeReport}
+              onNavigate={(view) => { setActiveReport(view); setMobileMenuOpen(false) }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Background logo watermark */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
           <img
             src="/logo.png"
             alt=""
-            className="w-[400px] h-[400px] object-contain opacity-[0.035]"
+            className="w-[300px] h-[300px] lg:w-[400px] lg:h-[400px] object-contain opacity-[0.035]"
           />
         </div>
-        <Header user={user} onLogout={logout} />
-        <main className="flex-1 overflow-y-auto p-6 relative z-[1]">
+        <Header user={user} onLogout={logout} onMenuToggle={() => setMobileMenuOpen(true)} />
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 relative z-[1]">
           <div className="max-w-7xl mx-auto">
             {activeReport === 'task-summary' && <TaskSummaryReport />}
             {activeReport === 'overdue' && <OverdueReport />}

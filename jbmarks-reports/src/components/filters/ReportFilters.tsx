@@ -55,7 +55,7 @@ export function ReportFilters({ filters, onChange }: ReportFiltersProps) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
       {/* Date range */}
       <div className="flex items-center gap-2">
         <div className="relative">

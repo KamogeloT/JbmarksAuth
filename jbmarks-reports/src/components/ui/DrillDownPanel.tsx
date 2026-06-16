@@ -137,7 +137,7 @@ export function DrillDownPanel({ title, tasks, onClose, id }: DrillDownPanelProp
   return (
     <div id={id || 'drill-down-panel'} className="mt-6 card p-0 overflow-hidden border border-ios-separator">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 bg-brand-dark text-white">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-brand-dark text-white">
         <div className="flex items-center gap-3">
           <h2 className="text-[15px] font-bold">{title}</h2>
           <span className="text-[12px] bg-white/20 px-2 py-0.5 rounded-full">
@@ -155,7 +155,7 @@ export function DrillDownPanel({ title, tasks, onClose, id }: DrillDownPanelProp
       </div>
 
       {/* Filters Row */}
-      <div className="px-5 py-3 bg-gray-50/80 border-b border-ios-separator flex flex-wrap items-center gap-2">
+      <div className="px-4 sm:px-5 py-3 bg-gray-50/80 border-b border-ios-separator flex flex-wrap items-center gap-2">
         {/* Search */}
         <input
           type="text"

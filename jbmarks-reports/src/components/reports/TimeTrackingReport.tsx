@@ -152,10 +152,10 @@ export function TimeTrackingReport() {
   return (
     <div className="space-y-6" id="report-content">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold text-ios-label tracking-tight">Time Tracking</h1>
-          <p className="text-[15px] text-ios-secondary mt-0.5">Analyse time logged against tasks and estimates</p>
+          <h1 className="text-[22px] sm:text-[28px] font-bold text-ios-label tracking-tight">Time Tracking</h1>
+          <p className="text-[13px] sm:text-[15px] text-ios-secondary mt-0.5">Analyse time logged against tasks and estimates</p>
         </div>
         <ExportButton data={exportData} filename="time-tracking" title="Time Tracking Report" />
       </div>
@@ -164,7 +164,7 @@ export function TimeTrackingReport() {
       <ReportFilters filters={filters} onChange={setFilters} />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Time Logged" value={formatDuration(totalSecondsLogged)} icon="🕐" onClick={() => setDrillDown({ title: 'Tasks with Time Logged', tasks: tasks.filter(t => t.timeSpentInLogs && parseInt(t.timeSpentInLogs) > 0) })} />
         <StatCard label="Tasks with Time" value={tasksWithTimeCount} icon="📋" onClick={() => setDrillDown({ title: 'Tasks with Time Entries', tasks: tasks.filter(t => t.timeSpentInLogs && parseInt(t.timeSpentInLogs) > 0) })} />
         <StatCard label="Total Estimated" value={formatDuration(totalEstimated)} icon="📐" />
@@ -172,7 +172,7 @@ export function TimeTrackingReport() {
       </div>
 
       {/* Charts — hidden when drill-down is open */}
-      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Top Tasks by Time */}
         {topTasksChart.length > 0 && (
           <div className="card">

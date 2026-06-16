@@ -22,10 +22,10 @@ export function StatCard({ label, value, icon, highlight, onClick }: StatCardPro
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[12px] text-ios-secondary font-medium uppercase tracking-wide">{label}</p>
-          <p className="text-[28px] font-bold text-ios-label mt-1 tracking-tight">{value}</p>
+          <p className="text-[11px] sm:text-[12px] text-ios-secondary font-medium uppercase tracking-wide">{label}</p>
+          <p className="text-[22px] sm:text-[28px] font-bold text-ios-label mt-1 tracking-tight">{value}</p>
         </div>
-        <span className="text-[28px] opacity-80">{icon}</span>
+        <span className="text-[22px] sm:text-[28px] opacity-80">{icon}</span>
       </div>
       {onClick && (
         <p className="text-[10px] text-ios-tertiary mt-2">Tap to view list →</p>

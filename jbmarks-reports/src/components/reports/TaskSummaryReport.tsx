@@ -147,10 +147,10 @@ export function TaskSummaryReport() {
   return (
     <div className="space-y-6" id="report-content">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold text-ios-label tracking-tight">Task Summary</h1>
-          <p className="text-[15px] text-ios-secondary mt-0.5">Overview of all tasks across your portal</p>
+          <h1 className="text-[22px] sm:text-[28px] font-bold text-ios-label tracking-tight">Task Summary</h1>
+          <p className="text-[13px] sm:text-[15px] text-ios-secondary mt-0.5">Overview of all tasks across your portal</p>
         </div>
         <ExportButton data={exportData} filename="task-summary" title="Task Summary Report" />
       </div>
@@ -159,7 +159,7 @@ export function TaskSummaryReport() {
       <ReportFilters filters={filters} onChange={setFilters} />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard label="Total Tasks" value={totalTasks} icon="📋" onClick={() => setDrillDown({ title: 'All Tasks', tasks })} />
         <StatCard label="Active" value={activeTasks} icon="🟢" onClick={() => setDrillDown({ title: 'Active Tasks', tasks: tasks.filter(t => t.status !== '5' && t.status !== '6') })} />
         <StatCard label="Completed" value={completedTasks} icon="✅" highlight="green" onClick={() => setDrillDown({ title: 'Completed Tasks', tasks: tasks.filter(t => t.status === '5') })} />
@@ -168,7 +168,7 @@ export function TaskSummaryReport() {
       </div>
 
       {/* Charts — hidden when drill-down is open */}
-      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
         {/* Status Pie Chart */}
         <div className="card">
           <h3 className="text-[15px] font-semibold text-ios-label mb-4">By Status</h3>
