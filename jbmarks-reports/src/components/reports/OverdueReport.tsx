@@ -167,10 +167,10 @@ export function OverdueReport() {
   return (
     <div className="space-y-6" id="report-content">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold text-ios-label tracking-tight">Overdue & Deadlines</h1>
-          <p className="text-[15px] text-ios-secondary mt-0.5">Track missed deadlines and upcoming due dates</p>
+          <h1 className="text-[22px] sm:text-[28px] font-bold text-ios-label tracking-tight">Overdue & Deadlines</h1>
+          <p className="text-[13px] sm:text-[15px] text-ios-secondary mt-0.5">Track missed deadlines and upcoming due dates</p>
         </div>
         <ExportButton data={exportData} filename="overdue-report" title="Overdue & Deadlines Report" />
       </div>
@@ -179,7 +179,7 @@ export function OverdueReport() {
       <ReportFilters filters={filters} onChange={setFilters} />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           label="Overdue Tasks" 
           value={overdueTasks.length} 
@@ -197,7 +197,7 @@ export function OverdueReport() {
       </div>
 
       {/* Charts — hidden when drill-down is open */}
-      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {!drillDown && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Severity Chart */}
         {severityData.length > 0 && (
           <div className="card">

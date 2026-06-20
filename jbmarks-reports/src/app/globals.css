@@ -13,10 +13,10 @@
 
 @layer components {
   .card {
-    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-6;
+    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-4 sm:p-6;
   }
   .stat-card {
-    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-5 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out;
+    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-4 sm:p-5 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out;
   }
   .btn-primary {
     @apply bg-brand-dark text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:brightness-110 active:scale-95 transition-all duration-200;

@@ -197,10 +197,10 @@ export function TeamWorkloadReport() {
   return (
     <div className="space-y-6" id="report-content">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-bold text-ios-label tracking-tight">Team Workload</h1>
-          <p className="text-[15px] text-ios-secondary mt-0.5">Task distribution and productivity across team members</p>
+          <h1 className="text-[22px] sm:text-[28px] font-bold text-ios-label tracking-tight">Team Workload</h1>
+          <p className="text-[13px] sm:text-[15px] text-ios-secondary mt-0.5">Task distribution and productivity across team members</p>
         </div>
         <ExportButton data={exportData} filename="team-workload" title="Team Workload Report" />
       </div>
@@ -209,7 +209,7 @@ export function TeamWorkloadReport() {
       <ReportFilters filters={filters} onChange={setFilters} />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Team Members" value={teamSize} icon="👥" />
         <StatCard label="Total Active Tasks" value={totalActive} icon="📋" onClick={() => setDrillDown({ title: 'All Active Tasks', tasks: allTasks.filter(t => t.status !== '5' && t.status !== '6') })} />
         <StatCard label="Avg Tasks/Person" value={avgTasksPerPerson} icon="📊" />
