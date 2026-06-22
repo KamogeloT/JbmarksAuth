@@ -6,19 +6,59 @@ import com.example.jbmarks.network.RetrofitInstance
 /**
  * Repository for user profile data
  */
-class UserRepository(context: Context) {
+class UserRepository(private val context: Context) {
+
+    private val tokenManager = com.example.jbmarks.auth.data.TokenManager(context)
 
     init {
         RetrofitInstance.initialize(context)
     }
 
+    /**
+     * Get current user. Returns cached profile instantly if available,
+     * and refreshes from API in the background.
+     */
     suspend fun getCurrentUser(): Result<User> {
         return try {
             val response = RetrofitInstance.api.getCurrentUser()
-            Result.success(response.result)
+            val user = response.result
+            // Update cache with fresh data
+            tokenManager.saveUserProfile(
+                id = user.id,
+                name = user.name,
+                lastName = user.lastName,
+                email = user.email,
+                photoUrl = user.photoUrl,
+                position = user.position
+            )
+            Result.success(user)
         } catch (e: Exception) {
-            Result.failure(e)
+            // If network fails, try returning cached profile
+            val cachedUser = getCachedUser()
+            if (cachedUser != null) {
+                Result.success(cachedUser)
+            } else {
+                Result.failure(e)
+            }
         }
+    }
+
+    /**
+     * Get cached user profile from local storage (no network call).
+     * Returns null if no profile is cached.
+     */
+    fun getCachedUser(): User? {
+        val id = tokenManager.getUserId() ?: return null
+        val name = tokenManager.getUserName() ?: return null
+        val lastName = tokenManager.getUserLastName() ?: ""
+        return User(
+            id = id,
+            name = name,
+            lastName = lastName,
+            email = tokenManager.getUserEmail(),
+            photoUrl = tokenManager.getUserPhotoUrl(),
+            position = tokenManager.getUserPosition()
+        )
     }
 
     suspend fun getUserWorkgroups(): Result<List<Workgroup>> {

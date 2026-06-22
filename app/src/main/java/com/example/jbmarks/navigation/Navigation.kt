@@ -100,11 +100,12 @@ fun AppNavigation() {
         topBar = {
             val context = LocalContext.current
             val userRepository = remember { UserRepository(context) }
-            var user by remember { mutableStateOf<User?>(null) }
+            // Load cached user instantly, then refresh from API
+            var user by remember { mutableStateOf<User?>(userRepository.getCachedUser()) }
             var workgroups by remember { mutableStateOf<List<Workgroup>>(emptyList()) }
-            var isLoadingUser by remember { mutableStateOf(true) }
+            var isLoadingUser by remember { mutableStateOf(user == null) }
             
-            // Fetch user data — LaunchedEffect already provides a coroutine scope
+            // Fetch fresh user data in background (updates cache too)
             LaunchedEffect(Unit) {
                 userRepository.getCurrentUser().onSuccess { fetchedUser ->
                     user = fetchedUser

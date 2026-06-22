@@ -51,9 +51,44 @@ class TokenManager(context: Context) {
             remove("REFRESH_TOKEN")
             remove("PORTAL_URL")
             remove("TOKEN_EXPIRY_TIME")
+            remove("USER_ID")
+            remove("USER_NAME")
+            remove("USER_LAST_NAME")
+            remove("USER_EMAIL")
+            remove("USER_PHOTO_URL")
+            remove("USER_POSITION")
             apply()
         }
     }
+    
+    // ── User Profile Cache ──────────────────────────────────────────────────
+
+    fun saveUserProfile(id: String, name: String, lastName: String, email: String?, photoUrl: String?, position: String?) {
+        with(sharedPreferences.edit()) {
+            putString("USER_ID", id)
+            putString("USER_NAME", name)
+            putString("USER_LAST_NAME", lastName)
+            if (email != null) putString("USER_EMAIL", email)
+            if (photoUrl != null) putString("USER_PHOTO_URL", photoUrl)
+            if (position != null) putString("USER_POSITION", position)
+            apply()
+        }
+    }
+
+    fun getUserId(): String? = sharedPreferences.getString("USER_ID", null)
+    fun getUserName(): String? = sharedPreferences.getString("USER_NAME", null)
+    fun getUserLastName(): String? = sharedPreferences.getString("USER_LAST_NAME", null)
+    fun getUserEmail(): String? = sharedPreferences.getString("USER_EMAIL", null)
+    fun getUserPhotoUrl(): String? = sharedPreferences.getString("USER_PHOTO_URL", null)
+    fun getUserPosition(): String? = sharedPreferences.getString("USER_POSITION", null)
+
+    fun getUserFullName(): String? {
+        val name = getUserName() ?: return null
+        val lastName = getUserLastName() ?: return name
+        return "$name $lastName"
+    }
+
+    fun hasUserProfile(): Boolean = getUserId() != null
     
     fun saveTokenExpiry(expiresIn: Int) {
         val expiryTime = System.currentTimeMillis() + (expiresIn * 1000L)

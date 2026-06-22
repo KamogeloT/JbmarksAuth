@@ -513,6 +513,27 @@ class AuthActivity : ComponentActivity() {
                     FCMTokenManager(this@AuthActivity).checkAndRegisterToken()
                 }
                 
+                // Fetch and cache user profile
+                android.util.Log.d("AuthActivity", "Fetching user profile")
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        val userRepo = com.example.jbmarks.user.data.UserRepository(this@AuthActivity)
+                        userRepo.getCurrentUser().onSuccess { user ->
+                            tokenManager.saveUserProfile(
+                                id = user.id,
+                                name = user.name,
+                                lastName = user.lastName,
+                                email = user.email,
+                                photoUrl = user.photoUrl,
+                                position = user.position
+                            )
+                            android.util.Log.d("AuthActivity", "User profile cached: ${user.fullName}")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("AuthActivity", "Failed to cache user profile", e)
+                    }
+                }
+                
                 android.util.Log.d("AuthActivity", "Navigating to main app")
                 setIsLoading(false)
                 setIsProcessing(false)
