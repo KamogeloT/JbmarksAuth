@@ -1,0 +1,15 @@
+﻿{
+  "branch": null,
+  "deploymentRollbackEnabled": false,
+  "gitHubActionConfiguration": null,
+  "id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/Microsoft.Web/sites/jbmarks-bff-api/sourcecontrols/web",
+  "isGitHubAction": false,
+  "isManualIntegration": false,
+  "isMercurial": false,
+  "kind": null,
+  "location": "South Africa North",
+  "name": "jbmarks-bff-api",
+  "repoUrl": null,
+  "resourceGroup": "jbmarks-oauth-redirect-rg-za",
+  "type": "Microsoft.Web/sites/sourcecontrols"
+}

@@ -1,0 +1,586 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "networkInterfaces_nic_bitrix_name": {
+      "type": "String"
+    },
+    "networkInterfaces_nic_sdinmotion_bitrix_name": {
+      "type": "String"
+    },
+    "networkSecurityGroups_nsg_bitrix_name": {
+      "type": "String"
+    },
+    "networkSecurityGroups_nsg_sdinmotion_bitrix_name": {
+      "type": "String"
+    },
+    "publicIPAddresses_pip_bitrix_name": {
+      "type": "String"
+    },
+    "publicIPAddresses_pip_sdinmotion_bitrix_name": {
+      "type": "String"
+    },
+    "virtualMachines_vm_sdinmotion_bitrix_name": {
+      "type": "String"
+    },
+    "virtualNetworks_vnet_bitrix_name": {
+      "type": "String"
+    },
+    "virtualNetworks_vnet_sdinmotion_bitrix_name": {
+      "type": "String"
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('networkSecurityGroups_nsg_bitrix_name')]",
+      "properties": {
+        "securityRules": [
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_bitrix_name'), 'Allow-SSH')]",
+            "name": "Allow-SSH",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "22",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1000,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          },
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_bitrix_name'), 'Allow-HTTP')]",
+            "name": "Allow-HTTP",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "80",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1010,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          },
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_bitrix_name'), 'Allow-HTTPS')]",
+            "name": "Allow-HTTPS",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "443",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1020,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          }
+        ]
+      },
+      "type": "Microsoft.Network/networkSecurityGroups"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name')]",
+      "properties": {
+        "securityRules": [
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), 'Allow-SSH')]",
+            "name": "Allow-SSH",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "22",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1000,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          },
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), 'Allow-HTTP')]",
+            "name": "Allow-HTTP",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "80",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1010,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          },
+          {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups/securityRules', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), 'Allow-HTTPS')]",
+            "name": "Allow-HTTPS",
+            "properties": {
+              "access": "Allow",
+              "destinationAddressPrefix": "*",
+              "destinationAddressPrefixes": [],
+              "destinationPortRange": "443",
+              "destinationPortRanges": [],
+              "direction": "Inbound",
+              "priority": 1020,
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "*",
+              "sourceAddressPrefixes": [],
+              "sourcePortRange": "*",
+              "sourcePortRanges": []
+            },
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+          }
+        ]
+      },
+      "type": "Microsoft.Network/networkSecurityGroups"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('publicIPAddresses_pip_bitrix_name')]",
+      "properties": {
+        "ddosSettings": {
+          "protectionMode": "VirtualNetworkInherited"
+        },
+        "idleTimeoutInMinutes": 4,
+        "ipAddress": "4.221.129.59",
+        "ipTags": [],
+        "publicIPAddressVersion": "IPv4",
+        "publicIPAllocationMethod": "Static"
+      },
+      "sku": {
+        "name": "Standard",
+        "tier": "Regional"
+      },
+      "type": "Microsoft.Network/publicIPAddresses"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('publicIPAddresses_pip_sdinmotion_bitrix_name')]",
+      "properties": {
+        "ddosSettings": {
+          "protectionMode": "VirtualNetworkInherited"
+        },
+        "idleTimeoutInMinutes": 4,
+        "ipAddress": "4.221.173.148",
+        "ipTags": [],
+        "publicIPAddressVersion": "IPv4",
+        "publicIPAllocationMethod": "Static"
+      },
+      "sku": {
+        "name": "Standard",
+        "tier": "Regional"
+      },
+      "type": "Microsoft.Network/publicIPAddresses"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('virtualNetworks_vnet_bitrix_name')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "enableDdosProtection": false,
+        "privateEndpointVNetPolicies": "Disabled",
+        "subnets": [
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_bitrix_name'), 'subnet-bitrix')]",
+            "name": "subnet-bitrix",
+            "properties": {
+              "addressPrefix": "10.0.1.0/24",
+              "delegations": [],
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Enabled"
+            },
+            "type": "Microsoft.Network/virtualNetworks/subnets"
+          }
+        ],
+        "virtualNetworkPeerings": []
+      },
+      "type": "Microsoft.Network/virtualNetworks"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "location": "southafricanorth",
+      "name": "[parameters('virtualNetworks_vnet_sdinmotion_bitrix_name')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.0.0.0/16"
+          ]
+        },
+        "enableDdosProtection": false,
+        "privateEndpointVNetPolicies": "Disabled",
+        "subnets": [
+          {
+            "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_sdinmotion_bitrix_name'), 'subnet-sdinmotion-bitrix')]",
+            "name": "subnet-sdinmotion-bitrix",
+            "properties": {
+              "addressPrefix": "10.0.1.0/24",
+              "delegations": [],
+              "privateEndpointNetworkPolicies": "Disabled",
+              "privateLinkServiceNetworkPolicies": "Enabled"
+            },
+            "type": "Microsoft.Network/virtualNetworks/subnets"
+          }
+        ],
+        "virtualNetworkPeerings": []
+      },
+      "type": "Microsoft.Network/virtualNetworks"
+    },
+    {
+      "apiVersion": "2025-04-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', parameters('networkInterfaces_nic_sdinmotion_bitrix_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[parameters('virtualMachines_vm_sdinmotion_bitrix_name')]",
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "Standard_DS1_v2"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', parameters('networkInterfaces_nic_sdinmotion_bitrix_name'))]",
+              "properties": {
+                "primary": true
+              }
+            }
+          ]
+        },
+        "osProfile": {
+          "adminUsername": "sdinmotion",
+          "allowExtensionOperations": true,
+          "computerName": "[parameters('virtualMachines_vm_sdinmotion_bitrix_name')]",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": false,
+            "patchSettings": {
+              "assessmentMode": "ImageDefault",
+              "patchMode": "ImageDefault"
+            },
+            "provisionVMAgent": true
+          },
+          "requireGuestProvisionSignal": true,
+          "secrets": []
+        },
+        "securityProfile": {
+          "securityType": "TrustedLaunch",
+          "uefiSettings": {
+            "secureBootEnabled": true,
+            "vTpmEnabled": true
+          }
+        },
+        "storageProfile": {
+          "dataDisks": [],
+          "diskControllerType": "SCSI",
+          "imageReference": {
+            "offer": "0001-com-ubuntu-server-jammy",
+            "publisher": "Canonical",
+            "sku": "22_04-lts-gen2",
+            "version": "latest"
+          },
+          "osDisk": {
+            "caching": "ReadWrite",
+            "createOption": "FromImage",
+            "deleteOption": "Detach",
+            "diskSizeGB": 30,
+            "managedDisk": {
+              "id": "[resourceId('Microsoft.Compute/disks', concat(parameters('virtualMachines_vm_sdinmotion_bitrix_name'), '_OsDisk_1_bab40dc64db14d048eb4c0959a503c82'))]",
+              "storageAccountType": "Premium_LRS"
+            },
+            "name": "[concat(parameters('virtualMachines_vm_sdinmotion_bitrix_name'), '_OsDisk_1_bab40dc64db14d048eb4c0959a503c82')]",
+            "osType": "Linux"
+          }
+        }
+      },
+      "type": "Microsoft.Compute/virtualMachines"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_bitrix_name'), '/Allow-HTTP')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "80",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1010,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), '/Allow-HTTP')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "80",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1010,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_bitrix_name'), '/Allow-HTTPS')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "443",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1020,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), '/Allow-HTTPS')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "443",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1020,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_bitrix_name'), '/Allow-SSH')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "22",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1000,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'), '/Allow-SSH')]",
+      "properties": {
+        "access": "Allow",
+        "destinationAddressPrefix": "*",
+        "destinationAddressPrefixes": [],
+        "destinationPortRange": "22",
+        "destinationPortRanges": [],
+        "direction": "Inbound",
+        "priority": 1000,
+        "protocol": "Tcp",
+        "sourceAddressPrefix": "*",
+        "sourceAddressPrefixes": [],
+        "sourcePortRange": "*",
+        "sourcePortRanges": []
+      },
+      "type": "Microsoft.Network/networkSecurityGroups/securityRules"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_vnet_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('virtualNetworks_vnet_bitrix_name'), '/subnet-bitrix')]",
+      "properties": {
+        "addressPrefix": "10.0.1.0/24",
+        "delegations": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Enabled"
+      },
+      "type": "Microsoft.Network/virtualNetworks/subnets"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworks_vnet_sdinmotion_bitrix_name'))]"
+      ],
+      "name": "[concat(parameters('virtualNetworks_vnet_sdinmotion_bitrix_name'), '/subnet-sdinmotion-bitrix')]",
+      "properties": {
+        "addressPrefix": "10.0.1.0/24",
+        "delegations": [],
+        "privateEndpointNetworkPolicies": "Disabled",
+        "privateLinkServiceNetworkPolicies": "Enabled"
+      },
+      "type": "Microsoft.Network/virtualNetworks/subnets"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_bitrix_name'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_bitrix_name'), 'subnet-bitrix')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bitrix_name'))]"
+      ],
+      "kind": "Regular",
+      "location": "southafricanorth",
+      "name": "[parameters('networkInterfaces_nic_bitrix_name')]",
+      "properties": {
+        "auxiliaryMode": "None",
+        "auxiliarySku": "None",
+        "disableTcpStateTracking": false,
+        "dnsSettings": {
+          "dnsServers": []
+        },
+        "enableAcceleratedNetworking": false,
+        "enableIPForwarding": false,
+        "ipConfigurations": [
+          {
+            "id": "[concat(resourceId('Microsoft.Network/networkInterfaces', parameters('networkInterfaces_nic_bitrix_name')), '/ipConfigurations/ipconfig1')]",
+            "name": "ipconfig1",
+            "properties": {
+              "primary": true,
+              "privateIPAddress": "10.0.1.4",
+              "privateIPAddressVersion": "IPv4",
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_bitrix_name'))]"
+              },
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_bitrix_name'), 'subnet-bitrix')]"
+              }
+            },
+            "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_bitrix_name'))]"
+        },
+        "nicType": "Standard"
+      },
+      "type": "Microsoft.Network/networkInterfaces"
+    },
+    {
+      "apiVersion": "2025-05-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_sdinmotion_bitrix_name'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_sdinmotion_bitrix_name'), 'subnet-sdinmotion-bitrix')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'))]"
+      ],
+      "kind": "Regular",
+      "location": "southafricanorth",
+      "name": "[parameters('networkInterfaces_nic_sdinmotion_bitrix_name')]",
+      "properties": {
+        "auxiliaryMode": "None",
+        "auxiliarySku": "None",
+        "disableTcpStateTracking": false,
+        "dnsSettings": {
+          "dnsServers": []
+        },
+        "enableAcceleratedNetworking": false,
+        "enableIPForwarding": false,
+        "ipConfigurations": [
+          {
+            "id": "[concat(resourceId('Microsoft.Network/networkInterfaces', parameters('networkInterfaces_nic_sdinmotion_bitrix_name')), '/ipConfigurations/ipconfig1')]",
+            "name": "ipconfig1",
+            "properties": {
+              "primary": true,
+              "privateIPAddress": "10.0.1.4",
+              "privateIPAddressVersion": "IPv4",
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', parameters('publicIPAddresses_pip_sdinmotion_bitrix_name'))]"
+              },
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworks_vnet_sdinmotion_bitrix_name'), 'subnet-sdinmotion-bitrix')]"
+              }
+            },
+            "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroups_nsg_sdinmotion_bitrix_name'))]"
+        },
+        "nicType": "Standard"
+      },
+      "type": "Microsoft.Network/networkInterfaces"
+    }
+  ],
+  "variables": {}
+}

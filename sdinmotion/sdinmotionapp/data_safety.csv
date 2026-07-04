@@ -1,0 +1,30 @@
+Question ID (machine readable),Question (human readable),Response ID (machine readable),Response (human readable)
+PSL_DATA_COLLECTION_COLLECTS_PERSONAL_DATA,Does your app collect or share any of the required user data types?,TRUE,Yes
+PSL_DATA_COLLECTION_EPHEMERAL,Is all of the user data collected by your app encrypted in transit?,TRUE,Yes
+PSL_DATA_COLLECTION_USER_ACCOUNTS,Can users request that their data is deleted?,TRUE,Yes
+PSL_DATA_COLLECTION_HANDLES_DATA_INDEPENDENTLY,Does your app share user data with third parties?,FALSE,No
+PSL_DATA_TYPE_PERSONAL_NAME,Name,COLLECTED,Collected
+PSL_DATA_TYPE_PERSONAL_NAME,Name,SHARED,Not shared
+PSL_DATA_TYPE_PERSONAL_NAME,Name,EPHEMERAL,No
+PSL_DATA_TYPE_PERSONAL_NAME,Name,REQUIRED,Yes
+PSL_DATA_TYPE_PERSONAL_NAME_PURPOSE,Name collection purpose,App functionality,App functionality
+PSL_DATA_TYPE_PHONE_NUMBER,Phone number,COLLECTED,Collected
+PSL_DATA_TYPE_PHONE_NUMBER,Phone number,SHARED,Not shared
+PSL_DATA_TYPE_PHONE_NUMBER,Phone number,EPHEMERAL,No
+PSL_DATA_TYPE_PHONE_NUMBER,Phone number,REQUIRED,Yes
+PSL_DATA_TYPE_PHONE_NUMBER_PURPOSE,Phone number collection purpose,App functionality,App functionality
+PSL_DATA_TYPE_EMAIL,Email address,COLLECTED,Collected
+PSL_DATA_TYPE_EMAIL,Email address,SHARED,Not shared
+PSL_DATA_TYPE_EMAIL,Email address,EPHEMERAL,No
+PSL_DATA_TYPE_EMAIL,Email address,REQUIRED,No
+PSL_DATA_TYPE_EMAIL_PURPOSE,Email collection purpose,App functionality,App functionality
+PSL_DATA_TYPE_PRECISE_LOCATION,Precise location,COLLECTED,Collected
+PSL_DATA_TYPE_PRECISE_LOCATION,Precise location,SHARED,Not shared
+PSL_DATA_TYPE_PRECISE_LOCATION,Precise location,EPHEMERAL,Yes
+PSL_DATA_TYPE_PRECISE_LOCATION,Precise location,REQUIRED,No
+PSL_DATA_TYPE_PRECISE_LOCATION_PURPOSE,Precise location collection purpose,App functionality,App functionality
+PSL_DATA_TYPE_PHOTOS,Photos,COLLECTED,Collected
+PSL_DATA_TYPE_PHOTOS,Photos,SHARED,Not shared
+PSL_DATA_TYPE_PHOTOS,Photos,EPHEMERAL,Yes
+PSL_DATA_TYPE_PHOTOS,Photos,REQUIRED,No
+PSL_DATA_TYPE_PHOTOS_PURPOSE,Photos collection purpose,App functionality,App functionality

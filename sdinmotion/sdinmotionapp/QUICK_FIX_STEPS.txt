@@ -1,0 +1,38 @@
+QUICK FIX STEPS - No Original Keystore
+=======================================
+
+STEP 1: Check Google Play Console (5 minutes)
+------------------------------------------------
+1. Go to: https://play.google.com/console
+2. Select your app
+3. Go to: Release → Setup → App signing
+4. Check if "Google Play App Signing" is enabled
+
+IF APP SIGNING IS ENABLED:
+  → Look for "Upload key certificate" section
+  → If you see "Request upload key reset" → Click it
+  → Follow Google's instructions to register new upload key
+  → Use the new keystore we created (upload-keystore.jks)
+  → Rebuild AAB and upload
+
+IF APP SIGNING IS NOT ENABLED:
+  → You'll need to contact Google Play Support
+  → Request key reset
+  → This may take several days
+
+STEP 2: If App Signing is Available
+------------------------------------------------
+Once you reset the upload key in Google Play Console:
+1. Use the current upload-keystore.jks we have
+2. Rebuild: cd android && ./gradlew bundleRelease
+3. Upload the new AAB
+
+STEP 3: Contact Support (if needed)
+------------------------------------------------
+If App Signing is not enabled:
+- Go to: https://support.google.com/googleplay/android-developer/
+- Select "App signing key issues"
+- Request key reset
+- Provide app package and fingerprint
+
+=======================================

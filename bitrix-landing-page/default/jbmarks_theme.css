@@ -1,0 +1,215 @@
+/**
+ * JB Marks Municipality — Custom Theme Overrides
+ * Applied on top of the default Bitrix24 template_styles.css
+ * Colors: Dark Green #1B5E20, Medium Green #2E7D32, Gold #F9A825
+ */
+
+/* ─── Header Bar ──────────────────────────────────────────── */
+#header {
+  background: #1B5E20 !important;
+}
+
+#header-inner .timeman-block:hover .timeman-background,
+.timeman-block .timeman-background {
+  background-color: rgba(255,255,255,0.08) !important;
+}
+
+.user-block:hover:after,
+.user-block.--hover:after,
+.user-block.--wait:after {
+  background-color: rgba(255,255,255,0.1) !important;
+}
+
+/* ─── Left Sidebar Menu ───────────────────────────────────── */
+.bx-layout-inner-left {
+  background: #1B5E20 !important;
+}
+
+/* Menu items - base state */
+.menu-items-block,
+.menu-item-block {
+  background: transparent !important;
+}
+
+/* Left menu wrapper */
+#layout-left-column,
+#layout-left-column-bottom {
+  background: #1B5E20 !important;
+}
+
+/* Menu item text color */
+.menu-item-link-text {
+  color: rgba(255,255,255,0.85) !important;
+}
+
+.menu-item-link:hover .menu-item-link-text {
+  color: #fff !important;
+}
+
+/* Active menu item */
+.menu-item-active .menu-item-link-text,
+.menu-item-active-current .menu-item-link-text {
+  color: #1B5E20 !important;
+  font-weight: 700 !important;
+}
+
+.menu-item-active .menu-item-link,
+.menu-item-active-current .menu-item-link {
+  background: #F9A825 !important;
+  border-radius: 6px !important;
+}
+
+/* Menu hover */
+.menu-item-block:hover .menu-item-link {
+  background: rgba(255,255,255,0.08) !important;
+  border-radius: 6px !important;
+}
+
+.menu-item-active .menu-item-link:hover,
+.menu-item-active-current .menu-item-link:hover {
+  background: #F9A825 !important;
+}
+
+/* Menu icons */
+.menu-item-link-icon {
+  filter: brightness(0) invert(1) !important;
+  opacity: 0.8 !important;
+}
+
+.menu-item-active .menu-item-link-icon,
+.menu-item-active-current .menu-item-link-icon {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* Menu counter badges */
+.menu-item-link-counter {
+  background: #F9A825 !important;
+  color: #1B5E20 !important;
+  font-weight: 700 !important;
+}
+
+/* Menu section titles */
+.menu-section-title {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+/* Collapsed menu */
+.menu-collapsed-mode #layout-left-column,
+.menu-collapsed-mode #layout-left-column-bottom {
+  background: #1B5E20 !important;
+}
+
+/* Menu switcher (hamburger) */
+.menu-switcher-lines,
+.menu-switcher-lines:before,
+.menu-switcher-lines:after {
+  background-color: #fff !important;
+}
+
+/* ─── Logo ────────────────────────────────────────────────── */
+.logo-text {
+  color: #fff !important;
+}
+
+.logo-color {
+  color: #F9A825 !important;
+}
+
+/* ─── Content Area ────────────────────────────────────────── */
+.bx-layout-inner-table {
+  background-color: #f0f4f0 !important;
+}
+
+/* ─── Links & Buttons ─────────────────────────────────────── */
+a {
+  color: #2E7D32;
+}
+
+a:hover {
+  color: #1B5E20;
+}
+
+/* Primary buttons */
+.ui-btn-primary,
+.ui-btn-success {
+  background-color: #2E7D32 !important;
+  border-color: #1B5E20 !important;
+}
+
+.ui-btn-primary:hover,
+.ui-btn-success:hover {
+  background-color: #1B5E20 !important;
+}
+
+/* ─── Page Title ──────────────────────────────────────────── */
+.pagetitle {
+  color: #1B5E20 !important;
+}
+
+/* ─── Notification Badge ──────────────────────────────────── */
+.header-notif-counter,
+.menu-notif-counter {
+  background: #F9A825 !important;
+  color: #1B5E20 !important;
+}
+
+/* ─── Top Search ──────────────────────────────────────────── */
+.header-search input[type="text"],
+.header-search .search-input {
+  background: rgba(255,255,255,0.12) !important;
+  border-color: rgba(255,255,255,0.2) !important;
+  color: #fff !important;
+}
+
+.header-search input[type="text"]::placeholder {
+  color: rgba(255,255,255,0.5) !important;
+}
+
+.header-search input[type="text"]:focus {
+  background: rgba(255,255,255,0.2) !important;
+  border-color: #F9A825 !important;
+}
+
+/* ─── Scrollbar in Sidebar ────────────────────────────────── */
+.bx-layout-inner-left::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2) !important;
+}
+
+/* ─── Theme Picker Overrides ──────────────────────────────── */
+.bitrix24-default-theme #header {
+  background: #1B5E20 !important;
+}
+
+.bitrix24-default-theme .bx-layout-inner-left,
+.bitrix24-default-theme #layout-left-column,
+.bitrix24-default-theme #layout-left-column-bottom {
+  background: #1B5E20 !important;
+}
+
+.bitrix24-dark-theme #header {
+  background: #0D3B12 !important;
+}
+
+.bitrix24-dark-theme .bx-layout-inner-left,
+.bitrix24-dark-theme #layout-left-column,
+.bitrix24-dark-theme #layout-left-column-bottom {
+  background: #0D3B12 !important;
+}
+
+/* ─── Sidebar Block (right sidebar on index) ──────────────── */
+.sidebar-block {
+  border-radius: 12px !important;
+}
+
+/* ─── Workarea Cards ──────────────────────────────────────── */
+.workarea-content {
+  border-radius: 12px !important;
+}
+
+/* ─── Custom External Links in Menu ───────────────────────── */
+.menu-item-external .menu-item-link-text::after {
+  content: " ↗";
+  font-size: 10px;
+  opacity: 0.5;
+}

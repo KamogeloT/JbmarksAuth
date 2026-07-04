@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { sdimApi, SDiMTask, SDiMUser, TICKET_STATUS_MAP, TICKET_STATUS_COLORS, PRIORITY_MAP, isUnassigned, getAssigneeName, parseCallerInfo } from '@/lib/sdim-api'
+import { emailNotifications } from '@/lib/email-notifications'
+import { playNotificationSound } from '@/lib/notification-sound'
 import { format } from 'date-fns'
 
 interface Props {
@@ -67,6 +69,19 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
       const t = await sdimApi.getTicket(ticketId)
       setTicket(t)
       onRefresh()
+
+      // Send notifications on status change
+      if (t) {
+        const statusName = TICKET_STATUS_MAP[t.status] || 'Updated'
+        await emailNotifications.notifyStatusChanged(
+          ticketId,
+          t.title,
+          statusName,
+          t.responsibleId,
+          t.createdBy,
+        )
+        playNotificationSound()
+      }
     } catch (e) {
       alert('Action failed: ' + (e instanceof Error ? e.message : 'Unknown error'))
     } finally {
@@ -89,6 +104,18 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
       setComments(c)
       setShowAssignModal(false)
       onRefresh()
+
+      // Send notification to assigned technician and caller
+      if (t) {
+        await emailNotifications.notifyTicketAssigned(
+          ticketId,
+          t.title,
+          userId,
+          techName,
+          t.createdBy,
+        )
+        playNotificationSound()
+      }
     } catch (e) {
       alert('Assignment failed: ' + (e instanceof Error ? e.message : 'Unknown error'))
     } finally {
@@ -101,9 +128,23 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
     setSubmitting(true)
     try {
       await sdimApi.addComment(ticketId, newComment)
+      const commentText = newComment
       setNewComment('')
       const c = await sdimApi.getComments(ticketId)
       setComments(c)
+
+      // Notify relevant parties about the new comment
+      if (ticket) {
+        await emailNotifications.notifyCommentAdded(
+          ticketId,
+          ticket.title,
+          commentText,
+          ticket.responsibleId, // current user is the tech on the dashboard
+          ticket.responsibleId,
+          ticket.createdBy,
+        )
+        playNotificationSound()
+      }
     } catch (e) {
       alert('Failed to add comment')
     } finally {

@@ -1,0 +1,2691 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "actionGroups_Application_Insights_Smart_Detection_name": {
+      "type": "String"
+    },
+    "components_jbmarks_token_exchange_name": {
+      "type": "String"
+    },
+    "components_jbmarks_token_exchange_v2_name": {
+      "type": "String"
+    },
+    "components_jbmarks_token_exchange_v3_name": {
+      "type": "String"
+    },
+    "serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name": {
+      "type": "String"
+    },
+    "serverfarms_Prod_name": {
+      "type": "String"
+    },
+    "sites_jbmarks_bff_api_name": {
+      "type": "String"
+    },
+    "sites_jbmarks_token_exchange_name": {
+      "type": "String"
+    },
+    "sites_jbmarks_token_exchange_v2_name": {
+      "type": "String"
+    },
+    "sites_jbmarks_token_exchange_v3_name": {
+      "type": "String"
+    },
+    "staticSites_jbmarks_oauth_redirect_name": {
+      "type": "String"
+    },
+    "storageAccounts_jbmarksoauthredirecb0ce_name": {
+      "type": "String"
+    },
+    "workspaces_DefaultWorkspace_41a1a89c_2a50_44b3_b917_d54b517783c2_JNB_externalid": {
+      "type": "String"
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2024-10-01-preview",
+      "location": "Global",
+      "name": "[parameters('actionGroups_Application_Insights_Smart_Detection_name')]",
+      "properties": {
+        "armRoleReceivers": [
+          {
+            "name": "Monitoring Contributor",
+            "roleId": "749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+            "useCommonAlertSchema": true
+          },
+          {
+            "name": "Monitoring Reader",
+            "roleId": "43d0d8ad-25c7-4714-9337-8ba259a9fe05",
+            "useCommonAlertSchema": true
+          }
+        ],
+        "automationRunbookReceivers": [],
+        "azureAppPushReceivers": [],
+        "azureFunctionReceivers": [],
+        "emailReceivers": [],
+        "enabled": true,
+        "eventHubReceivers": [],
+        "groupShortName": "SmartDetect",
+        "itsmReceivers": [],
+        "logicAppReceivers": [],
+        "smsReceivers": [],
+        "voiceReceivers": [],
+        "webhookReceivers": []
+      },
+      "type": "microsoft.insights/actionGroups"
+    },
+    {
+      "apiVersion": "2020-02-02",
+      "kind": "web",
+      "location": "southafricanorth",
+      "name": "[parameters('components_jbmarks_token_exchange_name')]",
+      "properties": {
+        "Application_Type": "web",
+        "DisableLocalAuth": false,
+        "Flow_Type": "Redfield",
+        "IngestionMode": "LogAnalytics",
+        "Request_Source": "IbizaWebAppExtensionCreate",
+        "RetentionInDays": 90,
+        "WorkspaceResourceId": "[parameters('workspaces_DefaultWorkspace_41a1a89c_2a50_44b3_b917_d54b517783c2_JNB_externalid')]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "type": "microsoft.insights/components"
+    },
+    {
+      "apiVersion": "2020-02-02",
+      "kind": "web",
+      "location": "southafricanorth",
+      "name": "[parameters('components_jbmarks_token_exchange_v2_name')]",
+      "properties": {
+        "Application_Type": "web",
+        "Flow_Type": "Redfield",
+        "IngestionMode": "LogAnalytics",
+        "Request_Source": "IbizaAIExtensionEnablementBlade",
+        "RetentionInDays": 90,
+        "WorkspaceResourceId": "[parameters('workspaces_DefaultWorkspace_41a1a89c_2a50_44b3_b917_d54b517783c2_JNB_externalid')]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "type": "microsoft.insights/components"
+    },
+    {
+      "apiVersion": "2020-02-02",
+      "kind": "web",
+      "location": "southafricanorth",
+      "name": "[parameters('components_jbmarks_token_exchange_v3_name')]",
+      "properties": {
+        "Application_Type": "web",
+        "IngestionMode": "LogAnalytics",
+        "RetentionInDays": 90,
+        "WorkspaceResourceId": "[parameters('workspaces_DefaultWorkspace_41a1a89c_2a50_44b3_b917_d54b517783c2_JNB_externalid')]",
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      },
+      "type": "microsoft.insights/components"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "kind": "Storage",
+      "location": "southafricanorth",
+      "name": "[parameters('storageAccounts_jbmarksoauthredirecb0ce_name')]",
+      "properties": {
+        "allowBlobPublicAccess": true,
+        "allowCrossTenantReplication": false,
+        "allowSharedKeyAccess": true,
+        "defaultToOAuthAuthentication": true,
+        "encryption": {
+          "keySource": "Microsoft.Storage",
+          "services": {
+            "blob": {
+              "enabled": true,
+              "keyType": "Account"
+            },
+            "file": {
+              "enabled": true,
+              "keyType": "Account"
+            }
+          }
+        },
+        "minimumTlsVersion": "TLS1_2",
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Allow",
+          "ipRules": [],
+          "ipv6Rules": [],
+          "virtualNetworkRules": []
+        },
+        "publicNetworkAccess": "Enabled",
+        "supportsHttpsTrafficOnly": true
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "kind": "functionapp",
+      "location": "South Africa North",
+      "name": "[parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name')]",
+      "properties": {
+        "asyncScalingEnabled": false,
+        "elasticScaleEnabled": false,
+        "hyperV": false,
+        "isSpot": false,
+        "isXenon": false,
+        "maximumElasticWorkerCount": 1,
+        "perSiteScaling": false,
+        "reserved": false,
+        "targetWorkerCount": 0,
+        "targetWorkerSizeId": 0,
+        "zoneRedundant": false
+      },
+      "sku": {
+        "capacity": 0,
+        "family": "Y",
+        "name": "Y1",
+        "size": "Y1",
+        "tier": "Dynamic"
+      },
+      "type": "Microsoft.Web/serverfarms"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "kind": "linux",
+      "location": "South Africa North",
+      "name": "[parameters('serverfarms_Prod_name')]",
+      "properties": {
+        "asyncScalingEnabled": false,
+        "elasticScaleEnabled": false,
+        "hyperV": false,
+        "isSpot": false,
+        "isXenon": false,
+        "maximumElasticWorkerCount": 1,
+        "perSiteScaling": false,
+        "reserved": true,
+        "targetWorkerCount": 0,
+        "targetWorkerSizeId": 0,
+        "zoneRedundant": false
+      },
+      "sku": {
+        "capacity": 1,
+        "family": "B",
+        "name": "B1",
+        "size": "B1",
+        "tier": "Basic"
+      },
+      "type": "Microsoft.Web/serverfarms"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "location": "West Europe",
+      "name": "[parameters('staticSites_jbmarks_oauth_redirect_name')]",
+      "properties": {
+        "allowConfigFileUpdates": true,
+        "enterpriseGradeCdnStatus": "Disabled",
+        "provider": "None",
+        "stagingEnvironmentPolicy": "Enabled"
+      },
+      "sku": {
+        "name": "Free",
+        "tier": "Free"
+      },
+      "type": "Microsoft.Web/staticSites"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/degradationindependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationindependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/degradationindependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationindependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/degradationindependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationindependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/degradationinserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationinserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/degradationinserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationinserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/degradationinserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Degradation in server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "degradationinserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/digestMailConfiguration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This rule describes the digest mail preferences",
+          "DisplayName": "Digest Mail Configuration",
+          "HelpUrl": "www.homail.com",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": false,
+          "Name": "digestMailConfiguration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/digestMailConfiguration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This rule describes the digest mail preferences",
+          "DisplayName": "Digest Mail Configuration",
+          "HelpUrl": "www.homail.com",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": false,
+          "Name": "digestMailConfiguration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/digestMailConfiguration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This rule describes the digest mail preferences",
+          "DisplayName": "Digest Mail Configuration",
+          "HelpUrl": "www.homail.com",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": false,
+          "Name": "digestMailConfiguration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_billingdatavolumedailyspikeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the billing data generated by your application, and can warn you about an unusual increase in your application's billing costs",
+          "DisplayName": "Abnormal rise in daily data volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/billing-data-volume-daily-spike.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_billingdatavolumedailyspikeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_billingdatavolumedailyspikeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the billing data generated by your application, and can warn you about an unusual increase in your application's billing costs",
+          "DisplayName": "Abnormal rise in daily data volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/billing-data-volume-daily-spike.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_billingdatavolumedailyspikeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_billingdatavolumedailyspikeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the billing data generated by your application, and can warn you about an unusual increase in your application's billing costs",
+          "DisplayName": "Abnormal rise in daily data volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/billing-data-volume-daily-spike.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_billingdatavolumedailyspikeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_canaryextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Canary extension",
+          "DisplayName": "Canary extension",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "extension_canaryextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_canaryextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Canary extension",
+          "DisplayName": "Canary extension",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "extension_canaryextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_canaryextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Canary extension",
+          "DisplayName": "Canary extension",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/",
+          "IsEnabledByDefault": true,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "extension_canaryextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_exceptionchangeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the exceptions thrown in your application, and can warn you about unusual patterns in your exception telemetry.",
+          "DisplayName": "Abnormal rise in exception volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/abnormal-rise-in-exception-volume.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_exceptionchangeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_exceptionchangeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the exceptions thrown in your application, and can warn you about unusual patterns in your exception telemetry.",
+          "DisplayName": "Abnormal rise in exception volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/abnormal-rise-in-exception-volume.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_exceptionchangeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_exceptionchangeextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the exceptions thrown in your application, and can warn you about unusual patterns in your exception telemetry.",
+          "DisplayName": "Abnormal rise in exception volume (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/abnormal-rise-in-exception-volume.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_exceptionchangeextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_memoryleakextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the memory consumption of each process in your application, and can warn you about potential memory leaks or increased memory consumption.",
+          "DisplayName": "Potential memory leak detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/memory-leak.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_memoryleakextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_memoryleakextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the memory consumption of each process in your application, and can warn you about potential memory leaks or increased memory consumption.",
+          "DisplayName": "Potential memory leak detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/memory-leak.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_memoryleakextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_memoryleakextension')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the memory consumption of each process in your application, and can warn you about potential memory leaks or increased memory consumption.",
+          "DisplayName": "Potential memory leak detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/tree/master/SmartDetection/memory-leak.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_memoryleakextension",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_securityextensionspackage')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the telemetry generated by your application and detects potential security issues.",
+          "DisplayName": "Potential security issue detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/application-security-detection-pack.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_securityextensionspackage",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_securityextensionspackage')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the telemetry generated by your application and detects potential security issues.",
+          "DisplayName": "Potential security issue detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/application-security-detection-pack.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_securityextensionspackage",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_securityextensionspackage')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the telemetry generated by your application and detects potential security issues.",
+          "DisplayName": "Potential security issue detected (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/application-security-detection-pack.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_securityextensionspackage",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/extension_traceseveritydetector')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the trace logs emitted from your application, and can warn you about unusual patterns in the severity of your trace telemetry.",
+          "DisplayName": "Degradation in trace severity ratio (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/degradation-in-trace-severity-ratio.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_traceseveritydetector",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/extension_traceseveritydetector')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the trace logs emitted from your application, and can warn you about unusual patterns in the severity of your trace telemetry.",
+          "DisplayName": "Degradation in trace severity ratio (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/degradation-in-trace-severity-ratio.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_traceseveritydetector",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/extension_traceseveritydetector')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "This detection rule automatically analyzes the trace logs emitted from your application, and can warn you about unusual patterns in the severity of your trace telemetry.",
+          "DisplayName": "Degradation in trace severity ratio (preview)",
+          "HelpUrl": "https://github.com/Microsoft/ApplicationInsights-Home/blob/master/SmartDetection/degradation-in-trace-severity-ratio.md",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": true,
+          "Name": "extension_traceseveritydetector",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/longdependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Long dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "longdependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/longdependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Long dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "longdependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/longdependencyduration')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Long dependency duration",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "longdependencyduration",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/migrationToAlertRulesCompleted')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": false,
+        "ruleDefinitions": {
+          "Description": "A configuration that controls the migration state of Smart Detection to Smart Alerts",
+          "DisplayName": "Migration To Alert Rules Completed",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": false,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "migrationToAlertRulesCompleted",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/migrationToAlertRulesCompleted')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": false,
+        "ruleDefinitions": {
+          "Description": "A configuration that controls the migration state of Smart Detection to Smart Alerts",
+          "DisplayName": "Migration To Alert Rules Completed",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": false,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "migrationToAlertRulesCompleted",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/migrationToAlertRulesCompleted')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": false,
+        "ruleDefinitions": {
+          "Description": "A configuration that controls the migration state of Smart Detection to Smart Alerts",
+          "DisplayName": "Migration To Alert Rules Completed",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": false,
+          "IsHidden": true,
+          "IsInPreview": true,
+          "Name": "migrationToAlertRulesCompleted",
+          "SupportsEmailNotifications": false
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/slowpageloadtime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow page load time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowpageloadtime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/slowpageloadtime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow page load time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowpageloadtime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/slowpageloadtime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow page load time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowpageloadtime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_name'), '/slowserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v2_name'), '/slowserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2018-05-01-preview",
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components', parameters('components_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "southafricanorth",
+      "name": "[concat(parameters('components_jbmarks_token_exchange_v3_name'), '/slowserverresponsetime')]",
+      "properties": {
+        "customEmails": [],
+        "enabled": true,
+        "ruleDefinitions": {
+          "Description": "Smart Detection rules notify you of performance anomaly issues.",
+          "DisplayName": "Slow server response time",
+          "HelpUrl": "https://docs.microsoft.com/en-us/azure/application-insights/app-insights-proactive-performance-diagnostics",
+          "IsEnabledByDefault": true,
+          "IsHidden": false,
+          "IsInPreview": false,
+          "Name": "slowserverresponsetime",
+          "SupportsEmailNotifications": true
+        },
+        "sendEmailsToSubscriptionOwners": true
+      },
+      "type": "microsoft.insights/components/ProactiveDetectionConfigs"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "allowPermanentDelete": false,
+          "enabled": false
+        }
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        },
+        "protocolSettings": {
+          "smb": {}
+        },
+        "shareDeleteRetentionPolicy": {
+          "days": 7,
+          "enabled": true
+        }
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/queueServices"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default')]",
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      },
+      "type": "Microsoft.Storage/storageAccounts/tableServices"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_Prod_name'))]"
+      ],
+      "kind": "app,linux",
+      "location": "South Africa North",
+      "name": "[parameters('sites_jbmarks_bff_api_name')]",
+      "properties": {
+        "clientAffinityEnabled": true,
+        "clientAffinityProxyEnabled": false,
+        "clientCertEnabled": false,
+        "clientCertMode": "Optional",
+        "containerSize": 0,
+        "customDomainVerificationId": "FF7477652A8373F8234F259AC59DC202D0B0B8A3303AC40371033ECA831A5B41",
+        "dailyMemoryTimeQuota": 0,
+        "dnsConfiguration": {},
+        "enabled": true,
+        "endToEndEncryptionEnabled": false,
+        "hostNameSslStates": [
+          {
+            "hostType": "Standard",
+            "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '.azurewebsites.net')]",
+            "sslState": "Disabled"
+          },
+          {
+            "hostType": "Repository",
+            "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '.scm.azurewebsites.net')]",
+            "sslState": "Disabled"
+          }
+        ],
+        "hostNamesDisabled": false,
+        "httpsOnly": false,
+        "hyperV": false,
+        "ipMode": "IPv4",
+        "isXenon": false,
+        "keyVaultReferenceIdentity": "SystemAssigned",
+        "outboundVnetRouting": {
+          "allTraffic": false,
+          "applicationTraffic": false,
+          "backupRestoreTraffic": false,
+          "contentShareTraffic": false,
+          "imagePullTraffic": false
+        },
+        "publicNetworkAccess": "Enabled",
+        "redundancyMode": "None",
+        "reserved": true,
+        "scmSiteAlsoStopped": false,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_Prod_name'))]",
+        "siteConfig": {
+          "acrUseManagedIdentityCreds": false,
+          "alwaysOn": true,
+          "functionAppScaleLimit": 0,
+          "http20Enabled": true,
+          "linuxFxVersion": "NODE|22-lts",
+          "minimumElasticInstanceCount": 1,
+          "numberOfWorkers": 1
+        },
+        "sshEnabled": true,
+        "storageAccountRequired": false
+      },
+      "type": "Microsoft.Web/sites"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]"
+      ],
+      "kind": "functionapp",
+      "location": "South Africa North",
+      "name": "[parameters('sites_jbmarks_token_exchange_name')]",
+      "properties": {
+        "autoGeneratedDomainNameLabelScope": "TenantReuse",
+        "clientAffinityEnabled": false,
+        "clientAffinityProxyEnabled": false,
+        "clientCertEnabled": false,
+        "clientCertMode": "Required",
+        "containerSize": 1536,
+        "customDomainVerificationId": "FF7477652A8373F8234F259AC59DC202D0B0B8A3303AC40371033ECA831A5B41",
+        "dailyMemoryTimeQuota": 0,
+        "dnsConfiguration": {},
+        "enabled": true,
+        "endToEndEncryptionEnabled": false,
+        "hostNameSslStates": [
+          {
+            "hostType": "Repository",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '-dxd0cne9fgdch3ay.scm.southafricanorth-01.azurewebsites.net')]",
+            "sslState": "Disabled"
+          },
+          {
+            "hostType": "Standard",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net')]",
+            "sslState": "Disabled"
+          }
+        ],
+        "hostNamesDisabled": false,
+        "httpsOnly": true,
+        "hyperV": false,
+        "ipMode": "IPv4",
+        "isXenon": false,
+        "keyVaultReferenceIdentity": "SystemAssigned",
+        "outboundVnetRouting": {
+          "allTraffic": false,
+          "applicationTraffic": false,
+          "backupRestoreTraffic": false,
+          "contentShareTraffic": false,
+          "imagePullTraffic": false
+        },
+        "publicNetworkAccess": "Enabled",
+        "redundancyMode": "None",
+        "reserved": false,
+        "scmSiteAlsoStopped": false,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]",
+        "siteConfig": {
+          "acrUseManagedIdentityCreds": false,
+          "alwaysOn": false,
+          "functionAppScaleLimit": 200,
+          "http20Enabled": false,
+          "minimumElasticInstanceCount": 1,
+          "numberOfWorkers": 1
+        },
+        "storageAccountRequired": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]"
+      ],
+      "kind": "functionapp",
+      "location": "South Africa North",
+      "name": "[parameters('sites_jbmarks_token_exchange_v2_name')]",
+      "properties": {
+        "clientAffinityEnabled": false,
+        "clientAffinityProxyEnabled": false,
+        "clientCertEnabled": false,
+        "clientCertMode": "Optional",
+        "containerSize": 1536,
+        "customDomainVerificationId": "FF7477652A8373F8234F259AC59DC202D0B0B8A3303AC40371033ECA831A5B41",
+        "dailyMemoryTimeQuota": 0,
+        "dnsConfiguration": {},
+        "enabled": true,
+        "endToEndEncryptionEnabled": false,
+        "hostNameSslStates": [
+          {
+            "hostType": "Standard",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '.azurewebsites.net')]",
+            "sslState": "Disabled"
+          },
+          {
+            "hostType": "Repository",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '.scm.azurewebsites.net')]",
+            "sslState": "Disabled"
+          }
+        ],
+        "hostNamesDisabled": false,
+        "httpsOnly": true,
+        "hyperV": false,
+        "ipMode": "IPv4",
+        "isXenon": false,
+        "keyVaultReferenceIdentity": "SystemAssigned",
+        "outboundVnetRouting": {
+          "allTraffic": false,
+          "applicationTraffic": false,
+          "backupRestoreTraffic": false,
+          "contentShareTraffic": false,
+          "imagePullTraffic": false
+        },
+        "publicNetworkAccess": "Enabled",
+        "redundancyMode": "None",
+        "reserved": false,
+        "scmSiteAlsoStopped": false,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]",
+        "siteConfig": {
+          "acrUseManagedIdentityCreds": false,
+          "alwaysOn": false,
+          "functionAppScaleLimit": 200,
+          "http20Enabled": false,
+          "minimumElasticInstanceCount": 0,
+          "numberOfWorkers": 1
+        },
+        "storageAccountRequired": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]"
+      ],
+      "kind": "functionapp",
+      "location": "South Africa North",
+      "name": "[parameters('sites_jbmarks_token_exchange_v3_name')]",
+      "properties": {
+        "clientAffinityEnabled": false,
+        "clientAffinityProxyEnabled": false,
+        "clientCertEnabled": false,
+        "clientCertMode": "Required",
+        "containerSize": 1536,
+        "customDomainVerificationId": "FF7477652A8373F8234F259AC59DC202D0B0B8A3303AC40371033ECA831A5B41",
+        "dailyMemoryTimeQuota": 0,
+        "dnsConfiguration": {},
+        "enabled": true,
+        "endToEndEncryptionEnabled": false,
+        "hostNameSslStates": [
+          {
+            "hostType": "Standard",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '.azurewebsites.net')]",
+            "sslState": "Disabled"
+          },
+          {
+            "hostType": "Repository",
+            "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '.scm.azurewebsites.net')]",
+            "sslState": "Disabled"
+          }
+        ],
+        "hostNamesDisabled": false,
+        "httpsOnly": false,
+        "hyperV": false,
+        "ipMode": "IPv4",
+        "isXenon": false,
+        "keyVaultReferenceIdentity": "SystemAssigned",
+        "outboundVnetRouting": {
+          "allTraffic": false,
+          "applicationTraffic": false,
+          "backupRestoreTraffic": false,
+          "contentShareTraffic": false,
+          "imagePullTraffic": false
+        },
+        "publicNetworkAccess": "Enabled",
+        "redundancyMode": "None",
+        "reserved": false,
+        "scmSiteAlsoStopped": false,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('serverfarms_ASP_jbmarksoauthredirectrgza_83b1_name'))]",
+        "siteConfig": {
+          "acrUseManagedIdentityCreds": false,
+          "alwaysOn": false,
+          "functionAppScaleLimit": 200,
+          "http20Enabled": true,
+          "minimumElasticInstanceCount": 0,
+          "numberOfWorkers": 1
+        },
+        "storageAccountRequired": false
+      },
+      "type": "Microsoft.Web/sites"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_bff_api_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '/ftp')]",
+      "properties": {
+        "allow": true
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/ftp')]",
+      "properties": {
+        "allow": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/ftp')]",
+      "properties": {
+        "allow": true
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/ftp')]",
+      "properties": {
+        "allow": false
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_bff_api_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '/scm')]",
+      "properties": {
+        "allow": true
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/scm')]",
+      "properties": {
+        "allow": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/scm')]",
+      "properties": {
+        "allow": true
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/scm')]",
+      "properties": {
+        "allow": false
+      },
+      "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_bff_api_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '/web')]",
+      "properties": {
+        "acrUseManagedIdentityCreds": false,
+        "alwaysOn": true,
+        "appCommandLine": "npm install --production && node server.js",
+        "autoHealEnabled": false,
+        "azureStorageAccounts": {},
+        "defaultDocuments": [
+          "Default.htm",
+          "Default.html",
+          "Default.asp",
+          "index.htm",
+          "index.html",
+          "iisstart.htm",
+          "default.aspx",
+          "index.php",
+          "hostingstart.html"
+        ],
+        "detailedErrorLoggingEnabled": false,
+        "elasticWebAppScaleLimit": 0,
+        "experiments": {
+          "rampUpRules": []
+        },
+        "ftpsState": "AllAllowed",
+        "functionsRuntimeScaleMonitoringEnabled": false,
+        "healthCheckPath": "/health",
+        "http20Enabled": true,
+        "http20ProxyFlag": 1,
+        "httpLoggingEnabled": true,
+        "ipSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "linuxFxVersion": "NODE|22-lts",
+        "loadBalancing": "LeastRequests",
+        "localMySqlEnabled": false,
+        "logsDirectorySizeLimit": 100,
+        "managedPipelineMode": "Integrated",
+        "minTlsVersion": "1.2",
+        "minimumElasticInstanceCount": 1,
+        "netFrameworkVersion": "v4.0",
+        "numberOfWorkers": 1,
+        "preWarmedInstanceCount": 0,
+        "publicNetworkAccess": "Enabled",
+        "publishingUsername": "$jbmarks-bff-api",
+        "remoteDebuggingEnabled": false,
+        "remoteDebuggingVersion": "VS2022",
+        "requestTracingEnabled": false,
+        "scmIpSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "scmMinTlsVersion": "1.2",
+        "scmType": "None",
+        "use32BitWorkerProcess": true,
+        "virtualApplications": [
+          {
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": true,
+            "virtualPath": "/"
+          }
+        ],
+        "vnetPrivatePortsCount": 0,
+        "vnetRouteAllEnabled": false,
+        "webSocketsEnabled": false
+      },
+      "type": "Microsoft.Web/sites/config"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/web')]",
+      "properties": {
+        "acrUseManagedIdentityCreds": false,
+        "alwaysOn": false,
+        "autoHealEnabled": false,
+        "azureStorageAccounts": {},
+        "cors": {
+          "allowedOrigins": [
+            "https://portal.azure.com"
+          ],
+          "supportCredentials": false
+        },
+        "defaultDocuments": [
+          "Default.htm",
+          "Default.html",
+          "Default.asp",
+          "index.htm",
+          "index.html",
+          "iisstart.htm",
+          "default.aspx",
+          "index.php"
+        ],
+        "detailedErrorLoggingEnabled": false,
+        "experiments": {
+          "rampUpRules": []
+        },
+        "ftpsState": "FtpsOnly",
+        "functionAppScaleLimit": 200,
+        "functionsRuntimeScaleMonitoringEnabled": false,
+        "http20Enabled": false,
+        "http20ProxyFlag": 0,
+        "httpLoggingEnabled": false,
+        "ipSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "localMySqlEnabled": false,
+        "logsDirectorySizeLimit": 35,
+        "managedPipelineMode": "Integrated",
+        "minTlsVersion": "1.2",
+        "minimumElasticInstanceCount": 1,
+        "netFrameworkVersion": "v8.0",
+        "numberOfWorkers": 1,
+        "preWarmedInstanceCount": 0,
+        "publicNetworkAccess": "Enabled",
+        "publishingUsername": "REDACTED",
+        "remoteDebuggingEnabled": false,
+        "remoteDebuggingVersion": "VS2022",
+        "requestTracingEnabled": false,
+        "scmIpSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "scmMinTlsVersion": "1.2",
+        "scmType": "None",
+        "use32BitWorkerProcess": false,
+        "virtualApplications": [
+          {
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": false,
+            "virtualPath": "/"
+          }
+        ],
+        "vnetPrivatePortsCount": 0,
+        "vnetRouteAllEnabled": false,
+        "webSocketsEnabled": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/config"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/web')]",
+      "properties": {
+        "acrUseManagedIdentityCreds": false,
+        "alwaysOn": false,
+        "autoHealEnabled": false,
+        "azureStorageAccounts": {},
+        "defaultDocuments": [
+          "Default.htm",
+          "Default.html",
+          "Default.asp",
+          "index.htm",
+          "index.html",
+          "iisstart.htm",
+          "default.aspx",
+          "index.php"
+        ],
+        "detailedErrorLoggingEnabled": false,
+        "experiments": {
+          "rampUpRules": []
+        },
+        "ftpsState": "FtpsOnly",
+        "functionAppScaleLimit": 200,
+        "functionsRuntimeScaleMonitoringEnabled": false,
+        "http20Enabled": false,
+        "http20ProxyFlag": 0,
+        "httpLoggingEnabled": false,
+        "ipSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "localMySqlEnabled": false,
+        "logsDirectorySizeLimit": 35,
+        "managedPipelineMode": "Integrated",
+        "minTlsVersion": "1.2",
+        "minimumElasticInstanceCount": 0,
+        "netFrameworkVersion": "v8.0",
+        "numberOfWorkers": 1,
+        "preWarmedInstanceCount": 0,
+        "publishingUsername": "$jbmarks-token-exchange-v2",
+        "remoteDebuggingEnabled": false,
+        "requestTracingEnabled": false,
+        "scmIpSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "scmMinTlsVersion": "1.2",
+        "scmType": "None",
+        "use32BitWorkerProcess": true,
+        "virtualApplications": [
+          {
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": false,
+            "virtualPath": "/"
+          }
+        ],
+        "vnetPrivatePortsCount": 0,
+        "vnetRouteAllEnabled": false,
+        "webSocketsEnabled": false
+      },
+      "tags": {
+        "hidden-link: /app-insights-resource-id": "/subscriptions/41a1a89c-2a50-44b3-b917-d54b517783c2/resourceGroups/jbmarks-oauth-redirect-rg-za/providers/microsoft.insights/components/jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/config"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/web')]",
+      "properties": {
+        "acrUseManagedIdentityCreds": false,
+        "alwaysOn": false,
+        "autoHealEnabled": false,
+        "azureStorageAccounts": {},
+        "defaultDocuments": [
+          "Default.htm",
+          "Default.html",
+          "Default.asp",
+          "index.htm",
+          "index.html",
+          "iisstart.htm",
+          "default.aspx",
+          "index.php"
+        ],
+        "detailedErrorLoggingEnabled": false,
+        "experiments": {
+          "rampUpRules": []
+        },
+        "ftpsState": "FtpsOnly",
+        "functionAppScaleLimit": 200,
+        "functionsRuntimeScaleMonitoringEnabled": false,
+        "http20Enabled": true,
+        "http20ProxyFlag": 0,
+        "httpLoggingEnabled": false,
+        "ipSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "loadBalancing": "LeastRequests",
+        "localMySqlEnabled": false,
+        "logsDirectorySizeLimit": 35,
+        "managedPipelineMode": "Integrated",
+        "minTlsVersion": "1.2",
+        "minimumElasticInstanceCount": 0,
+        "netFrameworkVersion": "v6.0",
+        "numberOfWorkers": 1,
+        "preWarmedInstanceCount": 0,
+        "publishingUsername": "REDACTED",
+        "remoteDebuggingEnabled": false,
+        "requestTracingEnabled": false,
+        "scmIpSecurityRestrictions": [
+          {
+            "action": "Allow",
+            "description": "Allow all access",
+            "ipAddress": "Any",
+            "name": "Allow all",
+            "priority": 2147483647
+          }
+        ],
+        "scmIpSecurityRestrictionsUseMain": false,
+        "scmMinTlsVersion": "1.2",
+        "scmType": "None",
+        "use32BitWorkerProcess": true,
+        "virtualApplications": [
+          {
+            "physicalPath": "site\\wwwroot",
+            "preloadEnabled": false,
+            "virtualPath": "/"
+          }
+        ],
+        "vnetPrivatePortsCount": 0,
+        "vnetRouteAllEnabled": false,
+        "webSocketsEnabled": false
+      },
+      "type": "Microsoft.Web/sites/config"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/0865342f52954b6eab327c031af400a5')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:15:16.3334116Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:15:14.7865269Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/0f996c4b4584479f95f21c8946a5f4c6')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:56:39.5003361Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:56:38.1253401Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/23c6bd72fc854848a7d2190ffda9971a')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:15:18.6936711Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:15:17.4592964Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/31062f8a74c044eca295a09c41a93535')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:39:32.0282795Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:39:13.4249768Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/39d522df1ed14f5cb41913c08b4b1728')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:44:43.2349604Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:44:39.6545196Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/3fb4c873f4d34505ac89396f9dc8c4a2')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:47:57.5780365Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:47:54.9363803Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/427a9b0648304a988f3d0317a0c57e66')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:21:38.2109633Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:21:36.8515801Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/4ce2bc002c994f39a8b050784ced01ac')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:23:31.9359904Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:23:30.545359Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/573475589fe84efd981cc3e880133dc8')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:13:52.3964681Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:13:50.630844Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/5a2054656aa64c4fbbb004760c62a8b0')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:25:28.4047642Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:25:27.1235198Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/63b6cd9035984a3a96f40610a2fd9449')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-28T17:36:55.671739Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-28T17:36:54.4372663Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/6cba61257d1f4a439901f9acb2028277')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T21:57:30.5920333Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T21:57:29.0295154Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/7632c8efcd674b3297230895eba82de4')]",
+      "properties": {
+        "active": true,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T15:41:09.2243484Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T15:41:02.7947255Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/8191ccae3c864476a0f7bfefc9c44d44')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:52:27.5059371Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:52:26.1934222Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/8645a88b3cb44efaa1bf5f599430f7b1')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T21:55:52.0279029Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T21:55:50.5435064Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/a4c04461723442a1ac285ac73f33fca0')]",
+      "properties": {
+        "active": true,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "az_cli_functions",
+        "end_time": "2026-01-29T16:05:19.450315Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T16:05:16.622157Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/a66dae8eeb6f46da832b71174a2748ed')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:59:20.7411468Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:59:19.3973812Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/af4f83934e4443c2a6eead58d9c39408')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:22:09.8260882Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:22:08.3885727Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_bff_api_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '/b6cf4638-f421-49c0-b304-ef6427ce9286')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "Push-Deployer",
+        "end_time": "2026-01-29T16:30:44.3735014Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-29T16:23:08.2333787Z",
+        "status": 3
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/c694732bc29446ee9de91a938d40eef7')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:36:41.567544Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:36:40.1612834Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/caa2f2bc650c40ab888f4972d82c680b')]",
+      "properties": {
+        "active": true,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T21:20:11.723088Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T21:20:10.3324503Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/cd664a90fb2648c085f97597e06569ae')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T21:01:02.7832277Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T21:01:01.189467Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/f0827217dfde47bb88a7c189828717fa')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T20:44:22.8883162Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T20:44:21.4508017Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/f0be2b6858284ba8a7d2ffe6198f7619')]",
+      "properties": {
+        "active": false,
+        "author": "N/A",
+        "author_email": "N/A",
+        "deployer": "ZipDeploy",
+        "end_time": "2026-01-26T21:53:57.2513862Z",
+        "message": "Created via a push deployment",
+        "start_time": "2026-01-26T21:53:55.7982576Z",
+        "status": 4
+      },
+      "type": "Microsoft.Web/sites/deployments"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/exchangeToken')]",
+      "properties": {
+        "config": {
+          "bindings": [
+            {
+              "authLevel": "function",
+              "direction": "in",
+              "methods": [
+                "post"
+              ],
+              "name": "req",
+              "type": "httpTrigger"
+            },
+            {
+              "direction": "out",
+              "name": "res",
+              "type": "http"
+            }
+          ],
+          "scriptFile": "index.js"
+        },
+        "config_href": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/function.json",
+        "href": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/admin/functions/exchangeToken",
+        "invoke_url_template": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/api/exchangetoken",
+        "isDisabled": false,
+        "language": "node",
+        "script_href": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/index.js",
+        "script_root_path_href": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/",
+        "test_data_href": "https://jbmarks-token-exchange-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net/admin/vfs/data/Functions/sampledata/exchangeToken.dat"
+      },
+      "type": "Microsoft.Web/sites/functions"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/exchangeToken')]",
+      "properties": {
+        "config": {
+          "bindings": [
+            {
+              "authLevel": "function",
+              "direction": "in",
+              "methods": [
+                "post"
+              ],
+              "name": "req",
+              "type": "httpTrigger"
+            },
+            {
+              "direction": "out",
+              "name": "res",
+              "type": "http"
+            }
+          ],
+          "scriptFile": "index.js"
+        },
+        "config_href": "https://jbmarks-token-exchange-v2.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/function.json",
+        "href": "https://jbmarks-token-exchange-v2.azurewebsites.net/admin/functions/exchangeToken",
+        "invoke_url_template": "https://jbmarks-token-exchange-v2.azurewebsites.net/api/exchangetoken",
+        "isDisabled": false,
+        "language": "node",
+        "script_href": "https://jbmarks-token-exchange-v2.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/index.js",
+        "script_root_path_href": "https://jbmarks-token-exchange-v2.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/",
+        "test_data_href": "https://jbmarks-token-exchange-v2.azurewebsites.net/admin/vfs/data/Functions/sampledata/exchangeToken.dat"
+      },
+      "type": "Microsoft.Web/sites/functions"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/exchangeToken')]",
+      "properties": {
+        "config": {
+          "bindings": [
+            {
+              "authLevel": "function",
+              "direction": "in",
+              "methods": [
+                "post"
+              ],
+              "name": "req",
+              "type": "httpTrigger"
+            },
+            {
+              "direction": "out",
+              "name": "res",
+              "type": "http"
+            }
+          ],
+          "scriptFile": "index.js"
+        },
+        "config_href": "https://jbmarks-token-exchange-v3.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/function.json",
+        "href": "https://jbmarks-token-exchange-v3.azurewebsites.net/admin/functions/exchangeToken",
+        "invoke_url_template": "https://jbmarks-token-exchange-v3.azurewebsites.net/api/exchangetoken",
+        "isDisabled": false,
+        "language": "node",
+        "script_href": "https://jbmarks-token-exchange-v3.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/index.js",
+        "script_root_path_href": "https://jbmarks-token-exchange-v3.azurewebsites.net/admin/vfs/site/wwwroot/exchangeToken/",
+        "test_data_href": "https://jbmarks-token-exchange-v3.azurewebsites.net/admin/vfs/data/Functions/sampledata/exchangeToken.dat"
+      },
+      "type": "Microsoft.Web/sites/functions"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_bff_api_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_bff_api_name'), '/', parameters('sites_jbmarks_bff_api_name'), '.azurewebsites.net')]",
+      "properties": {
+        "hostNameType": "Verified",
+        "siteName": "jbmarks-bff-api"
+      },
+      "type": "Microsoft.Web/sites/hostNameBindings"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_name'), '/', parameters('sites_jbmarks_token_exchange_name'), '-dxd0cne9fgdch3ay.southafricanorth-01.azurewebsites.net')]",
+      "properties": {
+        "hostNameType": "Verified",
+        "siteName": "jbmarks-token-exchange"
+      },
+      "type": "Microsoft.Web/sites/hostNameBindings"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v2_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v2_name'), '/', parameters('sites_jbmarks_token_exchange_v2_name'), '.azurewebsites.net')]",
+      "properties": {
+        "hostNameType": "Verified",
+        "siteName": "jbmarks-token-exchange-v2"
+      },
+      "type": "Microsoft.Web/sites/hostNameBindings"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', parameters('sites_jbmarks_token_exchange_v3_name'))]"
+      ],
+      "location": "South Africa North",
+      "name": "[concat(parameters('sites_jbmarks_token_exchange_v3_name'), '/', parameters('sites_jbmarks_token_exchange_v3_name'), '.azurewebsites.net')]",
+      "properties": {
+        "hostNameType": "Verified",
+        "siteName": "jbmarks-token-exchange-v3"
+      },
+      "type": "Microsoft.Web/sites/hostNameBindings"
+    },
+    {
+      "apiVersion": "2024-11-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/staticSites', parameters('staticSites_jbmarks_oauth_redirect_name'))]"
+      ],
+      "location": "West Europe",
+      "name": "[concat(parameters('staticSites_jbmarks_oauth_redirect_name'), '/default')]",
+      "properties": {
+        "applicableEnvironmentsMode": "SpecifiedEnvironments"
+      },
+      "type": "Microsoft.Web/staticSites/basicAuth"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/azure-webjobs-hosts')]",
+      "properties": {
+        "defaultEncryptionScope": "$account-encryption-key",
+        "denyEncryptionScopeOverride": false,
+        "immutableStorageWithVersioning": {
+          "enabled": false
+        },
+        "publicAccess": "None"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/azure-webjobs-secrets')]",
+      "properties": {
+        "defaultEncryptionScope": "$account-encryption-key",
+        "denyEncryptionScopeOverride": false,
+        "immutableStorageWithVersioning": {
+          "enabled": false
+        },
+        "publicAccess": "None"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/jbmarks-releases')]",
+      "properties": {
+        "defaultEncryptionScope": "$account-encryption-key",
+        "denyEncryptionScopeOverride": false,
+        "immutableStorageWithVersioning": {
+          "enabled": false
+        },
+        "publicAccess": "Blob"
+      },
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/jbmarks-token-exchange8a7f')]",
+      "properties": {
+        "accessTier": "TransactionOptimized",
+        "enabledProtocols": "SMB",
+        "shareQuota": 102400
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/jbmarks-token-exchange-v2-46ce431a')]",
+      "properties": {
+        "accessTier": "TransactionOptimized",
+        "enabledProtocols": "SMB",
+        "shareQuota": 102400
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/jbmarks-token-exchange-v3e61c3f87c7da')]",
+      "properties": {
+        "accessTier": "TransactionOptimized",
+        "enabledProtocols": "SMB",
+        "shareQuota": 102400
+      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/tableServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/AzureFunctionsDiagnosticEvents202601')]",
+      "properties": {},
+      "type": "Microsoft.Storage/storageAccounts/tableServices/tables"
+    },
+    {
+      "apiVersion": "2025-08-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/tableServices', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), 'default')]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_jbmarksoauthredirecb0ce_name'))]"
+      ],
+      "name": "[concat(parameters('storageAccounts_jbmarksoauthredirecb0ce_name'), '/default/AzureFunctionsDiagnosticEvents202602')]",
+      "properties": {},
+      "type": "Microsoft.Storage/storageAccounts/tableServices/tables"
+    }
+  ],
+  "variables": {}
+}
