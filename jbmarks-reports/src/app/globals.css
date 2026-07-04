@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#f5f5f7] text-gray-900 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-4 sm:p-6;
+  }
+  .stat-card {
+    @apply bg-white/80 backdrop-blur-xl rounded-2xl shadow-sm border border-white/20 p-4 sm:p-5 hover:shadow-lg hover:scale-[1.02] transition-all duration-300 ease-out;
+  }
+  .btn-primary {
+    @apply bg-brand-dark text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:brightness-110 active:scale-95 transition-all duration-200;
+  }
+  .btn-secondary {
+    @apply bg-gray-100/80 backdrop-blur-sm text-gray-700 px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-gray-200/80 active:scale-95 transition-all duration-200;
+  }
+  .glass {
+    @apply bg-white/70 backdrop-blur-2xl border border-white/30 shadow-lg;
+  }
+  .glass-dark {
+    @apply bg-black/40 backdrop-blur-2xl border border-white/10;
+  }
+}

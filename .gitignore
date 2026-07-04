@@ -1,54 +1,62 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
 
-# Environment variables
-.env
-.env.local
-.env.production
+# Kotlin
+.kotlin/
 
-# PWA
-dev-dist
-sw.js
-workbox-*.js
+# Firebase
+app/google-services.json
 
-# Android signing keys
-*.jks
-*.keystore
-android/gradle.properties
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace
+iosApp/*.xcuserdata
+iosApp/*.xcscmblueprint
+iosApp/DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
 
-# Android build outputs (large binary files)
-*.aab
-*.apk
-android/app/build/
-android/build/
-android/capacitor-cordova-android-plugins/build/
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcuserstate
+project.xcworkspace
 
-# Debug logs
-sdinmotion_debug.log
-phone-debug*.log
-crash-log.txt
+# CocoaPods
+Pods/
+Podfile.lock
 
-# Temporary test files
-test-upload.html
+# iOS Configuration (contains secrets)
+JbmrksIOs/JbmrksIOs/Config/OAuthConfig.swift
+
+# APNs Keys and Certificates (contains secrets)
+JbmrksIOs/certs/
+*.p8
+*.p12
+*.cer
+AuthKey_*.p8
+
+# Local Java installation (for Java 17)
+.java/
+
+# Documentation files (optional - remove if you want to include them)
+# BITRIX24_API_REFERENCE.md
+# IMPLEMENTATION_PLAN.md
+# PROJECT_ANALYSIS.md
+node_modules

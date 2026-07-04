@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Modern JB Marks Icon - Checkmark with "JB" -->
+    
+    <!-- Main checkmark shape (modern, rounded) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,54 L38,72 L88,22 L88,32 L38,82 L20,64 Z" />
+    
+    <!-- "JB" text in modern style -->
+    <group>
+        <!-- Letter "J" -->
+        <path
+            android:fillColor="#F9A825"
+            android:pathData="M25,25 L25,60 L35,60 L35,50 L30,50 L30,35 L35,35 L35,25 Z" />
+        
+        <!-- Letter "B" -->
+        <path
+            android:fillColor="#F9A825"
+            android:pathData="M42,25 L42,60 L55,60 Q62,60 62,55 L62,50 Q62,48 60,48 L62,48 Q65,48 65,45 L65,40 Q65,37 62,37 L55,25 Z M50,35 L55,35 Q60,35 60,40 L60,45 Q60,50 55,50 L50,50 Z M50,25 L55,25 Q60,25 60,30 L60,35 Q60,35 55,35 L50,35 Z" />
+    </group>
+    
+    <!-- Decorative gold accent circle -->
+    <path
+        android:fillColor="#F9A825"
+        android:pathData="M75,20 A5,5 0 1,1 75,30 A5,5 0 1,1 75,20 Z" />
+</vector>

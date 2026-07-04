@@ -1,0 +1,95 @@
+package com.example.jbmarks.network
+
+import android.content.Context
+import com.example.jbmarks.auth.data.TokenManager
+import com.example.jbmarks.config.Config
+import com.example.jbmarks.tasks.data.TaskDto
+import com.example.jbmarks.tasks.data.TaskDtoDeserializer
+import com.example.jbmarks.tasks.data.TasksListDeserializer
+import com.example.jbmarks.tasks.data.TasksListResponse
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+
+object RetrofitInstance {
+
+    private var context: Context? = null
+    private var tokenManager: TokenManager? = null
+    private var retrofit: Retrofit? = null
+    private var bitrixApi: BitrixApi? = null
+
+    /**
+     * Initialize RetrofitInstance with context
+     * Should be called from Application class or early in app lifecycle
+     */
+    fun initialize(context: Context) {
+        this.context = context.applicationContext
+        if (tokenManager == null) {
+            tokenManager = TokenManager(context)
+            refreshRetrofitInstance()
+        }
+    }
+
+    /**
+     * Get or create BitrixApi instance
+     * Will use stored portal URL or default
+     */
+    val api: BitrixApi
+        get() {
+            if (bitrixApi == null) {
+                refreshRetrofitInstance()
+            }
+            return bitrixApi!!
+        }
+
+    /**
+     * Refresh the Retrofit instance (useful when portal URL or token changes)
+     */
+    fun refreshRetrofitInstance() {
+        val portalUrl = tokenManager?.getPortalUrl() ?: Config.DEFAULT_PORTAL_URL
+        val baseUrl = if (portalUrl.endsWith("/")) {
+            "${portalUrl}rest/"
+        } else {
+            "$portalUrl/rest/"
+        }
+
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.HEADERS
+        }
+
+        // Match iOS network timeout configuration:
+        // timeoutIntervalForRequest = 30.0 (individual request timeout)
+        // timeoutIntervalForResource = 60.0 (total resource transfer timeout)
+        val clientBuilder = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)  // Match iOS timeoutIntervalForRequest
+            .readTimeout(30, TimeUnit.SECONDS)    // Match iOS timeoutIntervalForRequest
+            .writeTimeout(30, TimeUnit.SECONDS)   // Match iOS timeoutIntervalForRequest
+            .callTimeout(60, TimeUnit.SECONDS)     // Match iOS timeoutIntervalForResource (total call timeout)
+            .addInterceptor(logging)
+
+        // Add AuthInterceptor if we have context and tokenManager
+        val ctx = context
+        val tm = tokenManager
+        if (ctx != null && tm != null) {
+            clientBuilder.addInterceptor(AuthInterceptor(ctx, tm))
+        }
+
+        // Create Gson with custom deserializers for tasks
+        val gson = GsonBuilder()
+            .registerTypeAdapter(TasksListResponse::class.java, TasksListDeserializer())
+            .registerTypeAdapter(TaskDto::class.java, TaskDtoDeserializer())
+            .create()
+
+        retrofit = Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(clientBuilder.build())
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+
+        bitrixApi = retrofit!!.create(BitrixApi::class.java)
+    }
+}

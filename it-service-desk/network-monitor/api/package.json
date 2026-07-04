@@ -1,0 +1,6 @@
+{
+  "name": "network-monitor-api",
+  "version": "1.0.0",
+  "description": "Server-side ping API for network monitoring",
+  "main": "index.js"
+}

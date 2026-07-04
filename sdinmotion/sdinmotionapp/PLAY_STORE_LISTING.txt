@@ -1,0 +1,154 @@
+═══════════════════════════════════════════════════════════════
+GOOGLE PLAY STORE LISTING — Copy & Paste into Play Console
+═══════════════════════════════════════════════════════════════
+
+─── APP DETAILS ───────────────────────────────────────────────
+
+App name: JBMarks Community Reporter
+
+Default language: English (United Kingdom) – en-GB
+
+─── MAIN STORE LISTING ────────────────────────────────────────
+
+Short description (max 80 chars):
+Report municipal faults instantly. Water, electricity, roads & waste issues.
+
+Full description (max 4000 chars):
+JBMarks Community Reporter is the official fault reporting app for JB Marks Local Municipality (Potchefstroom & Ventersdorp). Report issues directly to the municipality and track their resolution in real-time.
+
+What you can report:
+🚰 Water & Sanitation — Leaks, burst pipes, no water supply, sewer blockages
+⚡ Electricity — Power outages, faulty streetlights, exposed cables
+🛣️ Roads & Stormwater — Potholes, damaged signs, flooding, blocked drains
+🗑️ Refuse & Waste — Missed collections, illegal dumping, bin damage
+
+Key Features:
+• Quick & easy fault reporting — no account needed
+• GPS location detection for accurate fault pinpointing
+• Photo capture to show the issue clearly
+• Track your report status in real-time
+• Get a reference number for every report
+• Service announcements — planned maintenance & load shedding
+• Emergency contacts — one-tap calling for urgent issues
+• Rate the service once your issue is resolved
+• Offline support — save reports when there's no signal
+
+How it works:
+1. Select the type of issue
+2. Fill in your details and describe the problem
+3. Add a photo and GPS location
+4. Submit — you'll get a reference number immediately
+5. Track the progress until resolution
+
+Coverage area:
+• Potchefstroom
+• Ventersdorp
+• Surrounding areas within JB Marks Local Municipality
+
+Making service delivery easier for everyone. Together we build a better municipality.
+
+─── CATEGORISATION ────────────────────────────────────────────
+
+Application type: Application
+Category: Tools (or: Communication / Productivity)
+Tags: municipality, fault reporting, service delivery, local government
+
+─── CONTACT DETAILS ───────────────────────────────────────────
+
+Email: admin@t3ssystems.co.za
+Phone: +27661327845
+Website: https://jbmarks.sdinmotion.co.za
+
+─── PRIVACY POLICY ────────────────────────────────────────────
+
+Privacy policy URL: https://jbmarks.sdinmotion.co.za/privacy-policy
+
+─── CONTENT RATING ────────────────────────────────────────────
+
+Questionnaire answers:
+- Violence: No
+- Sexual content: No
+- Language: No
+- Controlled substances: No
+- User interaction: No (users don't interact with each other)
+- Shares location: Yes (GPS for fault location only)
+- Data sharing: No personal data shared with third parties
+
+Expected rating: Everyone / PEGI 3
+
+─── TARGET AUDIENCE ───────────────────────────────────────────
+
+Target age group: 18+ (municipal service reporting)
+Not designed for children: Confirmed
+Country availability: South Africa (or All countries)
+
+─── APP ACCESS ────────────────────────────────────────────────
+
+Does the app require login? No
+All features available without authentication? Yes
+Special permissions: Camera, Location (for fault reporting)
+
+─── DATA SAFETY ───────────────────────────────────────────────
+
+Data collected:
+- Name: Yes (for fault report identification)
+- Phone number: Yes (for municipality to contact reporter)
+- Email: Optional
+- Location: Yes (precise GPS for fault location)
+- Photos: Yes (evidence of the fault)
+
+Data shared with third parties: No
+Data encrypted in transit: Yes (HTTPS)
+Data deletion: Users can delete local reports from the app
+Data retention: Fault reports stored on municipal system until resolved
+
+─── SCREENSHOTS NEEDED ────────────────────────────────────────
+
+Required: Minimum 2, recommended 8
+Dimensions: 320px to 3840px, aspect ratio 16:9 or 9:16
+
+Recommended screenshots (in order):
+1. Home screen with category cards
+2. Fault type selection (Water/Electricity/Roads/Waste)
+3. Report form filled in with photo
+4. GPS location detection
+5. Success screen with reference number
+6. Track My Report with status timeline
+7. Emergency contacts
+8. Service announcements
+
+─── FEATURE GRAPHIC ───────────────────────────────────────────
+
+Dimensions: 1024 x 500px
+Design: Green gradient background (#1B5E20 → #2E7D32) with JBMarks logo + "Community Reporter" text + gold subtitle "Report. Track. Resolve."
+
+─── APP ICON ──────────────────────────────────────────────────
+
+Dimensions: 512 x 512px
+Use: JBMarks municipality logo on green gradient background
+
+═══════════════════════════════════════════════════════════════
+VERSION INFO
+═══════════════════════════════════════════════════════════════
+
+Version name: 1.8.0
+Version code: 20
+Package name: com.municipality.faultreporter
+Minimum SDK: 22 (Android 5.1)
+Target SDK: 34 (Android 14)
+
+═══════════════════════════════════════════════════════════════
+RELEASE NOTES (What's new)
+═══════════════════════════════════════════════════════════════
+
+What's new in v1.8.0:
+• NEW: Track your report status in real-time with progress timeline
+• NEW: Service announcements — see planned maintenance & outages
+• NEW: Emergency contacts — one-tap calling
+• NEW: Rate the service after your issue is resolved
+• IMPROVED: Faster app startup with branded splash screen
+• IMPROVED: Better success screen with copy & share reference number
+• IMPROVED: Updated icons and consistent colour scheme
+• IMPROVED: Duplicate detection before submitting
+
+═══════════════════════════════════════════════════════════════
