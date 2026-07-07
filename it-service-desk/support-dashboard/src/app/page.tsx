@@ -76,6 +76,10 @@ export default function Home() {
     { id: 'queue', label: 'Ticket Queue', icon: '📋' },
   ]
 
+  const externalLinks = [
+    { label: 'Network Monitor', icon: '📡', url: 'https://polite-hill-057872e0f.7.azurestaticapps.net' },
+  ]
+
   return (
     <div className="flex h-screen overflow-hidden bg-[#f5f5f7]">
       {/* Sidebar — desktop */}
@@ -105,6 +109,25 @@ export default function Home() {
               </li>
             ))}
           </ul>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="px-3 text-[10px] font-semibold text-ios-tertiary uppercase tracking-wider mb-2">Tools</p>
+            <ul className="space-y-1">
+              {externalLinks.map(link => (
+                <li key={link.label}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-ios-label hover:bg-gray-100/80 transition-all"
+                  >
+                    <span className="text-[16px]">{link.icon}</span>
+                    <span className="font-medium text-[13px]">{link.label}</span>
+                    <span className="ml-auto text-[10px] text-ios-tertiary">↗</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         </nav>
         <div className="p-4 mx-3 mb-3 rounded-2xl bg-primary-50/60">
           <div className="flex items-center gap-2">
