@@ -955,53 +955,36 @@ ${error.stack ? `Stack Trace:\n${error.stack}` : ''}`;
    * Generate task title based on fault type
    */
   private generateTaskTitle(faultReport: FaultReport): string {
-    const typeMap: Record<string, string> = {
-      'Water': 'Water & Sanitation Issue',
-      'Electricity': 'Electricity Issue',
-      'Roads': 'Roads & Stormwater Issue',
-      'Waste': 'Refuse & Waste Issue'
-    };
-
-    const baseTitle = typeMap[faultReport.formType] || 'Municipal Issue';
-    return `${baseTitle} - ${faultReport.specificField || 'General Issue'}`;
+    // Title shows: Specific Issue - Name - Location (easy to identify in list)
+    const location = faultReport.address ? faultReport.address.split(',')[0].trim() : '';
+    return `${faultReport.specificField} - ${faultReport.fullName}${location ? ' - ' + location : ''}`;
   }
 
   /**
    * Generate detailed task description
    */
   private generateTaskDescription(faultReport: FaultReport): string {
-    const areaInfo = faultReport.area && faultReport.city 
-      ? `Area: ${faultReport.area}\nCity: ${faultReport.city}\n`
-      : faultReport.area 
-        ? `Area: ${faultReport.area}\n`
-        : faultReport.city
-          ? `City: ${faultReport.city}\n`
-          : '';
-    
-    return `
-FAULT REPORT DETAILS:
-====================
-
-Reference Number: ${faultReport.refNumber}
-Reported By: ${faultReport.fullName}
+    return `Reported By: ${faultReport.fullName}
 Contact: ${faultReport.contactNumber}
 Email: ${faultReport.email || 'Not provided'}
 Municipal Account: ${faultReport.municipalAccount || 'Not provided'}
-${areaInfo}Location: ${faultReport.address}
+Department: ${faultReport.formType}
+City: ${faultReport.city || 'Potchefstroom'}
+Area: ${faultReport.area || 'Not specified'}
+Location: ${faultReport.address}
 
-Issue Type: ${faultReport.formType}
+Category: ${faultReport.formType}
 Specific Issue: ${faultReport.specificField}
+Priority: ${faultReport.formType === 'Water' || faultReport.formType === 'Electricity' ? 'HIGH' : 'NORMAL'}
+Reference: ${faultReport.refNumber}
 
 Description:
 ${faultReport.details}
 
-Additional Notes:
-- Photo attached: ${faultReport.photoFile ? 'Yes' : 'No'}
-- Reported via: Municipal Fault Reporting Mobile App
-- Timestamp: ${new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}
-
-Please investigate and resolve this issue promptly.
-    `.trim();
+---
+Photo attached: ${faultReport.photoFile ? 'Yes' : 'No'}
+Submitted via: SDinMotion Community App
+Timestamp: ${new Date().toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg' })}`;
   }
 
   /**
