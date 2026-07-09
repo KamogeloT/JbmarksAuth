@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { BitrixTask, TASK_STATUS_MAP, TASK_STATUS_LABELS, TASK_PRIORITY_LABELS } from '@/lib/bitrix-api'
+import { BitrixTask, TASK_STATUS_MAP, TASK_STATUS_LABELS } from '@/lib/bitrix-api'
 import { format } from 'date-fns'
 
 interface DrillDownPanelProps {
