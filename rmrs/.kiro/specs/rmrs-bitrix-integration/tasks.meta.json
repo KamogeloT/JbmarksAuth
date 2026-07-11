@@ -1,0 +1,452 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create .NET 8 solution structure with modular project layout": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346670
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004359492
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004830785
+      }
+    ],
+    "1.2 Create Angular 17+ SPA project with standalone component architecture": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346674
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004360304
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004831646
+      }
+    ],
+    "1.3 Configure EF Core 8 DbContext, entity configurations, and migrations": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346677
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004837901
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005481088
+      }
+    ],
+    "1.4 Implement centralized Bitrix API client (`IBitrixApiClient`)": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346687
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004838646
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005481883
+      }
+    ],
+    "1.5 Implement shared infrastructure services": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346690
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004839459
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005482612
+      }
+    ],
+    "2. Checkpoint - Verify project scaffolding": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346693
+      }
+    ],
+    "3.1 Implement Bitrix OAuth 2.0 flow with `BitrixOAuthController`": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346697
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005489382
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005972797
+      }
+    ],
+    "3.2 Implement token refresh and session management": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346700
+      }
+    ],
+    "3.3 Implement user profile sync from Bitrix": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346704
+      }
+    ],
+    "4.1 Implement role-based authorization with custom policies": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346707
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005490190
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005973633
+      }
+    ],
+    "4.2 Implement role assignment and re-authentication": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346710
+      }
+    ],
+    "5.1 Implement immutable audit logging with EF Core interceptor": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346713
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005490937
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005974434
+      }
+    ],
+    "5.2 Implement compliance dashboard and audit query endpoints": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346717
+      }
+    ],
+    "6. Checkpoint - Verify core infrastructure modules": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346720
+      }
+    ],
+    "7.1 Implement department mapping CRUD with Bitrix validation": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346724
+      }
+    ],
+    "8.1 Implement hierarchical file plan CRUD": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346727
+      }
+    ],
+    "8.2 Implement retention rules management": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346730
+      }
+    ],
+    "9.1 Implement registry number generation and record registration": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346733
+      }
+    ],
+    "9.2 Implement record metadata capture and classification inheritance": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346739
+      }
+    ],
+    "10.1 Implement document upload with Bitrix integration": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346742
+      }
+    ],
+    "10.2 Implement document versioning and integrity verification": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346745
+      }
+    ],
+    "11.1 Implement barcode/QR generation and location tracking": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346748
+      }
+    ],
+    "11.2 Implement loan management and overdue notifications": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346751
+      }
+    ],
+    "12. Checkpoint - Verify core record management modules": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346754
+      }
+    ],
+    "13.1 Implement retention calculation and disposal candidate identification": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346757
+      }
+    ],
+    "13.2 Implement disposal workflow with approval and execution": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346760
+      }
+    ],
+    "14.1 Implement archive transfer batch workflow": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346763
+      }
+    ],
+    "14.2 Implement transfer manifest PDF generation": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346766
+      }
+    ],
+    "15.1 Implement full-text search with access filtering": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346770
+      }
+    ],
+    "15.2 Implement record detail retrieval with document access": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346773
+      }
+    ],
+    "16.1 Implement report generation with PDF/Excel export": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346776
+      }
+    ],
+    "16.2 Implement role-based dashboards": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346780
+      }
+    ],
+    "17.1 Implement system configuration management": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346783
+      }
+    ],
+    "17.2 Implement lookup tables and scheduled job management": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346786
+      }
+    ],
+    "18. Checkpoint - Verify all backend modules": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346790
+      }
+    ],
+    "19.1 Implement Angular core services and auth flow": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346794
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005491675
+      },
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005975245
+      }
+    ],
+    "19.2 Implement Angular shared components and models": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346798
+      }
+    ],
+    "20.1 Implement file plan tree management UI": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346802
+      }
+    ],
+    "20.2 Implement record registration forms": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346805
+      }
+    ],
+    "21.1 Implement document management UI": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346808
+      }
+    ],
+    "21.2 Implement physical records management UI": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346811
+      }
+    ],
+    "22.1 Implement disposal and archive transfer UI": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346817
+      }
+    ],
+    "22.2 Implement search interface": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346820
+      }
+    ],
+    "23.1 Implement role-based dashboards": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346823
+      }
+    ],
+    "23.2 Implement reports and admin configuration UI": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346826
+      }
+    ],
+    "24. Checkpoint - Verify frontend application": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346829
+      }
+    ],
+    "25.1 Implement background jobs (IHostedService)": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346832
+      }
+    ],
+    "26.1 Configure deployment infrastructure": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346835
+      }
+    ],
+    "26.2 Configure Angular production build and hosting": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346838
+      }
+    ],
+    "27. Final Checkpoint - Full system verification": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783004346841
+      }
+    ],
+    "1. Project Scaffolding and Infrastructure": [
+      {
+        "executionId": "38e9da58-54d6-4a90-b89e-35e6625855c1",
+        "chatSessionId": "57f372cf-b8c4-45f4-ab2e-731104d045f0",
+        "timestamp": 1783005482615
+      }
+    ]
+  }
+}

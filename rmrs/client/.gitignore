@@ -1,0 +1,23 @@
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+/out-tsc
+
+# IDE
+.idea/
+.vscode/
+
+# Misc
+*.log
+.angular/
+.sass-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment overrides (keep templates)
+!src/environments/environment.ts
+!src/environments/environment.production.ts
