@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { getBitrixApi, BitrixTask, TASK_STATUS_MAP, TASK_STATUS_LABELS, TASK_STATUS_COLORS, TASK_PRIORITY_LABELS, TaskStatus } from '@/lib/bitrix-api'
 import { ReportFilters, FilterState } from '@/components/filters/ReportFilters'
 import { StatCard } from '@/components/ui/StatCard'
@@ -46,8 +46,14 @@ export function TaskSummaryReport() {
       if (filters.userId) filterParams['RESPONSIBLE_ID'] = filters.userId
       
       const allTasks = await api.getAllTasks(filterParams)
+
+      // Client-side group filter — Bitrix webhook may not enforce GROUP_ID strictly
+      const groupFiltered = filters.groupId
+        ? allTasks.filter(t => t.groupId === filters.groupId)
+        : allTasks
+
       // Apply date filter on createdDate
-      const datFiltered = allTasks.filter(t => {
+      const datFiltered = groupFiltered.filter(t => {
         if (!filters.dateFrom && !filters.dateTo) return true
         const created = t.createdDate ? t.createdDate.split('T')[0] : null
         if (!created) return true
@@ -78,6 +84,7 @@ export function TaskSummaryReport() {
     }
   }).filter(s => s.value > 0)
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const priorityCounts: PriorityCount[] = Object.entries(TASK_PRIORITY_LABELS).map(([code, label]) => ({
     name: label,
     value: tasks.filter(t => t.priority === code).length,
@@ -100,6 +107,7 @@ export function TaskSummaryReport() {
     else if (task.status !== '6') acc[groupName].active++
     return acc
   }, {})
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const groupChartData = Object.values(groupData).sort((a, b) => (b.active + b.completed) - (a.active + a.completed)).slice(0, 10)
 
   const exportData = tasks.map(t => {

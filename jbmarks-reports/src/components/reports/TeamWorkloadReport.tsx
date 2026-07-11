@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { getBitrixApi, BitrixTask, BitrixUser, TASK_STATUS_MAP, TASK_PRIORITY_LABELS } from '@/lib/bitrix-api'
+import { getBitrixApi, BitrixTask } from '@/lib/bitrix-api'
 import { ReportFilters, FilterState } from '@/components/filters/ReportFilters'
 import { StatCard } from '@/components/ui/StatCard'
 import { ExportButton } from '@/components/ui/ExportButton'
@@ -60,8 +60,13 @@ export function TeamWorkloadReport() {
         api.getAllUsers(),
       ])
       
+      // Client-side group filter — Bitrix webhook may not enforce GROUP_ID strictly
+      const groupFiltered = filters.groupId
+        ? fetchedTasks.filter(t => t.groupId === filters.groupId)
+        : fetchedTasks
+
       // Apply date filter
-      const datFiltered = fetchedTasks.filter(t => {
+      const datFiltered = groupFiltered.filter(t => {
         if (!filters.dateFrom && !filters.dateTo) return true
         const created = t.createdDate ? t.createdDate.split('T')[0] : null
         if (!created) return true
@@ -151,6 +156,7 @@ export function TeamWorkloadReport() {
 
   // Aggregate totals
   const totalActive = teamStats.reduce((sum, s) => sum + s.activeTasks, 0)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const totalCompleted = teamStats.reduce((sum, s) => sum + s.completedTasks, 0)
   const totalOverdue = teamStats.reduce((sum, s) => sum + s.overdueTasks, 0)
   const teamSize = teamStats.length

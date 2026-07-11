@@ -21,7 +21,8 @@
 11. [Reports Dashboard](#reports-dashboard)
 12. [Network Monitor](#network-monitor)
 13. [Bitrix Landing Page (Portal)](#bitrix-landing-page)
-14. [Server Access](#server-access)
+14. [RMRS — Records Management and Registry System](#rmrs--records-management-and-registry-system)
+15. [Server Access](#server-access)
 
 ---
 
@@ -38,6 +39,7 @@ IT Support Dashboard       → Manages IT tickets
 Reports Dashboard          → Analytics & exports
 Network Monitor            → Infrastructure health
 Bitrix Landing Page        → SDiM portal homepage
+RMRS                       → Records Management (docs stored in SDiM workgroup drives)
 ```
 
 ---
@@ -54,6 +56,7 @@ Bitrix Landing Page        → SDiM portal homepage
 | **Reports Custom Domain** | https://reports.sdinmotion.co.za | CNAME → Azure | Reports (custom domain) |
 | **SDinMotion App** | Google Play Store | Android (Capacitor) | Community fault reporting |
 | **JBmarks App** | Azure Blob (APK) | Android (native Kotlin) | Task management for staff |
+| **RMRS** | https://records.sdinmotion.co.za | IIS / Windows Server | Records Management & Registry |
 
 ---
 
@@ -101,6 +104,9 @@ JBmarks/
 │   ├── support-dashboard/        # IT Support Dashboard (Next.js)
 │   └── network-monitor/          # Network Monitor (Vite + React + Azure Function)
 ├── jbmarks-reports/              # Reports Dashboard (Next.js)
+├── rmrs/                         # Records Management & Registry System (.NET 8 + Angular 17)
+│   ├── src/                      # .NET 8 Backend (API, Application, Domain, Infrastructure)
+│   └── client/                   # Angular 17 SPA (12 feature modules)
 ├── sdinmotion/
 │   └── sdinmotionapp/            # Community App (Vite + React + Capacitor)
 ├── bitrix-landing-page/          # SDiM Portal Landing Page
@@ -362,6 +368,73 @@ Deploy locally on a PC inside the network — the browser can then ping internal
 - ICT Service Desk → Helpdesk Portal
 - IT Support Dashboard → Support Dashboard
 - Reports & Analytics → Reports Dashboard
+
+---
+
+## RMRS — Records Management and Registry System
+
+**Purpose:** Comprehensive Records Management and Registry System for JB Marks Local Municipality, compliant with NARSSA principles and SANS ISO 16175-2:2014.  
+**Tech:** .NET 8 Web API (C#) + Angular 17 SPA + SQL Server 2022  
+**URL:** https://records.sdinmotion.co.za  
+**Source:** https://github.com/KamogeloT/RMRS  
+**Local Path:** `rmrs/`
+
+### Integration with SDiM Ecosystem
+- **Authentication:** Bitrix OAuth 2.0 SSO (same login as JBmarks app and other ecosystem apps)
+- **Document Storage:** Files uploaded via RMRS are stored in Bitrix24 workgroup drives using the Bitrix REST API
+- **Department Mapping:** Municipal departments mapped to Bitrix workgroup drives (configurable)
+
+### Architecture
+| Layer | Technology |
+|---|---|
+| Backend API | C# .NET 8 Web API |
+| Frontend SPA | Angular 17 (Standalone Components) |
+| Database | SQL Server 2022 |
+| ORM | Entity Framework Core 8 |
+| Authentication | Bitrix OAuth 2.0 (SSO) |
+| Document Storage | Bitrix REST API (Workgroup Drives) |
+| PDF Generation | QuestPDF |
+| Barcode/QR | ZXing.Net |
+| Hosting | IIS / Kestrel on Windows Server |
+
+### Modules (12)
+1. **Authentication** — Bitrix OAuth 2.0 SSO with token refresh
+2. **Department Mapping** — Map departments to Bitrix workgroup drives
+3. **File Plan** — Hierarchical classification (up to 5 levels) with retention rules
+4. **Records Registry** — Register incoming/outgoing/internal records with auto-generated numbers
+5. **Electronic Documents** — Upload to Bitrix with versioning, SHA-256 integrity
+6. **Physical Records** — Barcode/QR tracking, location hierarchy, loans, bulk moves
+7. **Retention & Disposal** — Automated retention calculation, multi-step disposal workflow
+8. **Archive Transfer** — Transfer batches with manifest PDF generation
+9. **Search & Retrieval** — Full-text search with role-based access filtering
+10. **Security & RBAC** — 9 roles, department isolation, classification levels
+11. **Audit & Compliance** — Immutable audit logs, compliance dashboards
+12. **Reports & Admin** — PDF/Excel reports, system configuration, lookup tables
+
+### User Roles (9)
+| Role | Access |
+|---|---|
+| System Administrator | Full system access and configuration |
+| Records Manager | File plan, disposal initiation, reports |
+| Registry Clerk | Record registration, documents, physical records |
+| Department User | View department records, upload documents |
+| Department Supervisor | Department oversight + all Dept User access |
+| Compliance Officer | Disposal approval, compliance monitoring |
+| Auditor | Read-only audit log access |
+| Archivist | Archive transfer management |
+| Executive Viewer | Executive dashboards and reports |
+
+### Registry Number Format
+```
+RMRS/{DEPT}/{YYYY}/{SEQ:00000}
+Example: RMRS/FIN/2024/00042
+```
+
+### Deployment
+- Hosted on IIS / Windows Server
+- SQL Server database with EF Core migrations
+- Angular SPA served from wwwroot or separate hosting
+- Requires: .NET 8 SDK, Node.js 18+, SQL Server 2022, Bitrix OAuth credentials
 
 ---
 

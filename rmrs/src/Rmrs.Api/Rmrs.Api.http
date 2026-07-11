@@ -1,0 +1,6 @@
+@Rmrs.Api_HostAddress = http://localhost:5243
+
+GET {{Rmrs.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

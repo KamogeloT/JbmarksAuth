@@ -45,7 +45,13 @@ export function OverdueReport() {
       if (filters.userId) filterParams['RESPONSIBLE_ID'] = filters.userId
       
       const allTasks = await api.getAllTasks(filterParams)
-      const datFiltered = allTasks.filter(t => {
+
+      // Client-side group filter — Bitrix webhook may not enforce GROUP_ID strictly
+      const groupFiltered = filters.groupId
+        ? allTasks.filter(t => t.groupId === filters.groupId)
+        : allTasks
+
+      const datFiltered = groupFiltered.filter(t => {
         if (!filters.dateFrom && !filters.dateTo) return true
         const created = t.createdDate ? t.createdDate.split('T')[0] : null
         if (!created) return true

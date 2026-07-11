@@ -1,0 +1,32 @@
+## .NET ##
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+*.cache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## NuGet ##
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+nuget-publish/
+
+## Visual Studio ##
+.vs/
+*.DotSettings.user
+# launchSettings.json - kept in source control for this project
+
+## Rider ##
+.idea/
+*.sln.iml
+
+## OS ##
+.DS_Store
+Thumbs.db

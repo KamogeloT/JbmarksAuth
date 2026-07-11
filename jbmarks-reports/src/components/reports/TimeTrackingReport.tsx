@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { getBitrixApi, BitrixTask, ElapsedTimeEntry } from '@/lib/bitrix-api'
+import { getBitrixApi, BitrixTask } from '@/lib/bitrix-api'
 import { ReportFilters, FilterState } from '@/components/filters/ReportFilters'
 import { StatCard } from '@/components/ui/StatCard'
 import { ExportButton } from '@/components/ui/ExportButton'
@@ -53,7 +53,13 @@ export function TimeTrackingReport() {
       if (filters.userId) filterParams['RESPONSIBLE_ID'] = filters.userId
 
       const allTasks = await api.getAllTasks(filterParams)
-      const datFiltered = allTasks.filter(t => {
+
+      // Client-side group filter — Bitrix webhook may not enforce GROUP_ID strictly
+      const groupFiltered = filters.groupId
+        ? allTasks.filter(t => t.groupId === filters.groupId)
+        : allTasks
+
+      const datFiltered = groupFiltered.filter(t => {
         if (!filters.dateFrom && !filters.dateTo) return true
         const created = t.createdDate ? t.createdDate.split('T')[0] : null
         if (!created) return true
@@ -92,6 +98,7 @@ export function TimeTrackingReport() {
   const totalSecondsLogged = timeData.reduce((sum, t) => sum + t.totalSeconds, 0)
   const totalEstimated = timeData.reduce((sum, t) => sum + t.estimateSeconds, 0)
   const tasksWithTimeCount = timeData.length
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const tasksWithEstimate = timeData.filter(t => t.estimateSeconds > 0).length
 
   // Efficiency: actual vs estimated for tasks that have both
