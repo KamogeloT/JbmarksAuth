@@ -57,14 +57,20 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _isLoading.value = true
             userRepository.getCurrentUser().onSuccess { _user.value = it }
             userRepository.getUserWorkgroups().onSuccess { groups ->
-                _workgroups.value = groups.filter { it.role != "K" } // exclude pending invites
+                _workgroups.value = groups // show all groups the user belongs to
             }
             _isLoading.value = false
         }
     }
 
     fun logout(onDone: () -> Unit) {
+        // Clear auth tokens
         tokenManager.clearTokens()
+        // Clear notification & sync state so the next user starts fresh
+        val app = getApplication<Application>()
+        app.getSharedPreferences("sync_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        app.getSharedPreferences("notifications_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        app.getSharedPreferences("fcm_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         onDone()
     }
 }
