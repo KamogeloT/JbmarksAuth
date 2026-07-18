@@ -71,16 +71,23 @@ class UserRepository(private val context: Context) {
     }
 
     /**
-     * Returns workgroups where ROLE = "K" (pending invitation)
+     * Returns workgroups with a genuine pending invitation.
+     *
+     * NOTE: Bitrix24's `sonet_group.user.groups` only returns groups the user
+     * is already an active member of. The ROLE values returned (A=owner,
+     * E=moderator, K=participant) all represent active membership — none of
+     * them indicate a pending invitation.
+     *
+     * Bitrix24 does not expose a dedicated REST endpoint to list pending
+     * inbound invitations for the current user. Therefore this method now
+     * returns an empty list. True invitation handling would require a server-
+     * side component (webhook/workflow) that tracks invitations and exposes
+     * them via a custom endpoint.
      */
     suspend fun getPendingInvitations(): Result<List<Workgroup>> {
-        return try {
-            val response = RetrofitInstance.api.getUserWorkgroups()
-            val pending = response.result.filter { it.role == "K" }
-            Result.success(pending)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        // sonet_group.user.groups never contains pending invitations —
+        // role "K" means the user is already an active participant.
+        return Result.success(emptyList())
     }
 
     /**
