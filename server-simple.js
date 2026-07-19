@@ -950,7 +950,7 @@ app.get('/api/water-levels', async (req, res) => {
         let querySpec;
         if (date) {
             querySpec = {
-                query: 'SELECT TOP @limit * FROM c WHERE c.date = @date ORDER BY c.submittedAt DESC',
+                query: 'SELECT TOP @limit * FROM c WHERE c.date = @date',
                 parameters: [
                     { name: '@limit', value: limit },
                     { name: '@date', value: date }
@@ -958,13 +958,17 @@ app.get('/api/water-levels', async (req, res) => {
             };
         } else {
             querySpec = {
-                query: 'SELECT TOP @limit * FROM c ORDER BY c.submittedAt DESC',
+                query: 'SELECT TOP @limit * FROM c',
                 parameters: [{ name: '@limit', value: limit }]
             };
         }
 
         console.log(`💧 Fetching water levels (limit: ${limit}, date: ${date || 'all'})`);
         const results = await cosmosQuery(querySpec);
+
+        // Sort client-side (descending by submittedAt)
+        results.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+
         console.log(`✅ Returned ${results.length} water level records`);
 
         res.json(results);
