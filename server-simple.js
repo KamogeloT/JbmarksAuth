@@ -768,6 +768,217 @@ app.delete('/api/push/token/:user_id', async (req, res) => {
     }
 });
 
+// ============================================
+// WATER LEVELS ENDPOINTS (Cosmos DB)
+// ============================================
+
+const crypto = require('crypto');
+
+/**
+ * Generate Cosmos DB authorization token
+ */
+function cosmosAuthToken(verb, resourceType, resourceLink, date, masterKey) {
+    const key = Buffer.from(masterKey, 'base64');
+    const text = (verb || '').toLowerCase() + '\n' +
+                 (resourceType || '').toLowerCase() + '\n' +
+                 (resourceLink || '') + '\n' +
+                 date.toLowerCase() + '\n\n';
+    const signature = crypto.createHmac('sha256', key).update(text, 'utf8').digest('base64');
+    return encodeURIComponent(`type=master&ver=1.0&sig=${signature}`);
+}
+
+/**
+ * Make a request to Cosmos DB REST API
+ */
+function cosmosRequest(method, path, resourceType, resourceLink, body) {
+    return new Promise((resolve, reject) => {
+        const cosmosEndpoint = process.env.COSMOS_ENDPOINT;
+        const cosmosKey = process.env.COSMOS_KEY;
+
+        if (!cosmosEndpoint || !cosmosKey) {
+            return reject(new Error('COSMOS_ENDPOINT or COSMOS_KEY not configured'));
+        }
+
+        const hostname = cosmosEndpoint.replace('https://', '').replace(':443/', '').replace('/', '');
+        const date = new Date().toUTCString();
+        const token = cosmosAuthToken(method, resourceType, resourceLink, date, cosmosKey);
+
+        const headers = {
+            'Authorization': token,
+            'x-ms-version': '2018-12-31',
+            'x-ms-date': date,
+            'Content-Type': 'application/json'
+        };
+
+        if (body && body.date) {
+            headers['x-ms-documentdb-partitionkey'] = JSON.stringify([body.date]);
+        }
+
+        const bodyStr = body ? JSON.stringify(body) : null;
+        if (bodyStr) {
+            headers['Content-Length'] = Buffer.byteLength(bodyStr);
+        }
+
+        const options = { hostname, port: 443, path, method, headers };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({ status: res.statusCode, body: data ? JSON.parse(data) : null });
+                } else {
+                    reject(new Error(`Cosmos ${res.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        if (bodyStr) req.write(bodyStr);
+        req.end();
+    });
+}
+
+/**
+ * Query Cosmos DB
+ */
+function cosmosQuery(querySpec) {
+    return new Promise((resolve, reject) => {
+        const cosmosEndpoint = process.env.COSMOS_ENDPOINT;
+        const cosmosKey = process.env.COSMOS_KEY;
+        const databaseId = process.env.COSMOS_DATABASE || 'waterlevels';
+        const containerId = process.env.COSMOS_CONTAINER || 'readings';
+
+        if (!cosmosEndpoint || !cosmosKey) {
+            return reject(new Error('COSMOS_ENDPOINT or COSMOS_KEY not configured'));
+        }
+
+        const hostname = cosmosEndpoint.replace('https://', '').replace(':443/', '').replace('/', '');
+        const date = new Date().toUTCString();
+        const resourceLink = `dbs/${databaseId}/colls/${containerId}`;
+        const token = cosmosAuthToken('POST', 'docs', resourceLink, date, cosmosKey);
+
+        const bodyStr = JSON.stringify(querySpec);
+
+        const options = {
+            hostname,
+            port: 443,
+            path: `/dbs/${databaseId}/colls/${containerId}/docs`,
+            method: 'POST',
+            headers: {
+                'Authorization': token,
+                'x-ms-version': '2018-12-31',
+                'x-ms-date': date,
+                'Content-Type': 'application/query+json',
+                'x-ms-documentdb-isquery': 'true',
+                'x-ms-documentdb-query-enablecrosspartition': 'true',
+                'Content-Length': Buffer.byteLength(bodyStr)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    const parsed = data ? JSON.parse(data) : { Documents: [] };
+                    resolve(parsed.Documents || []);
+                } else {
+                    reject(new Error(`Cosmos query ${res.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(bodyStr);
+        req.end();
+    });
+}
+
+/**
+ * POST /api/water-levels
+ * Submit water level readings
+ */
+app.post('/api/water-levels', async (req, res) => {
+    try {
+        const body = req.body;
+
+        if (!body || !body.readings || !Array.isArray(body.readings)) {
+            return res.status(400).json({ error: "Missing or invalid 'readings' array" });
+        }
+
+        for (const reading of body.readings) {
+            if (!reading.reservoirId || reading.levelPercent === undefined || !reading.status) {
+                return res.status(400).json({ error: 'Each reading must have reservoirId, levelPercent, and status' });
+            }
+        }
+
+        const databaseId = process.env.COSMOS_DATABASE || 'waterlevels';
+        const containerId = process.env.COSMOS_CONTAINER || 'readings';
+
+        const doc = {
+            id: body.id || `${body.date || new Date().toISOString().split('T')[0]}_${Date.now()}`,
+            date: body.date || new Date().toISOString().split('T')[0],
+            submittedBy: body.submittedBy || 'unknown',
+            submittedByName: body.submittedByName || '',
+            submittedAt: body.submittedAt || new Date().toISOString(),
+            readings: body.readings
+        };
+
+        console.log(`💧 Submitting water levels: ${doc.id}`);
+
+        const path = `/dbs/${databaseId}/colls/${containerId}/docs`;
+        const resourceLink = `dbs/${databaseId}/colls/${containerId}`;
+        const result = await cosmosRequest('POST', path, 'docs', resourceLink, doc);
+
+        console.log(`✅ Water levels saved: ${result.body.id}`);
+        res.status(201).json(result.body);
+
+    } catch (error) {
+        console.error('❌ Water levels submit error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/water-levels
+ * Get past water level submissions
+ */
+app.get('/api/water-levels', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 10;
+        const date = req.query.date;
+
+        let querySpec;
+        if (date) {
+            querySpec = {
+                query: 'SELECT TOP @limit * FROM c WHERE c.date = @date',
+                parameters: [
+                    { name: '@limit', value: limit },
+                    { name: '@date', value: date }
+                ]
+            };
+        } else {
+            querySpec = {
+                query: 'SELECT TOP @limit * FROM c',
+                parameters: [{ name: '@limit', value: limit }]
+            };
+        }
+
+        console.log(`💧 Fetching water levels (limit: ${limit}, date: ${date || 'all'})`);
+        const results = await cosmosQuery(querySpec);
+
+        // Sort client-side (descending by submittedAt)
+        results.sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+
+        console.log(`✅ Returned ${results.length} water level records`);
+
+        res.json(results);
+
+    } catch (error) {
+        console.error('❌ Water levels fetch error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 404 handler
 app.use((req, res) => {
     res.status(404).json({

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getBitrixApi, BitrixWorkgroup } from '@/lib/bitrix-api'
+import { getUserWorkgroupIds } from '@/hooks/useAuth'
 
 export interface FilterState {
   groupId: string
@@ -36,7 +37,12 @@ export function ReportFilters({ filters, onChange }: ReportFiltersProps) {
       try {
         const api = getBitrixApi()
         const groups = await api.getWorkgroups()
-        setWorkgroups(groups)
+        // Filter to only show the logged-in user's workgroups
+        const userGroupIds = getUserWorkgroupIds()
+        const filtered = userGroupIds.length > 0
+          ? groups.filter(g => userGroupIds.includes(g.GROUP_ID))
+          : groups
+        setWorkgroups(filtered)
       } catch (e) {
         console.warn('Failed to load workgroups:', e)
       } finally {
