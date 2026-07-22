@@ -53,7 +53,7 @@ import { ClassificationLevelPipe } from '../../shared/pipes';
             <button
               class="action-btn"
               (click)="createChild.emit(node); $event.stopPropagation()"
-              aria-label="Add child entry under {{ node.title }}">
+              [attr.aria-label]="'Add child entry under ' +  node.title  + ''">
               +
             </button>
           }
@@ -61,7 +61,7 @@ import { ClassificationLevelPipe } from '../../shared/pipes';
             <button
               class="action-btn action-btn-danger"
               (click)="deactivate.emit(node); $event.stopPropagation()"
-              aria-label="Deactivate {{ node.title }}">
+              [attr.aria-label]="'Deactivate ' +  node.title  + ''">
               &#x2715;
             </button>
           }

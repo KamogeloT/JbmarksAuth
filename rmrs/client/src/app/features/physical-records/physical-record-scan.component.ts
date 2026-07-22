@@ -111,7 +111,7 @@ interface ScanResult {
                 <span class="bulk-barcode">{{ item.physicalRecord.barcodeValue }}</span>
                 <span class="bulk-registry">{{ item.registryNumber }}</span>
                 <span class="bulk-subject">{{ item.subject }}</span>
-                <button class="remove-btn" (click)="removeBulkItem(item)" aria-label="Remove {{ item.registryNumber }} from bulk list">
+                <button class="remove-btn" (click)="removeBulkItem(item)" [attr.aria-label]="'Remove ' +  item.registryNumber  + ' from bulk list'">
                   &times;
                 </button>
               </div>

@@ -1,0 +1,1 @@
+var t=function(r){return r.SystemAdministrator="System_Administrator",r.RecordsManager="Records_Manager",r.RegistryClerk="Registry_Clerk",r.DepartmentUser="Department_User",r.DepartmentSupervisor="Department_Supervisor",r.ComplianceOfficer="Compliance_Officer",r.Auditor="Auditor",r.Archivist="Archivist",r.ExecutiveViewer="Executive_Viewer",r}(t||{});export{t as a};

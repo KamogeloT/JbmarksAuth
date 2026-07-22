@@ -1,0 +1,1 @@
+import"./chunk-35PI25VP.js";var t=[{path:"",loadComponent:()=>import("./chunk-HBFZKJKH.js").then(o=>o.ReportListComponent)},{path:"generate",loadComponent:()=>import("./chunk-4SVUFEYL.js").then(o=>o.ReportGeneratorComponent)}];export{t as REPORTS_ROUTES};

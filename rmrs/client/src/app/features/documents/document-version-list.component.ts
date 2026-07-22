@@ -55,7 +55,7 @@ import { DateFormatPipe } from '../../shared/pipes';
                 </button>
               </span>
               <span class="col-actions" role="cell">
-                <button class="btn btn-sm" (click)="downloadVersion(version)" aria-label="Download version {{ version.versionNumber }}">
+                <button class="btn btn-sm" (click)="downloadVersion(version)" [attr.aria-label]="'Download version ' +  version.versionNumber  + ''">
                   Download
                 </button>
               </span>

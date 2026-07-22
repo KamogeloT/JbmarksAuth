@@ -214,12 +214,12 @@ export class RecordListComponent implements OnInit {
   }
 
   private getClassificationLabel(level: number): string {
-    const labels: Record<number, string> = { 0: 'Public', 1: 'Internal', 2: 'Confidential', 3: 'Restricted' };
+    const labels: { [key: number]: string } = { 0: 'Public', 1: 'Internal', 2: 'Confidential', 3: 'Restricted' };
     return labels[level] || `Level ${level}`;
   }
 
   private getStatusLabel(status: string): string {
-    const labels: Record<string, string> = {
+    const labels: { [key: string]: string } = {
       Active: 'Active', DisposalPending: 'Disposal Pending', Disposed: 'Disposed',
       Archived: 'Archived', TransferPending: 'Transfer Pending'
     };

@@ -19,7 +19,7 @@ public class TransferManifestGenerator : ITransferManifestGenerator
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
-        var document = Document.Create(container =>
+        var document = QuestPDF.Fluent.Document.Create(container =>
         {
             container.Page(page =>
             {

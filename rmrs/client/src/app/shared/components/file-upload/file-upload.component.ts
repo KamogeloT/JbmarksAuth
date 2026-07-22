@@ -58,7 +58,7 @@ export interface FileSelectEvent {
             <div class="file-item">
               <span class="file-name">{{ file.name }}</span>
               <span class="file-size">({{ formatSize(file.size) }})</span>
-              <button class="remove-btn" (click)="removeFile(file)" aria-label="Remove {{ file.name }}">
+              <button class="remove-btn" (click)="removeFile(file)" [attr.aria-label]="'Remove ' + file.name">
                 &times;
               </button>
             </div>

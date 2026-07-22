@@ -88,7 +88,7 @@ import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../..
                       <span class="doc-name">{{ doc.fileName }}</span>
                       <span class="doc-meta">Version {{ doc.currentVersion }} | {{ formatFileSize(doc.fileSize) }}</span>
                     </div>
-                    <button class="btn btn-sm" (click)="downloadDocument(doc.id)" aria-label="Download {{ doc.fileName }}">
+                    <button class="btn btn-sm" (click)="downloadDocument(doc.id)" [attr.aria-label]="'Download ' +  doc.fileName  + ''">
                       Download
                     </button>
                   </div>

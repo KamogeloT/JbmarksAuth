@@ -234,40 +234,42 @@ public class ReportGeneratorService : IReportGeneratorService
         switch (type)
         {
             case ReportType.RecordsPerDepartmentMonth:
-                data.Rows = await query
+                var deptMonthData = await query
                     .GroupBy(r => new { r.Department.DepartmentName, r.CreatedAt.Year, r.CreatedAt.Month })
-                    .Select(g => new ReportRow
-                    {
-                        Values = new Dictionary<string, string>
-                        {
-                            ["Department"] = g.Key.DepartmentName,
-                            ["Year"] = g.Key.Year.ToString(),
-                            ["Month"] = g.Key.Month.ToString(),
-                            ["Count"] = g.Count().ToString()
-                        }
-                    })
+                    .Select(g => new { g.Key.DepartmentName, g.Key.Year, g.Key.Month, Count = g.Count() })
                     .ToListAsync();
+                data.Rows = deptMonthData.Select(g => new ReportRow
+                {
+                    Values = new Dictionary<string, string>
+                    {
+                        ["Department"] = g.DepartmentName,
+                        ["Year"] = g.Year.ToString(),
+                        ["Month"] = g.Month.ToString(),
+                        ["Count"] = g.Count.ToString()
+                    }
+                }).ToList();
                 data.Columns = new[] { "Department", "Year", "Month", "Count" };
                 break;
 
             case ReportType.PendingDisposal:
                 var now = DateTime.UtcNow;
-                data.Rows = await query
+                var pendingData = await query
                     .Where(r => r.Status == "Active"
                         && r.RetentionExpiryDate != null
                         && r.RetentionExpiryDate <= now)
-                    .Select(r => new ReportRow
-                    {
-                        Values = new Dictionary<string, string>
-                        {
-                            ["RegistryNumber"] = r.RegistryNumber,
-                            ["Subject"] = r.Subject,
-                            ["Department"] = r.Department.DepartmentName,
-                            ["RetentionExpiry"] = r.RetentionExpiryDate!.Value.ToString("yyyy-MM-dd"),
-                            ["Status"] = r.Status
-                        }
-                    })
+                    .Select(r => new { r.RegistryNumber, r.Subject, DepartmentName = r.Department.DepartmentName, r.RetentionExpiryDate, r.Status })
                     .ToListAsync();
+                data.Rows = pendingData.Select(r => new ReportRow
+                {
+                    Values = new Dictionary<string, string>
+                    {
+                        ["RegistryNumber"] = r.RegistryNumber,
+                        ["Subject"] = r.Subject,
+                        ["Department"] = r.DepartmentName,
+                        ["RetentionExpiry"] = r.RetentionExpiryDate!.Value.ToString("yyyy-MM-dd"),
+                        ["Status"] = r.Status
+                    }
+                }).ToList();
                 data.Columns = new[] { "RegistryNumber", "Subject", "Department", "RetentionExpiry", "Status" };
                 break;
 
@@ -290,18 +292,19 @@ public class ReportGeneratorService : IReportGeneratorService
                         m.PhysicalRecord.Record.Department.DepartmentCode == userContext.DepartmentCode);
                 }
 
-                data.Rows = await movementsQuery
-                    .Select(m => new ReportRow
-                    {
-                        Values = new Dictionary<string, string>
-                        {
-                            ["RegistryNumber"] = m.PhysicalRecord.Record.RegistryNumber,
-                            ["MovedAt"] = m.MovedAt.ToString("yyyy-MM-dd HH:mm"),
-                            ["FromLocation"] = m.FromLocationId != null ? m.FromLocationId.ToString()! : "N/A",
-                            ["ToLocation"] = m.ToLocationId.ToString()
-                        }
-                    })
+                var movementsData = await movementsQuery
+                    .Select(m => new { RegistryNumber = m.PhysicalRecord.Record.RegistryNumber, m.MovedAt, m.FromLocationId, m.ToLocationId })
                     .ToListAsync();
+                data.Rows = movementsData.Select(m => new ReportRow
+                {
+                    Values = new Dictionary<string, string>
+                    {
+                        ["RegistryNumber"] = m.RegistryNumber,
+                        ["MovedAt"] = m.MovedAt.ToString("yyyy-MM-dd HH:mm"),
+                        ["FromLocation"] = m.FromLocationId != null ? m.FromLocationId.ToString()! : "N/A",
+                        ["ToLocation"] = m.ToLocationId.ToString()!
+                    }
+                }).ToList();
                 data.Columns = new[] { "RegistryNumber", "MovedAt", "FromLocation", "ToLocation" };
                 break;
 
@@ -317,18 +320,19 @@ public class ReportGeneratorService : IReportGeneratorService
                         d.Record.Department.DepartmentCode == userContext.DepartmentCode);
                 }
 
-                data.Rows = await storageQuery
+                var storageData = await storageQuery
                     .GroupBy(d => d.Record.Department.DepartmentName)
-                    .Select(g => new ReportRow
-                    {
-                        Values = new Dictionary<string, string>
-                        {
-                            ["Department"] = g.Key,
-                            ["FileCount"] = g.Count().ToString(),
-                            ["TotalSizeMB"] = (g.Sum(d => d.FileSize) / (1024.0 * 1024.0)).ToString("F2")
-                        }
-                    })
+                    .Select(g => new { Department = g.Key, FileCount = g.Count(), TotalSize = g.Sum(d => d.FileSize) })
                     .ToListAsync();
+                data.Rows = storageData.Select(g => new ReportRow
+                {
+                    Values = new Dictionary<string, string>
+                    {
+                        ["Department"] = g.Department,
+                        ["FileCount"] = g.FileCount.ToString(),
+                        ["TotalSizeMB"] = (g.TotalSize / (1024.0 * 1024.0)).ToString("F2")
+                    }
+                }).ToList();
                 data.Columns = new[] { "Department", "FileCount", "TotalSizeMB" };
                 break;
 

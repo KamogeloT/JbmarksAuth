@@ -1,0 +1,1 @@
+import"./chunk-35PI25VP.js";var o=[{path:"",loadComponent:()=>import("./chunk-UCVKKJEW.js").then(t=>t.SecurityComponent)},{path:"roles",loadComponent:()=>import("./chunk-Z67A7DXV.js").then(t=>t.RoleManagementComponent)},{path:"departments",loadComponent:()=>import("./chunk-YQEOWW6Z.js").then(t=>t.DepartmentMappingComponent)}];export{o as SECURITY_ROUTES};

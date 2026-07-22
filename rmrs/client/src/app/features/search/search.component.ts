@@ -131,7 +131,6 @@ export class SearchComponent {
     this.hasSearched.set(true);
 
     const payload: any = {
-      query: this.searchQuery,
       page: this.currentPage(),
       pageSize: this.pageSize(),
       sortBy: this.sortBy || undefined,

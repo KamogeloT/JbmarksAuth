@@ -65,7 +65,7 @@ export interface ConfigSetting {
               } @else {
                 <div class="config-value">
                   <code>{{ maskSensitiveValue(setting) }}</code>
-                  <button class="btn-edit" (click)="startEdit(setting)" aria-label="Edit {{ setting.key }}">Edit</button>
+                  <button class="btn-edit" (click)="startEdit(setting)" [attr.aria-label]="'Edit ' +  setting.key  + ''">Edit</button>
                 </div>
               }
             </div>

@@ -1,0 +1,1 @@
+import"./chunk-35PI25VP.js";var n=[{path:"",loadComponent:()=>import("./chunk-4KYBXTLY.js").then(o=>o.AdminComponent)},{path:"config",loadComponent:()=>import("./chunk-ZXKP4XF6.js").then(o=>o.SystemConfigComponent)},{path:"lookups",loadComponent:()=>import("./chunk-IQ53FH64.js").then(o=>o.LookupTableEditorComponent)}];export{n as ADMIN_ROUTES};
