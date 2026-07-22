@@ -601,12 +601,12 @@ public partial class InitialSchema : Migration
         // Full-Text Catalog and Index
         migrationBuilder.Sql(@"
             CREATE FULLTEXT CATALOG RmrsFullTextCatalog AS DEFAULT;
-        ");
+        ", suppressTransaction: true);
 
         migrationBuilder.Sql(@"
             CREATE FULLTEXT INDEX ON Records (Subject, SenderOrRecipient, ExternalReferenceNumber, OriginatingOrganization)
                 KEY INDEX PK_Records ON RmrsFullTextCatalog;
-        ");
+        ", suppressTransaction: true);
 
         // Deny UPDATE/DELETE on AuditLogs for the app user (append-only enforcement)
         migrationBuilder.Sql(@"

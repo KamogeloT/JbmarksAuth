@@ -17,14 +17,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .Enrich.FromLogContext()
         .Enrich.WithMachineName()
         .Enrich.WithEnvironmentName()
-        .WriteTo.Console()
-        .WriteTo.MSSqlServer(
-            connectionString: context.Configuration.GetConnectionString("DefaultConnection"),
-            sinkOptions: new Serilog.Sinks.MSSqlServer.MSSqlServerSinkOptions
-            {
-                TableName = "Logs",
-                AutoCreateSqlTable = true
-            });
+        .WriteTo.Console();
 });
 
 // ──────────────────────────────────────────────
