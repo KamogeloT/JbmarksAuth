@@ -474,6 +474,11 @@ fun AppNavigation() {
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+
+            // Water Levels Capture Screen
+            composable("water_levels") {
+                com.example.jbmarks.waterlevels.ui.WaterLevelsScreen()
+            }
         }
     }
 }

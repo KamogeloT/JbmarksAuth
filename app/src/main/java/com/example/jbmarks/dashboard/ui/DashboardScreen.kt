@@ -352,6 +352,14 @@ fun QuickActionsRow(onNavigateTo: (String) -> Unit) {
     ) {
         item {
             QuickActionCard(
+                title = "Water Levels",
+                icon = Icons.Default.Create,
+                containerColor = Color(0xFF1976D2),
+                onClick = { onNavigateTo("water_levels") }
+            )
+        }
+        item {
+            QuickActionCard(
                 title = "My Tasks",
                 icon = Icons.Default.List,
                 containerColor = MaterialTheme.colorScheme.primary,

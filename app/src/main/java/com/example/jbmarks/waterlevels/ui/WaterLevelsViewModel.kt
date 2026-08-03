@@ -41,7 +41,7 @@ class WaterLevelsViewModel(application: Application) : AndroidViewModel(applicat
     val uiState: StateFlow<WaterLevelsUiState> = _uiState.asStateFlow()
 
     companion object {
-        private val ALLOWED_WORKGROUP_IDS = setOf("19", "23")
+        private val ALLOWED_WORKGROUP_IDS = setOf("2", "6")
     }
 
     init {

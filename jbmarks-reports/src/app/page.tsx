@@ -7,10 +7,11 @@ import { TaskSummaryReport } from '@/components/reports/TaskSummaryReport'
 import { OverdueReport } from '@/components/reports/OverdueReport'
 import { TimeTrackingReport } from '@/components/reports/TimeTrackingReport'
 import { TeamWorkloadReport } from '@/components/reports/TeamWorkloadReport'
+import { WaterLevelsReport } from '@/components/reports/WaterLevelsReport'
 import { LoginPage } from '@/components/auth/LoginPage'
 import { useAuth } from '@/hooks/useAuth'
 
-export type ReportView = 'task-summary' | 'overdue' | 'time-tracking' | 'team-workload'
+export type ReportView = 'task-summary' | 'overdue' | 'time-tracking' | 'team-workload' | 'water-levels'
 
 export default function Home() {
   const { isAuthenticated, user, login, logout, loading } = useAuth()
@@ -70,6 +71,7 @@ export default function Home() {
             {activeReport === 'overdue' && <OverdueReport />}
             {activeReport === 'time-tracking' && <TimeTrackingReport />}
             {activeReport === 'team-workload' && <TeamWorkloadReport />}
+            {activeReport === 'water-levels' && <WaterLevelsReport />}
           </div>
         </main>
       </div>

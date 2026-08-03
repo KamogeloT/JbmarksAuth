@@ -12,6 +12,7 @@ const navItems: { id: ReportView; label: string; icon: string }[] = [
   { id: 'overdue', label: 'Overdue & Deadlines', icon: '⏰' },
   { id: 'time-tracking', label: 'Time Tracking', icon: '🕐' },
   { id: 'team-workload', label: 'Team Workload', icon: '👥' },
+  { id: 'water-levels', label: 'Water Levels', icon: '💧' },
 ]
 
 export function Sidebar({ activeReport, onNavigate }: SidebarProps) {
