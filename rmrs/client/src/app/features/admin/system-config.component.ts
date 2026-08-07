@@ -2,6 +2,7 @@ import { Component, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/api';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 
 /**
  * A system configuration setting.
@@ -21,13 +22,18 @@ export interface ConfigSetting {
 @Component({
   selector: 'app-system-config',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, HelpBannerComponent],
   template: `
     <section class="system-config" aria-label="System Configuration">
       <header class="page-header">
         <h1>System Configuration</h1>
         <p class="subtitle">Manage OAuth settings and general system configuration.</p>
       </header>
+
+      <app-help-banner
+        title="System Administration"
+        [tips]="['Configure system settings like numbering rules and API connections.', 'Manage lookup tables (document types, priorities, classifications).', 'Monitor scheduled jobs and their execution history.', 'Sensitive values (like secrets) are masked for security.', 'Changes to configuration are logged in the audit trail.']">
+      </app-help-banner>
 
       @if (loading()) {
         <div class="loading" role="status" aria-label="Loading configuration">
@@ -65,7 +71,7 @@ export interface ConfigSetting {
               } @else {
                 <div class="config-value">
                   <code>{{ maskSensitiveValue(setting) }}</code>
-                  <button class="btn-edit" (click)="startEdit(setting)" [attr.aria-label]="'Edit ' +  setting.key  + ''">Edit</button>
+                  <button class="btn-edit" (click)="startEdit(setting)" title="Change this configuration value (requires a reason)" [attr.aria-label]="'Edit ' +  setting.key  + ''">Edit</button>
                 </div>
               }
             </div>

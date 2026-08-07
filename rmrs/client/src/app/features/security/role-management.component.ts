@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/api';
 import { UserRole } from '@shared/models';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 
 /**
  * User role assignment data.
@@ -31,13 +32,18 @@ export interface UserSummary {
 @Component({
   selector: 'app-role-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, HelpBannerComponent],
   template: `
     <section class="role-management" aria-label="Role Management">
       <header class="page-header">
         <h1>Role Management</h1>
         <p class="subtitle">Assign and revoke roles for system users. All changes require justification.</p>
       </header>
+
+      <app-help-banner
+        title="Role Management"
+        [tips]="['Assign roles to control what users can do in the system.', 'Each role has specific permissions — check the matrix.', 'Changes require a justification reason.', 'Users can have multiple roles if needed.', 'Role changes take effect immediately.']">
+      </app-help-banner>
 
       <!-- User search -->
       <div class="user-search">
@@ -107,7 +113,7 @@ export interface UserSummary {
                   <input id="justification" type="text" formControlName="justification"
                     placeholder="Reason for role assignment" aria-required="true" />
                 </div>
-                <button type="submit" class="btn-primary" [disabled]="assignForm.invalid || saving()">
+                <button type="submit" class="btn-primary" [disabled]="assignForm.invalid || saving()" title="Assign the selected role to this user">
                   {{ saving() ? 'Assigning...' : 'Assign' }}
                 </button>
               </div>

@@ -4,6 +4,7 @@ import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { Record, PaginatedResponse } from '../../shared/models';
 import { DataTableComponent, TableColumn, SortEvent, PageEvent } from '../../shared/components/data-table/data-table.component';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../../shared/pipes';
 import { HttpParams } from '@angular/common/http';
 
@@ -13,12 +14,17 @@ import { HttpParams } from '@angular/common/http';
 @Component({
   selector: 'app-record-list',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DataTableComponent, DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe],
+  imports: [CommonModule, ReactiveFormsModule, DataTableComponent, HelpBannerComponent, DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe],
   template: `
     <div class="record-list" aria-label="Records list">
       <div class="list-header">
         <h2>Records Registry</h2>
       </div>
+
+      <app-help-banner
+        title="Registering Records"
+        [tips]="['Use this module to register incoming, outgoing, or internal records.', 'Each record gets a unique registry number automatically.', 'Select the correct department and file reference for proper classification.', 'You can route records to responsible officials for action.', 'Records can only be closed once all required fields are complete.']">
+      </app-help-banner>
 
       <!-- Filters -->
       <div class="filters" role="search" aria-label="Record filters">
@@ -26,7 +32,7 @@ import { HttpParams } from '@angular/common/http';
           <div class="filter-row">
             <div class="filter-group">
               <label for="search">Search</label>
-              <input id="search" type="text" formControlName="search" placeholder="Search by subject, registry number..." />
+              <input id="search" type="text" formControlName="search" placeholder="Search by subject, registry number..." title="Enter keywords to filter records by subject or registry number" />
             </div>
             <div class="filter-group">
               <label for="recordType">Type</label>
@@ -57,8 +63,8 @@ import { HttpParams } from '@angular/common/http';
               <input id="dateTo" type="date" formControlName="dateTo" />
             </div>
             <div class="filter-actions">
-              <button type="submit" class="btn btn-primary" aria-label="Apply filters">Filter</button>
-              <button type="button" class="btn btn-secondary" (click)="clearFilters()" aria-label="Clear all filters">Clear</button>
+              <button type="submit" class="btn btn-primary" aria-label="Apply filters" title="Apply the selected filters to the records list">Filter</button>
+              <button type="button" class="btn btn-secondary" (click)="clearFilters()" aria-label="Clear all filters" title="Reset all filters and show all records">Clear</button>
             </div>
           </div>
         </form>

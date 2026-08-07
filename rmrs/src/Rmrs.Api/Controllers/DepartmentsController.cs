@@ -221,6 +221,33 @@ public class DepartmentsController : RmrsControllerBase
     }
 
     /// <summary>
+    /// Syncs departments from Bitrix workgroups.
+    /// Fetches all workgroups from Bitrix and creates missing department mappings.
+    /// Existing mappings (by BitrixWorkgroupId) are skipped.
+    /// </summary>
+    [HttpPost("sync-from-bitrix")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SyncFromBitrix()
+    {
+        try
+        {
+            var result = await _departmentMappingService.SyncFromBitrixAsync();
+            return OkResponse(result);
+        }
+        catch (BitrixApiException ex)
+        {
+            _logger.LogError(ex, "Bitrix API error during department sync");
+            return StatusCode(StatusCodes.Status502BadGateway, new Application.Models.ApiError
+            {
+                Code = "BITRIX_API_ERROR",
+                Message = ex.Message,
+                Detail = ex.Detail,
+                TraceId = HttpContext.TraceIdentifier
+            });
+        }
+    }
+
+    /// <summary>
     /// Validates that a Bitrix workgroup exists for the given department mapping.
     /// Calls Bitrix sonet_group.get to confirm the workgroup is accessible.
     /// </summary>

@@ -2,6 +2,7 @@ import { Component, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { DataTableComponent, TableColumn, SortEvent, PageEvent } from '@shared/components';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { DateFormatPipe } from '@shared/pipes';
 import { ApiService } from '@core/api';
 import { DisposalCandidate, PaginatedResponse } from '@shared/models';
@@ -14,13 +15,18 @@ import { DisposalCandidate, PaginatedResponse } from '@shared/models';
 @Component({
   selector: 'app-disposal-candidates',
   standalone: true,
-  imports: [CommonModule, DataTableComponent, DateFormatPipe],
+  imports: [CommonModule, DataTableComponent, HelpBannerComponent, DateFormatPipe],
   template: `
     <section class="disposal-candidates" aria-label="Disposal Candidates">
       <header class="page-header">
         <h1>Disposal Candidates</h1>
         <p class="subtitle">Records with expired retention periods eligible for disposal.</p>
       </header>
+
+      <app-help-banner
+        title="Record Disposal"
+        [tips]="['Records appear here once their retention period has expired.', 'Review candidates carefully before creating a disposal batch.', 'Records with legal or audit holds are excluded automatically.', 'A disposal authority number is required before destruction.', 'Disposal certificates are generated and permanently retained.']">
+      </app-help-banner>
 
       @if (loading()) {
         <div class="loading" role="status" aria-label="Loading candidates">
@@ -35,6 +41,7 @@ import { DisposalCandidate, PaginatedResponse } from '@shared/models';
             class="btn-primary"
             [disabled]="selectedIds().length === 0"
             (click)="createBatch()"
+            title="Bundle selected records into a disposal batch for review"
             aria-label="Create disposal batch from selected records">
             Create Disposal Batch ({{ selectedIds().length }})
           </button>

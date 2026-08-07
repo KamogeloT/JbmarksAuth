@@ -62,4 +62,23 @@ public interface IDepartmentMappingService
     /// <param name="workgroupId">The Bitrix workgroup ID to validate.</param>
     /// <returns>True if the workgroup exists on the Bitrix platform.</returns>
     Task<bool> ValidateWorkgroupAsync(int workgroupId);
+
+    /// <summary>
+    /// Syncs departments from Bitrix workgroups. Fetches all workgroups and creates
+    /// department mappings for any that don't already exist in the database.
+    /// </summary>
+    /// <returns>Summary of sync results (created, skipped, total).</returns>
+    Task<SyncFromBitrixResult> SyncFromBitrixAsync();
+}
+
+/// <summary>
+/// Result of a Bitrix workgroup sync operation.
+/// </summary>
+public class SyncFromBitrixResult
+{
+    public int TotalWorkgroups { get; set; }
+    public int Created { get; set; }
+    public int Skipped { get; set; }
+    public List<string> CreatedDepartments { get; set; } = new();
+    public List<string> SkippedDepartments { get; set; } = new();
 }

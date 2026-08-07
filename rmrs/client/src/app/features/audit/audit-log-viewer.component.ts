@@ -5,6 +5,7 @@ import { ApiService } from '@core/api';
 import { AuditLog, AuditQuery, PaginatedResponse } from '@shared/models';
 import { DateFormatPipe } from '@shared/pipes';
 import { DataTableComponent, TableColumn, SortEvent, PageEvent } from '@shared/components';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 
 /**
  * Filterable, paginated audit log viewer component.
@@ -14,13 +15,18 @@ import { DataTableComponent, TableColumn, SortEvent, PageEvent } from '@shared/c
 @Component({
   selector: 'app-audit-log-viewer',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DateFormatPipe, DataTableComponent],
+  imports: [CommonModule, ReactiveFormsModule, DateFormatPipe, DataTableComponent, HelpBannerComponent],
   template: `
     <section class="audit-log-viewer" aria-label="Audit Log Viewer">
       <header class="page-header">
         <h1>Audit Log</h1>
         <p class="subtitle">Immutable record of all system operations.</p>
       </header>
+
+      <app-help-banner
+        title="Audit Trail"
+        [tips]="['View a complete history of all actions in the system.', 'Filter by user, action type, date range, or record.', 'Audit logs cannot be deleted or modified.', 'Use this for compliance evidence and investigations.', 'Export audit data for external reporting.']">
+      </app-help-banner>
 
       <!-- Filter Panel -->
       <details class="filter-panel" open>
@@ -70,8 +76,8 @@ import { DataTableComponent, TableColumn, SortEvent, PageEvent } from '@shared/c
           </div>
 
           <div class="filter-actions">
-            <button type="submit" class="btn-primary">Apply</button>
-            <button type="button" class="btn-secondary" (click)="clearFilters()">Clear</button>
+            <button type="submit" class="btn-primary" title="Apply filters to narrow down audit log entries">Apply</button>
+            <button type="button" class="btn-secondary" (click)="clearFilters()" title="Reset all filters and show all audit entries">Clear</button>
           </div>
         </form>
       </details>

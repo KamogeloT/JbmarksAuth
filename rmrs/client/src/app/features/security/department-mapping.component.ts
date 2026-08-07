@@ -4,6 +4,14 @@ import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angula
 import { ApiService } from '@core/api';
 import { Department, CreateDepartmentRequest } from '@shared/models';
 
+interface SyncResult {
+  totalWorkgroups: number;
+  created: number;
+  skipped: number;
+  createdDepartments: string[];
+  skippedDepartments: string[];
+}
+
 /**
  * Department-to-workgroup CRUD management component.
  * Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5
@@ -17,7 +25,39 @@ import { Department, CreateDepartmentRequest } from '@shared/models';
       <header class="page-header">
         <h1>Department Mappings</h1>
         <p class="subtitle">Map municipal departments to their Bitrix workgroup drives.</p>
+        <div class="header-actions">
+          <button class="btn-sync" (click)="syncFromBitrix()" [disabled]="syncing()"
+            aria-label="Sync departments from Bitrix workgroups">
+            {{ syncing() ? '⏳ Syncing...' : '🔄 Sync from Bitrix' }}
+          </button>
+        </div>
       </header>
+
+      @if (syncResult()) {
+        <div class="sync-result" role="status">
+          <p><strong>Sync Complete:</strong> {{ syncResult()!.created }} created, {{ syncResult()!.skipped }} skipped ({{ syncResult()!.totalWorkgroups }} total workgroups)</p>
+          @if (syncResult()!.createdDepartments.length > 0) {
+            <details>
+              <summary>Created ({{ syncResult()!.createdDepartments.length }})</summary>
+              <ul>
+                @for (name of syncResult()!.createdDepartments; track name) {
+                  <li>{{ name }}</li>
+                }
+              </ul>
+            </details>
+          }
+          @if (syncResult()!.skippedDepartments.length > 0) {
+            <details>
+              <summary>Skipped — already exists ({{ syncResult()!.skippedDepartments.length }})</summary>
+              <ul>
+                @for (name of syncResult()!.skippedDepartments; track name) {
+                  <li>{{ name }}</li>
+                }
+              </ul>
+            </details>
+          }
+        </div>
+      }
 
       <!-- Add new mapping -->
       <details class="add-section">
@@ -129,14 +169,25 @@ import { Department, CreateDepartmentRequest } from '@shared/models';
     .empty-state { text-align: center; padding: 1.5rem; color: #666; }
     .error-message { color: #d32f2f; margin-top: 1rem; }
     .success-message { color: #2e7d32; margin-top: 1rem; }
+    .header-actions { margin-top: 0.75rem; }
+    .btn-sync { background: #ff9800; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 4px; cursor: pointer; font-weight: 500; font-size: 0.875rem; }
+    .btn-sync:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sync:hover:not(:disabled) { background: #f57c00; }
+    .sync-result { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+    .sync-result p { margin: 0 0 0.5rem; }
+    .sync-result details { margin-top: 0.5rem; }
+    .sync-result summary { cursor: pointer; font-size: 0.875rem; color: #1b5e20; }
+    .sync-result ul { margin: 0.25rem 0 0 1rem; padding: 0; font-size: 0.8125rem; }
   `]
 })
 export class DepartmentMappingComponent implements OnInit {
   departments = signal<Department[]>([]);
   loading = signal(true);
   saving = signal(false);
+  syncing = signal(false);
   error = signal<string | null>(null);
   successMessage = signal<string | null>(null);
+  syncResult = signal<SyncResult | null>(null);
 
   addForm: FormGroup;
 
@@ -208,6 +259,25 @@ export class DepartmentMappingComponent implements OnInit {
       },
       error: (err) => {
         this.error.set(err?.error?.message || 'Cannot delete department with active records.');
+      }
+    });
+  }
+
+  syncFromBitrix(): void {
+    this.syncing.set(true);
+    this.error.set(null);
+    this.successMessage.set(null);
+    this.syncResult.set(null);
+
+    this.api.post<SyncResult>('/departments/sync-from-bitrix').subscribe({
+      next: (result) => {
+        this.syncResult.set(result);
+        this.syncing.set(false);
+        this.loadDepartments();
+      },
+      error: (err) => {
+        this.error.set(err?.error?.message || 'Failed to sync from Bitrix. Check connection and try again.');
+        this.syncing.set(false);
       }
     });
   }

@@ -190,6 +190,54 @@ public sealed class BitrixApiClient : IBitrixApiClient
         return exists;
     }
 
+    /// <inheritdoc />
+    public async Task<List<BitrixWorkgroup>> GetAllWorkgroupsAsync()
+    {
+        _logger.LogInformation("Fetching all workgroups from Bitrix using webhook");
+
+        try
+        {
+            // Use webhook URL directly (no user token needed)
+            var webhookUrl = "https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss/sonet_group.user.groups.json";
+            var response = await _platformHttpClient.GetAsync(webhookUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                throw new BitrixApiException($"Bitrix API returned {response.StatusCode}: {errorBody}", response.StatusCode);
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var result = new List<BitrixWorkgroup>();
+
+            if (doc.RootElement.TryGetProperty("result", out var resultArray) && resultArray.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in resultArray.EnumerateArray())
+                {
+                    var id = item.TryGetProperty("GROUP_ID", out var gid) ? int.Parse(gid.GetString() ?? "0") : 0;
+                    var name = item.TryGetProperty("GROUP_NAME", out var gname) ? gname.GetString() ?? "" : "";
+
+                    if (id > 0 && !string.IsNullOrEmpty(name))
+                    {
+                        result.Add(new BitrixWorkgroup { Id = id, Name = name });
+                    }
+                }
+            }
+
+            _logger.LogInformation("Fetched {Count} workgroups from Bitrix", result.Count);
+            return result;
+        }
+        catch (BitrixApiException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new BitrixApiException("Failed to fetch workgroups from Bitrix: " + ex.Message, ex);
+        }
+    }
+
     // ==========================================
     // Drive / File Operations
     // ==========================================

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
 import { PhysicalRecord, StorageLocation } from '../../shared/models';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { DateFormatPipe } from '../../shared/pipes';
 
 /**
@@ -23,10 +24,16 @@ interface ScanResult {
 @Component({
   selector: 'app-physical-record-scan',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DateFormatPipe],
+  imports: [CommonModule, ReactiveFormsModule, HelpBannerComponent, DateFormatPipe],
   template: `
     <div class="scan-interface" aria-label="Physical record scanning interface">
       <h2>Scan Physical Records</h2>
+
+      <app-help-banner
+        title="Physical File Tracking"
+        [tips]="['Track physical files using barcodes and QR codes.', 'Scan a barcode to quickly find or move a file.', 'Use the loan feature to track who has borrowed a file.', 'Set up storage locations (building → room → cabinet → shelf).', 'Overdue loans are flagged automatically.']">
+      </app-help-banner>
+
       <p class="scan-info">Scan barcode or QR code to look up physical record details. Supports bulk scanning for batch operations.</p>
 
       <div class="scan-input-section">
@@ -42,7 +49,7 @@ interface ScanResult {
                 aria-label="Enter barcode or QR code value"
                 autofocus />
             </div>
-            <button type="submit" class="btn btn-primary" [disabled]="scanning()" aria-label="Look up barcode">
+            <button type="submit" class="btn btn-primary" [disabled]="scanning()" aria-label="Look up barcode" title="Search for the physical record associated with this barcode">
               {{ scanning() ? 'Scanning...' : 'Look Up' }}
             </button>
           </div>

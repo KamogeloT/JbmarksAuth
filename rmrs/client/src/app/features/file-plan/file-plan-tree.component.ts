@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ApiService } from '../../core/api/api.service';
 import { FilePlanTree, FilePlanTreeNode } from '../../shared/models';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { ClassificationLevelPipe } from '../../shared/pipes';
 
 /**
@@ -124,15 +125,20 @@ export class TreeNodeInternalComponent {
 @Component({
   selector: 'app-file-plan-tree',
   standalone: true,
-  imports: [CommonModule, ConfirmDialogComponent, ClassificationLevelPipe, TreeNodeInternalComponent],
+  imports: [CommonModule, ConfirmDialogComponent, ClassificationLevelPipe, TreeNodeInternalComponent, HelpBannerComponent],
   template: `
     <div class="file-plan-tree" role="tree" aria-label="File plan hierarchy">
       <div class="tree-header">
         <h2>File Plan Structure</h2>
-        <button class="btn btn-primary" (click)="onCreateEntry()" aria-label="Create new file plan entry">
+        <button class="btn btn-primary" (click)="onCreateEntry()" aria-label="Create new file plan entry" title="Add a new top-level file plan entry">
           + New Entry
         </button>
       </div>
+
+      <app-help-banner
+        title="Managing the File Plan"
+        [tips]="['The file plan is your classification structure for all records.', 'Click on a series to expand and see sub-series and file references.', 'Only Records Managers can create or edit file references.', 'Every record must be linked to an active file reference.', 'Retired references can\\'t be used for new records but remain searchable.']">
+      </app-help-banner>
 
       @if (loading()) {
         <div class="loading" role="status" aria-live="polite">

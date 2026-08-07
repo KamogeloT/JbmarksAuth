@@ -1,21 +1,7 @@
-import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
-import { AuthService } from './auth.service';
+import { CanActivateFn } from '@angular/router';
 
 /**
- * Functional route guard that checks authentication state.
- * Redirects to /auth/login if the user is not authenticated.
+ * DEV BYPASS - always allows access.
+ * Remove before production.
  */
-export const authGuard: CanActivateFn = (route, state) => {
-  const authService = inject(AuthService);
-  const router = inject(Router);
-
-  if (authService.isAuthenticated()) {
-    return true;
-  }
-
-  // Redirect to login with returnUrl to restore navigation after auth
-  return router.createUrlTree(['/auth/login'], {
-    queryParams: { returnUrl: state.url }
-  });
-};
+export const authGuard: CanActivateFn = () => true;

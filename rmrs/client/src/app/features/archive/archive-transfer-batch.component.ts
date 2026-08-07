@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/api';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { DateFormatPipe } from '@shared/pipes';
 
 /**
@@ -42,12 +43,17 @@ export interface TransferBatchRecord {
 @Component({
   selector: 'app-archive-transfer-batch',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, DateFormatPipe],
+  imports: [CommonModule, ReactiveFormsModule, HelpBannerComponent, DateFormatPipe],
   template: `
     <section class="archive-transfer" aria-label="Archive Transfer Batch">
       <header class="page-header">
         <h1>{{ batch() ? 'Transfer Batch: ' + batch()!.batchNumber : 'Create Transfer Batch' }}</h1>
       </header>
+
+      <app-help-banner
+        title="Archive Transfer"
+        [tips]="['Transfer permanent records to archive custody.', 'Create a batch, add records, then validate metadata completeness.', 'The system checks that all required metadata is present.', 'Generate a transfer manifest for the receiving archive.', 'Track retrieval requests from archived records.']">
+      </app-help-banner>
 
       @if (!batch()) {
         <!-- Create new transfer batch -->
@@ -166,14 +172,14 @@ export interface TransferBatchRecord {
 
           <div class="batch-actions">
             @if (batch()!.status === 'Draft') {
-              <button class="btn-primary" (click)="validateBatch()" [disabled]="submitting()">Validate Batch</button>
+              <button class="btn-primary" (click)="validateBatch()" [disabled]="submitting()" title="Check that all records have complete metadata">Validate Batch</button>
             }
             @if (batch()!.status === 'Validated') {
-              <button class="btn-primary" (click)="finalizeBatch()" [disabled]="submitting()">Finalize Batch</button>
+              <button class="btn-primary" (click)="finalizeBatch()" [disabled]="submitting()" title="Lock the batch — no more changes allowed after this">Finalize Batch</button>
             }
             @if (batch()!.status === 'Finalized') {
-              <button class="btn-primary" (click)="completeBatch()" [disabled]="submitting()">Mark Completed</button>
-              <button class="btn-secondary" (click)="downloadManifest()">Download Manifest</button>
+              <button class="btn-primary" (click)="completeBatch()" [disabled]="submitting()" title="Confirm receipt by the archive">Mark Completed</button>
+              <button class="btn-secondary" (click)="downloadManifest()" title="Download a PDF manifest for handover to the receiving archive">Download Manifest</button>
             }
           </div>
         </div>

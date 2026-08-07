@@ -2,6 +2,7 @@ import { Component, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '@core/auth/auth.service';
 import { UserRole } from '@shared/models';
+import { HelpBannerComponent } from '@shared/components';
 import { RecordsManagerDashboardComponent } from './records-manager-dashboard.component';
 import { ExecutiveDashboardComponent } from './executive-dashboard.component';
 import { ComplianceDashboardComponent } from './compliance-dashboard.component';
@@ -16,12 +17,17 @@ import { ComplianceDashboardComponent } from './compliance-dashboard.component';
   standalone: true,
   imports: [
     CommonModule,
+    HelpBannerComponent,
     RecordsManagerDashboardComponent,
     ExecutiveDashboardComponent,
     ComplianceDashboardComponent
   ],
   template: `
     <div class="dashboard-container">
+      <app-help-banner
+        title="Welcome to RMRS"
+        [tips]="['This is your overview of the records management system.', 'Use the sidebar to navigate to different modules.', 'Cards show key metrics — click them for details.', 'Your role determines which modules you can access.']">
+      </app-help-banner>
       @switch (activeDashboard()) {
         @case ('records-manager') {
           <app-records-manager-dashboard />

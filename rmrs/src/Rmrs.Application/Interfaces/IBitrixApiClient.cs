@@ -53,6 +53,13 @@ public interface IBitrixApiClient
     /// <returns>True if the workgroup exists, false otherwise.</returns>
     Task<bool> ValidateWorkgroupExistsAsync(int workgroupId, string accessToken);
 
+    /// <summary>
+    /// Fetches all workgroups from Bitrix using the configured webhook (no user token needed).
+    /// Used for syncing departments.
+    /// </summary>
+    /// <returns>List of all Bitrix workgroups.</returns>
+    Task<List<BitrixWorkgroup>> GetAllWorkgroupsAsync();
+
     // ==========================================
     // Drive / File Operations
     // ==========================================

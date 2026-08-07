@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '@core/api';
 import { PaginatedResponse } from '@shared/models';
 import { SortEvent, PageEvent } from '@shared/components';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 import { AdvancedSearchComponent, SearchFilters } from './advanced-search.component';
 import { SearchResultsComponent, SearchResultItem } from './search-results.component';
 
@@ -16,12 +17,17 @@ import { SearchResultsComponent, SearchResultItem } from './search-results.compo
 @Component({
   selector: 'app-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdvancedSearchComponent, SearchResultsComponent],
+  imports: [CommonModule, FormsModule, HelpBannerComponent, AdvancedSearchComponent, SearchResultsComponent],
   template: `
     <section class="search-page" aria-label="Search Records">
       <header class="page-header">
         <h1>Search Records</h1>
       </header>
+
+      <app-help-banner
+        title="Searching Records"
+        [tips]="['Search by registry number, subject, sender, file reference, or date.', 'Use filters to narrow results by department, status, or classification.', 'Results respect your access permissions — restricted records are hidden.', 'Click a result to view full record details.', 'Save frequent searches for quick access later.']">
+      </app-help-banner>
 
       <!-- Full-text search bar -->
       <div class="search-bar-container" role="search">
@@ -37,12 +43,14 @@ import { SearchResultsComponent, SearchResultItem } from './search-results.compo
         <button
           (click)="executeSearch()"
           class="btn-search"
+          title="Search across all records you have access to"
           aria-label="Execute search">
           Search
         </button>
         <button
           (click)="toggleAdvanced()"
           class="btn-advanced"
+          title="Show additional search filters like date range and department"
           [attr.aria-expanded]="showAdvanced()"
           aria-controls="advancedFilters">
           {{ showAdvanced() ? 'Hide Filters' : 'Advanced' }}

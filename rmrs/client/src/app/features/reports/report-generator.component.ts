@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ApiService } from '@core/api';
+import { HelpBannerComponent } from '../../shared/components/help-banner/help-banner.component';
 
 /**
  * Component for generating reports with parameter selection and PDF/Excel export.
@@ -11,7 +12,7 @@ import { ApiService } from '@core/api';
 @Component({
   selector: 'app-report-generator',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, HelpBannerComponent],
   template: `
     <section class="report-generator" aria-label="Generate Report">
       <header class="page-header">
@@ -20,6 +21,11 @@ import { ApiService } from '@core/api';
           <p class="subtitle">Report: {{ reportType() }}</p>
         }
       </header>
+
+      <app-help-banner
+        title="Generating Reports"
+        [tips]="['Choose a report type and set your filters.', 'Reports can be exported to PDF or Excel.', 'Date range, department, and status filters are available.', 'Dashboard reports update in real-time.', 'Role-based dashboards show relevant KPIs for your role.']">
+      </app-help-banner>
 
       <form [formGroup]="reportForm" (ngSubmit)="generateReport()" class="report-form" aria-label="Report parameters form">
         <div class="form-group">
@@ -52,7 +58,7 @@ import { ApiService } from '@core/api';
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="btn-primary" [disabled]="reportForm.invalid || generating()">
+          <button type="submit" class="btn-primary" [disabled]="reportForm.invalid || generating()" title="Generate the report and download it in the selected format">
             {{ generating() ? 'Generating...' : 'Generate & Download' }}
           </button>
           <button type="button" class="btn-secondary" (click)="goBack()">Back to Reports</button>

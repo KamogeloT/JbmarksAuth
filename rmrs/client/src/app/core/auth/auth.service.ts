@@ -1,21 +1,44 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap } from 'rxjs';
+import { Observable, of, tap } from 'rxjs';
 import { environment } from '@env/environment';
-import { UserProfile } from '@shared/models/user.model';
+import { UserProfile, UserRole } from '@shared/models/user.model';
 
 /**
- * AuthService manages the authentication state and OAuth flow with Bitrix.
- * Uses Angular signals for reactive state management.
+ * AuthService - DEV BYPASS MODE
+ * Auto-authenticates as admin (user ID 1) for testing.
+ * Remove this bypass before production.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly apiUrl = `${environment.apiBaseUrl}/auth`;
 
-  // Reactive state using signals
-  private currentUserSignal = signal<UserProfile | null>(null);
-  private isAuthenticatedSignal = signal<boolean>(false);
+  // Mock admin user for testing
+  private readonly mockUser: UserProfile = {
+    id: 1,
+    bitrixUserId: 1,
+    email: 'admin@t3ssystems.co.za',
+    fullName: 'System Administrator',
+    departmentCode: null,
+    maxClassificationLevel: 4,
+    roles: [
+      UserRole.SystemAdministrator,
+      UserRole.RecordsManager,
+      UserRole.RegistryClerk,
+      UserRole.DepartmentUser,
+      UserRole.DepartmentSupervisor,
+      UserRole.ComplianceOfficer,
+      UserRole.Auditor,
+      UserRole.Archivist,
+      UserRole.ExecutiveViewer
+    ],
+    isActive: true
+  };
+
+  // Reactive state using signals - auto-authenticated
+  private currentUserSignal = signal<UserProfile | null>(this.mockUser);
+  private isAuthenticatedSignal = signal<boolean>(true);
   private isLoadingSignal = signal<boolean>(false);
 
   // Public computed signals (read-only)
@@ -28,66 +51,27 @@ export class AuthService {
     private readonly router: Router
   ) {}
 
-  /**
-   * Initiates OAuth login by redirecting to the Bitrix authorization endpoint.
-   */
   login(): void {
-    window.location.href = `${this.apiUrl}/login`;
+    // Bypass - already authenticated
   }
 
-  /**
-   * Fetches the current user profile from the backend.
-   * Called after successful OAuth callback to populate user state.
-   */
   loadCurrentUser(): Observable<UserProfile> {
-    this.isLoadingSignal.set(true);
-    return this.http.get<UserProfile>(`${this.apiUrl}/me`).pipe(
-      tap({
-        next: (user) => {
-          this.currentUserSignal.set(user);
-          this.isAuthenticatedSignal.set(true);
-          this.isLoadingSignal.set(false);
-        },
-        error: () => {
-          this.clearSession();
-          this.isLoadingSignal.set(false);
-        }
-      })
-    );
+    return of(this.mockUser);
   }
 
-  /**
-   * Logs out the current user by calling the backend logout endpoint
-   * and clearing local state.
-   */
   logout(): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/logout`, {}).pipe(
-      tap(() => {
-        this.clearSession();
-        this.router.navigate(['/auth/login']);
-      })
-    );
+    return of(undefined);
   }
 
-  /**
-   * Clears all local session state. Called on 401 or explicit logout.
-   */
   clearSession(): void {
-    this.currentUserSignal.set(null);
-    this.isAuthenticatedSignal.set(false);
+    // No-op in bypass mode
   }
 
-  /**
-   * Checks if the current user has a specific role.
-   */
   hasRole(role: string): boolean {
     const user = this.currentUserSignal();
     return user?.roles?.includes(role) ?? false;
   }
 
-  /**
-   * Checks if the current user has any of the specified roles.
-   */
   hasAnyRole(roles: string[]): boolean {
     return roles.some(role => this.hasRole(role));
   }

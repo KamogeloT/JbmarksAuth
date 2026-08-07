@@ -1,5 +1,6 @@
 import { Component, Input, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
 import { Record, Document, AuditLog } from '../../shared/models';
 import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../../shared/pipes';
@@ -10,7 +11,7 @@ import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../..
 @Component({
   selector: 'app-record-detail',
   standalone: true,
-  imports: [CommonModule, DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe],
+  imports: [CommonModule, RouterLink, DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe],
   template: `
     <div class="record-detail" aria-label="Record detail view">
       @if (loading()) {
@@ -79,7 +80,12 @@ import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../..
 
           <!-- Documents Section -->
           <section class="detail-section" aria-label="Associated documents">
-            <h3>Documents ({{ documents().length }})</h3>
+            <div class="section-header">
+              <h3>Documents ({{ documents().length }})</h3>
+              <a [routerLink]="['/documents/upload', recordId]" class="btn btn-upload" aria-label="Upload document to this record">
+                📎 Upload Document
+              </a>
+            </div>
             @if (documents().length > 0) {
               <div class="documents-list">
                 @for (doc of documents(); track doc.id) {
@@ -142,6 +148,10 @@ import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../..
     .detail-sections { display: flex; flex-direction: column; gap: 2rem; }
     .detail-section { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.25rem; }
     .detail-section h3 { margin: 0 0 1rem; font-size: 1rem; color: #333; border-bottom: 1px solid #f0f0f0; padding-bottom: 0.5rem; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f0f0f0; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+    .section-header h3 { margin: 0; border: none; padding: 0; }
+    .btn-upload { padding: 0.375rem 0.875rem; background: #4caf50; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8125rem; text-decoration: none; font-weight: 500; }
+    .btn-upload:hover { background: #388e3c; }
     .metadata-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
     .meta-item { display: flex; flex-direction: column; }
     .meta-label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.25rem; }
@@ -164,7 +174,7 @@ import { DateFormatPipe, ClassificationLevelPipe, RecordStatusPipe } from '../..
   `]
 })
 export class RecordDetailComponent implements OnInit {
-  @Input() recordId!: number;
+  @Input({ alias: 'id' }) recordId!: number;
 
   private readonly api = inject(ApiService);
 

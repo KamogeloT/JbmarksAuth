@@ -225,4 +225,81 @@ public class DepartmentMappingService : IDepartmentMappingService
                 ex.Message, ex);
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<SyncFromBitrixResult> SyncFromBitrixAsync()
+    {
+        var result = new SyncFromBitrixResult();
+
+        try
+        {
+            // Fetch workgroups from Bitrix using webhook (no user token needed)
+            var workgroups = await _bitrixApiClient.GetAllWorkgroupsAsync();
+
+            result.TotalWorkgroups = workgroups.Count;
+
+            // Get existing mappings to avoid duplicates
+            var existingMappings = await _dbContext.Departments.ToListAsync();
+            var existingBitrixIds = existingMappings.Select(d => d.BitrixWorkgroupId).ToHashSet();
+
+            foreach (var wg in workgroups)
+            {
+                if (existingBitrixIds.Contains(wg.Id))
+                {
+                    result.Skipped++;
+                    result.SkippedDepartments.Add(wg.Name);
+                    continue;
+                }
+
+                // Generate a department code from the name (e.g., "Ventersdorp- Water and Sanitation Department" -> "VENT-WS")
+                var code = GenerateDepartmentCode(wg.Name, existingMappings);
+
+                var department = new Department
+                {
+                    DepartmentCode = code,
+                    DepartmentName = wg.Name,
+                    BitrixWorkgroupId = wg.Id,
+                    BitrixDriveId = wg.Id, // Default to same as workgroup ID; can be updated later
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                _dbContext.Departments.Add(department);
+                existingMappings.Add(department);
+                result.Created++;
+                result.CreatedDepartments.Add(wg.Name);
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Bitrix sync completed: {Created} created, {Skipped} skipped out of {Total} workgroups",
+                result.Created, result.Skipped, result.TotalWorkgroups);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to sync departments from Bitrix");
+            throw new BitrixApiException("Failed to sync departments from Bitrix.", ex.Message, ex);
+        }
+    }
+
+    private static string GenerateDepartmentCode(string name, List<Department> existing)
+    {
+        // Simple code generation: take first letters of each word, uppercase, max 10 chars
+        var words = name.Replace("-", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var code = string.Join("", words.Select(w => w[0])).ToUpperInvariant();
+        if (code.Length > 10) code = code[..10];
+
+        // Ensure uniqueness
+        var baseCode = code;
+        var counter = 1;
+        while (existing.Any(d => d.DepartmentCode == code))
+        {
+            code = $"{baseCode}{counter}";
+            counter++;
+        }
+
+        return code;
+    }
 }
