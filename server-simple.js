@@ -169,13 +169,15 @@ app.get('/health', (req, res) => {
     const dbStatus = pool ? 'connected' : 'not configured';
     const apnsStatus = apnProvider ? 'ready' : 'not configured';
     const fcmStatus = firebaseInitialized ? 'ready' : 'not configured';
+    const emailStatus = process.env.AZURE_COMMS_CONNECTION_STRING ? 'ready' : 'not configured';
     res.json({ 
         status: 'healthy', 
         service: 'jbmarks-token-exchange',
-        version: '1.1.0',
+        version: '1.2.0',
         database: dbStatus,
         apns: apnsStatus,
         fcm: fcmStatus,
+        email: emailStatus,
         timestamp: new Date().toISOString() 
     });
 });
@@ -978,6 +980,328 @@ app.get('/api/water-levels', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ============================================
+// EMAIL NOTIFICATION ENDPOINTS (Azure Communication Services)
+// ============================================
+
+/**
+ * POST /api/email/send
+ * Send email notification via Azure Communication Services
+ * 
+ * Body: {
+ *   to: string | string[],        // Recipient email(s)
+ *   subject: string,              // Email subject
+ *   html: string,                 // HTML body
+ *   text?: string,                // Plain text fallback
+ *   from?: string                 // Sender (default: noreply@sdinmotion.co.za)
+ * }
+ */
+app.post('/api/email/send', async (req, res) => {
+    try {
+        const connectionString = process.env.AZURE_COMMS_CONNECTION_STRING;
+        if (!connectionString) {
+            return res.status(503).json({ 
+                error: 'Email service not configured',
+                message: 'AZURE_COMMS_CONNECTION_STRING not set' 
+            });
+        }
+
+        const { to, subject, html, text, from } = req.body;
+
+        if (!to || !subject || !html) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: to, subject, html' 
+            });
+        }
+
+        const senderAddress = from || process.env.EMAIL_SENDER || 'noreply@sdinmotion.co.za';
+        const recipients = Array.isArray(to) ? to : [to];
+
+        console.log(`📧 Sending email to: ${recipients.join(', ')} | Subject: ${subject}`);
+
+        // Use Azure Communication Services REST API directly (no SDK needed)
+        const { endpoint, accessKey } = parseConnectionString(connectionString);
+        
+        const emailPayload = {
+            senderAddress,
+            recipients: {
+                to: recipients.map(email => ({ address: email }))
+            },
+            content: {
+                subject,
+                html,
+                plainText: text || subject
+            }
+        };
+
+        const emailResponse = await sendAzureEmail(endpoint, accessKey, emailPayload);
+
+        console.log(`✅ Email sent successfully. Operation ID: ${emailResponse.id}`);
+        res.json({ 
+            success: true, 
+            operationId: emailResponse.id,
+            message: `Email sent to ${recipients.length} recipient(s)` 
+        });
+
+    } catch (error) {
+        console.error('❌ Email send error:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to send email',
+            message: error.message 
+        });
+    }
+});
+
+/**
+ * POST /api/email/ticket-notification
+ * Send a formatted ticket notification email
+ * 
+ * Body: {
+ *   type: 'created' | 'assigned' | 'status_changed' | 'comment_added' | 'resolved' | 'reopened',
+ *   ticketId: string,
+ *   ticketTitle: string,
+ *   recipientEmail: string,
+ *   recipientName?: string,
+ *   technicianName?: string,
+ *   callerName?: string,
+ *   callerEmail?: string,
+ *   status?: string,
+ *   comment?: string,
+ *   priority?: string,
+ *   category?: string,
+ *   department?: string
+ * }
+ */
+app.post('/api/email/ticket-notification', async (req, res) => {
+    try {
+        const connectionString = process.env.AZURE_COMMS_CONNECTION_STRING;
+        if (!connectionString) {
+            return res.status(503).json({ 
+                error: 'Email service not configured',
+                message: 'AZURE_COMMS_CONNECTION_STRING not set' 
+            });
+        }
+
+        const { 
+            type, ticketId, ticketTitle, recipientEmail, recipientName,
+            technicianName, callerName, callerEmail, status, comment,
+            priority, category, department
+        } = req.body;
+
+        if (!type || !ticketId || !ticketTitle || !recipientEmail) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: type, ticketId, ticketTitle, recipientEmail' 
+            });
+        }
+
+        const senderAddress = process.env.EMAIL_SENDER || 'noreply@sdinmotion.co.za';
+        const { subject, html } = buildTicketEmailContent({
+            type, ticketId, ticketTitle, recipientName,
+            technicianName, callerName, status, comment,
+            priority, category, department
+        });
+
+        console.log(`📧 Sending ticket ${type} notification to: ${recipientEmail}`);
+
+        const { endpoint, accessKey } = parseConnectionString(connectionString);
+
+        const emailPayload = {
+            senderAddress,
+            recipients: {
+                to: [{ address: recipientEmail, displayName: recipientName || recipientEmail }]
+            },
+            content: { subject, html, plainText: subject }
+        };
+
+        // Also CC the caller on technician notifications (and vice versa)
+        if (type === 'comment_added' && callerEmail && callerEmail !== recipientEmail) {
+            emailPayload.recipients.to.push({ address: callerEmail, displayName: callerName || callerEmail });
+        }
+
+        const emailResponse = await sendAzureEmail(endpoint, accessKey, emailPayload);
+
+        console.log(`✅ Ticket notification sent. Operation ID: ${emailResponse.id}`);
+        res.json({ 
+            success: true, 
+            operationId: emailResponse.id,
+            type 
+        });
+
+    } catch (error) {
+        console.error('❌ Ticket notification error:', error.message);
+        res.status(500).json({ 
+            error: 'Failed to send ticket notification',
+            message: error.message 
+        });
+    }
+});
+
+// ── Email Helper Functions ────────────────────────────────────────────
+
+function parseConnectionString(connStr) {
+    const parts = {};
+    connStr.split(';').forEach(part => {
+        const [key, ...valueParts] = part.split('=');
+        parts[key.trim()] = valueParts.join('=').trim();
+    });
+    return { endpoint: parts['endpoint'], accessKey: parts['accesskey'] };
+}
+
+async function sendAzureEmail(endpoint, accessKey, emailPayload) {
+    const url = `${endpoint}/emails:send?api-version=2023-03-31`;
+    const dateHeader = new Date().toUTCString();
+    
+    const bodyStr = JSON.stringify(emailPayload);
+    const contentHash = crypto.createHash('sha256').update(bodyStr).digest('base64');
+    
+    // Create HMAC signature for Azure Communication Services
+    const parsedUrl = new URL(url);
+    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+    const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
+        .update(stringToSign, 'utf8')
+        .digest('base64');
+    
+    const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
+
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(bodyStr),
+                'Date': dateHeader,
+                'x-ms-content-sha256': contentHash,
+                'Authorization': authHeader,
+                'x-ms-date': dateHeader
+            }
+        };
+
+        const req = https.request(options, (response) => {
+            let data = '';
+            response.on('data', chunk => data += chunk);
+            response.on('end', () => {
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                    const parsed = data ? JSON.parse(data) : {};
+                    resolve({ id: parsed.id || response.headers['x-ms-request-id'] || 'sent', status: response.statusCode });
+                } else {
+                    reject(new Error(`Azure Email API ${response.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(bodyStr);
+        req.end();
+    });
+}
+
+function buildTicketEmailContent({ type, ticketId, ticketTitle, recipientName, technicianName, callerName, status, comment, priority, category, department }) {
+    let subject = '';
+    let heading = '';
+    let body = '';
+    const greeting = recipientName ? `Hi ${recipientName},` : 'Hi,';
+
+    switch (type) {
+        case 'created':
+            subject = `[Ticket #${ticketId}] New IT Support Request: ${ticketTitle}`;
+            heading = '🎫 New Ticket Logged';
+            body = `
+                <p>${greeting}</p>
+                <p>A new IT support ticket has been logged:</p>
+                <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                    <tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;width:140px;">Ticket #</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${ticketId}</td></tr>
+                    <tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;">Subject</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${ticketTitle}</td></tr>
+                    ${category ? `<tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;">Category</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${category}</td></tr>` : ''}
+                    ${priority ? `<tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;">Priority</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${priority}</td></tr>` : ''}
+                    ${department ? `<tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;">Department</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${department}</td></tr>` : ''}
+                    ${callerName ? `<tr><td style="padding:8px;font-weight:600;border-bottom:1px solid #e5e7eb;">Reported By</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;">${callerName}</td></tr>` : ''}
+                </table>
+                <p>Our IT team will review and assign this ticket shortly.</p>`;
+            break;
+
+        case 'assigned':
+            subject = `[Ticket #${ticketId}] Assigned to ${technicianName}: ${ticketTitle}`;
+            heading = '🔧 Ticket Assigned';
+            body = `
+                <p>${greeting}</p>
+                <p>Ticket <strong>#${ticketId}</strong> has been assigned to <strong>${technicianName}</strong>.</p>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>
+                <p>${technicianName} will be in touch to assist you.</p>`;
+            break;
+
+        case 'status_changed':
+            subject = `[Ticket #${ticketId}] Status: ${status} — ${ticketTitle}`;
+            heading = '📋 Status Updated';
+            body = `
+                <p>${greeting}</p>
+                <p>The status of ticket <strong>#${ticketId}</strong> has been updated:</p>
+                <p style="font-size:18px;font-weight:600;color:#1976d2;margin:16px 0;">Status: ${status}</p>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>`;
+            break;
+
+        case 'comment_added':
+            subject = `[Ticket #${ticketId}] New Comment: ${ticketTitle}`;
+            heading = '💬 New Comment';
+            body = `
+                <p>${greeting}</p>
+                <p>A new comment has been added to ticket <strong>#${ticketId}</strong>:</p>
+                <div style="background:#f9fafb;border-left:4px solid #1976d2;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;">
+                    <p style="margin:0;white-space:pre-wrap;">${comment || 'No content'}</p>
+                </div>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>`;
+            break;
+
+        case 'resolved':
+            subject = `[Ticket #${ticketId}] Resolved ✅: ${ticketTitle}`;
+            heading = '✅ Ticket Resolved';
+            body = `
+                <p>${greeting}</p>
+                <p>Ticket <strong>#${ticketId}</strong> has been <strong>resolved</strong>.</p>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>
+                <p>If you still experience issues, please reply to this email or log a new ticket.</p>`;
+            break;
+
+        case 'reopened':
+            subject = `[Ticket #${ticketId}] Reopened: ${ticketTitle}`;
+            heading = '🔄 Ticket Reopened';
+            body = `
+                <p>${greeting}</p>
+                <p>Ticket <strong>#${ticketId}</strong> has been <strong>reopened</strong> for further investigation.</p>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>`;
+            break;
+
+        default:
+            subject = `[Ticket #${ticketId}] Update: ${ticketTitle}`;
+            heading = '📨 Ticket Update';
+            body = `<p>${greeting}</p><p>There's an update on ticket <strong>#${ticketId}</strong>: ${ticketTitle}</p>`;
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+    <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <div style="background:linear-gradient(135deg,#1B5E20,#2E7D32);padding:24px 32px;">
+            <h1 style="color:#fff;margin:0;font-size:20px;">${heading}</h1>
+            <p style="color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px;">JB Marks ICT Service Desk</p>
+        </div>
+        <div style="padding:28px 32px;">
+            ${body}
+        </div>
+        <div style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:11px;color:#9ca3af;">This is an automated notification from the JB Marks ICT Service Desk. Please do not reply directly to this email.</p>
+            <p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">© ${new Date().getFullYear()} JB Marks Local Municipality — IT Department</p>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    return { subject, html };
+}
 
 // 404 handler
 app.use((req, res) => {

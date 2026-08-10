@@ -52,6 +52,13 @@ class SdimService {
         await this.attachFile(String(taskId), file)
       }
 
+      // Send confirmation email to the person who logged the ticket
+      if (ticket.email) {
+        this.sendTicketConfirmationEmail(String(taskId), ticket).catch(e => 
+          console.warn('Email notification failed (ticket still created):', e)
+        )
+      }
+
       return { success: true, taskId: String(taskId) }
     } catch (error) {
       return {
@@ -119,6 +126,28 @@ class SdimService {
       reader.onerror = reject
       reader.readAsDataURL(file)
     })
+  }
+
+  private async sendTicketConfirmationEmail(taskId: string, ticket: ITTicket): Promise<void> {
+    try {
+      await fetch('https://jbmarksauth-production.up.railway.app/api/email/ticket-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'created',
+          ticketId: taskId,
+          ticketTitle: `${ticket.category} - ${ticket.subject}`,
+          recipientEmail: ticket.email,
+          recipientName: ticket.fullName,
+          callerName: ticket.fullName,
+          category: ticket.category,
+          priority: ticket.priority,
+          department: ticket.department,
+        }),
+      })
+    } catch (e) {
+      console.warn('Email confirmation failed:', e)
+    }
   }
 
   private buildDescription(ticket: ITTicket): string {

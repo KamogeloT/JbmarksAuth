@@ -1,121 +1,77 @@
 /**
  * Email Notification Service for IT Support Dashboard
  * 
- * Uses the SDiM/Bitrix REST API to send notifications when tickets are updated.
- * This leverages:
- * 1. im.notify.system.add — Sends in-app notification to user
- * 2. Bitrix task observers — Auto-notifies when tasks change (built-in)
- * 3. task.commentitem.add — Adding a comment auto-triggers Bitrix email notification to observers
+ * Sends real email notifications via the Railway backend (Azure Communication Services)
+ * AND in-app notifications via Bitrix im.notify.system.add.
  * 
- * For explicit email, we use the CRM activity email or log a comment that triggers
- * Bitrix's built-in email notification system.
+ * Emails are sent for:
+ * - Ticket created → IT team + caller confirmation
+ * - Ticket assigned → technician + caller
+ * - Status changed → caller + technician
+ * - Comment added → other party (caller or technician)
+ * - Ticket resolved → caller
+ * - Ticket reopened → technician
  */
 
 const WEBHOOK_URL = 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss'
+const EMAIL_API_URL = 'https://jbmarksauth-production.up.railway.app/api/email/ticket-notification'
 
 export type NotificationType = 
-  | 'ticket_assigned'
-  | 'ticket_status_changed'
-  | 'ticket_comment_added'
-  | 'ticket_resolved'
-  | 'ticket_reopened'
+  | 'created'
+  | 'assigned'
+  | 'status_changed'
+  | 'comment_added'
+  | 'resolved'
+  | 'reopened'
 
 interface NotificationPayload {
   type: NotificationType
   ticketId: string
   ticketTitle: string
-  recipientUserId: string
-  recipientEmail?: string
+  recipientEmail: string
+  recipientName?: string
   technicianName?: string
-  previousStatus?: string
-  newStatus?: string
-  comment?: string
+  technicianUserId?: string
   callerName?: string
   callerEmail?: string
-}
-
-/** Build a formatted notification message */
-function buildMessage(payload: NotificationPayload): string {
-  const { type, ticketId, ticketTitle, technicianName, newStatus, comment, callerName } = payload
-
-  switch (type) {
-    case 'ticket_assigned':
-      return `🔧 Ticket #${ticketId} has been assigned to ${technicianName}.\n\nTicket: ${ticketTitle}\n\nPlease review and action.`
-    
-    case 'ticket_status_changed':
-      return `📋 Ticket #${ticketId} status updated to: ${newStatus}\n\nTicket: ${ticketTitle}`
-    
-    case 'ticket_comment_added':
-      return `💬 New comment on Ticket #${ticketId}\n\nTicket: ${ticketTitle}\n\nComment: ${comment}`
-    
-    case 'ticket_resolved':
-      return `✅ Ticket #${ticketId} has been resolved.\n\nTicket: ${ticketTitle}\n\nIf you still experience issues, please reopen the ticket or log a new one.`
-    
-    case 'ticket_reopened':
-      return `🔄 Ticket #${ticketId} has been reopened.\n\nTicket: ${ticketTitle}`
-    
-    default:
-      return `📨 Update on Ticket #${ticketId}: ${ticketTitle}`
-  }
-}
-
-/** Build an email-friendly HTML message */
-function buildEmailHtml(payload: NotificationPayload): string {
-  const { type, ticketId, ticketTitle, technicianName, newStatus, comment } = payload
-
-  let heading = ''
-  let body = ''
-
-  switch (type) {
-    case 'ticket_assigned':
-      heading = '🔧 Ticket Assigned'
-      body = `<p>Ticket <strong>#${ticketId}</strong> has been assigned to <strong>${technicianName}</strong>.</p><p><strong>Subject:</strong> ${ticketTitle}</p><p>Please review and action this ticket.</p>`
-      break
-    case 'ticket_status_changed':
-      heading = '📋 Status Updated'
-      body = `<p>Ticket <strong>#${ticketId}</strong> status has been updated to: <strong>${newStatus}</strong></p><p><strong>Subject:</strong> ${ticketTitle}</p>`
-      break
-    case 'ticket_comment_added':
-      heading = '💬 New Comment'
-      body = `<p>A new comment was added to Ticket <strong>#${ticketId}</strong>.</p><p><strong>Subject:</strong> ${ticketTitle}</p><p><strong>Comment:</strong> ${comment}</p>`
-      break
-    case 'ticket_resolved':
-      heading = '✅ Ticket Resolved'
-      body = `<p>Ticket <strong>#${ticketId}</strong> has been resolved.</p><p><strong>Subject:</strong> ${ticketTitle}</p><p>If you still experience issues, please reopen the ticket or log a new one.</p>`
-      break
-    case 'ticket_reopened':
-      heading = '🔄 Ticket Reopened'
-      body = `<p>Ticket <strong>#${ticketId}</strong> has been reopened for further investigation.</p><p><strong>Subject:</strong> ${ticketTitle}</p>`
-      break
-  }
-
-  return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="background: linear-gradient(135deg, #1B5E20, #2E7D32); padding: 20px; border-radius: 12px 12px 0 0;">
-        <h2 style="color: white; margin: 0; font-size: 18px;">${heading}</h2>
-        <p style="color: rgba(255,255,255,0.8); margin: 5px 0 0; font-size: 13px;">JB Marks ICT Service Desk</p>
-      </div>
-      <div style="background: #fff; border: 1px solid #e5e7eb; border-top: none; padding: 24px; border-radius: 0 0 12px 12px;">
-        ${body}
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #6b7280;">This is an automated notification from the JB Marks ICT Service Desk. Do not reply to this email.</p>
-      </div>
-    </div>
-  `
+  status?: string
+  comment?: string
+  priority?: string
+  category?: string
+  department?: string
 }
 
 class EmailNotificationService {
-  
-  /** Send in-app notification to a user via SDiM */
-  async sendInAppNotification(userId: string, message: string): Promise<boolean> {
+
+  /** Send email notification via Railway backend */
+  private async sendEmail(payload: NotificationPayload): Promise<boolean> {
+    try {
+      const response = await fetch(EMAIL_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json()
+      if (data.success) {
+        console.log(`✅ Email sent: ${payload.type} to ${payload.recipientEmail}`)
+        return true
+      } else {
+        console.warn(`⚠️ Email API error: ${data.message || data.error}`)
+        return false
+      }
+    } catch (e) {
+      console.error('Failed to send email notification:', e)
+      return false
+    }
+  }
+
+  /** Send in-app notification to a Bitrix user */
+  private async sendInAppNotification(userId: string, message: string): Promise<boolean> {
     try {
       const response = await fetch(`${WEBHOOK_URL}/im.notify.system.add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          USER_ID: userId,
-          MESSAGE: message,
-        }),
+        body: JSON.stringify({ USER_ID: userId, MESSAGE: message }),
       })
       const data = await response.json()
       return !data.error
@@ -125,122 +81,170 @@ class EmailNotificationService {
     }
   }
 
-  /** Send email notification via SDiM event (triggers Bitrix built-in mailer) */
-  async sendEmailViaEvent(userId: string, subject: string, htmlBody: string): Promise<boolean> {
-    try {
-      // Use Bitrix event system to send email
-      const response = await fetch(`${WEBHOOK_URL}/event.send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          EVENT: 'CUSTOM_IT_NOTIFICATION',
-          FIELDS: {
-            USER_ID: userId,
-            SUBJECT: subject,
-            BODY: htmlBody,
-          },
-        }),
+  /**
+   * Ticket created — notify IT team + send confirmation to caller
+   */
+  async notifyTicketCreated(
+    ticketId: string,
+    ticketTitle: string,
+    callerName: string,
+    callerEmail: string,
+    category: string,
+    priority: string,
+    department: string,
+  ): Promise<void> {
+    // Email to caller (confirmation)
+    if (callerEmail) {
+      await this.sendEmail({
+        type: 'created',
+        ticketId,
+        ticketTitle,
+        recipientEmail: callerEmail,
+        recipientName: callerName,
+        callerName,
+        category,
+        priority,
+        department,
       })
-      return response.ok
-    } catch (e) {
-      console.error('Failed to send email event:', e)
-      return false
     }
+
+    // In-app notification to IT team (user 1 = admin)
+    await this.sendInAppNotification('1', 
+      `🎫 New IT Ticket #${ticketId}: ${ticketTitle}\nFrom: ${callerName} (${department})\nPriority: ${priority}`)
   }
 
-  /** 
-   * Notify when a ticket is assigned to a technician.
-   * Notifies both the technician and the person who logged the ticket.
+  /**
+   * Ticket assigned — notify technician + inform caller
    */
   async notifyTicketAssigned(
     ticketId: string,
     ticketTitle: string,
     technicianUserId: string,
     technicianName: string,
-    callerUserId?: string,
+    technicianEmail: string,
     callerName?: string,
+    callerEmail?: string,
   ): Promise<void> {
-    const payload: NotificationPayload = {
-      type: 'ticket_assigned',
-      ticketId,
-      ticketTitle,
-      recipientUserId: technicianUserId,
-      technicianName,
+    // Email to technician
+    if (technicianEmail) {
+      await this.sendEmail({
+        type: 'assigned',
+        ticketId,
+        ticketTitle,
+        recipientEmail: technicianEmail,
+        recipientName: technicianName,
+        technicianName,
+        callerName,
+      })
     }
 
-    const message = buildMessage(payload)
-
-    // Notify technician
-    await this.sendInAppNotification(technicianUserId, message)
-
-    // Notify caller/reporter if different person
-    if (callerUserId && callerUserId !== technicianUserId) {
-      const callerPayload = { ...payload, recipientUserId: callerUserId }
-      const callerMessage = `🔧 Your ticket #${ticketId} has been assigned to ${technicianName}.\n\n"${ticketTitle}"`
-      await this.sendInAppNotification(callerUserId, callerMessage)
+    // Email to caller
+    if (callerEmail) {
+      await this.sendEmail({
+        type: 'assigned',
+        ticketId,
+        ticketTitle,
+        recipientEmail: callerEmail,
+        recipientName: callerName,
+        technicianName,
+      })
     }
+
+    // In-app to technician
+    await this.sendInAppNotification(technicianUserId,
+      `🔧 Ticket #${ticketId} assigned to you: ${ticketTitle}`)
   }
 
   /**
-   * Notify when ticket status changes
+   * Status changed — notify both parties
    */
   async notifyStatusChanged(
     ticketId: string,
     ticketTitle: string,
     newStatus: string,
-    responsibleUserId: string,
-    callerUserId?: string,
+    technicianUserId: string,
+    technicianEmail?: string,
+    callerName?: string,
+    callerEmail?: string,
   ): Promise<void> {
-    const payload: NotificationPayload = {
-      type: newStatus === 'Resolved' ? 'ticket_resolved' : newStatus === 'New' ? 'ticket_reopened' : 'ticket_status_changed',
-      ticketId,
-      ticketTitle,
-      recipientUserId: responsibleUserId,
-      newStatus,
+    const type: NotificationType = newStatus === 'Resolved' ? 'resolved' 
+      : newStatus === 'New' ? 'reopened' 
+      : 'status_changed'
+
+    // Email to caller
+    if (callerEmail) {
+      await this.sendEmail({
+        type,
+        ticketId,
+        ticketTitle,
+        recipientEmail: callerEmail,
+        recipientName: callerName,
+        status: newStatus,
+      })
     }
 
-    const message = buildMessage(payload)
-
-    // Notify responsible
-    if (responsibleUserId && responsibleUserId !== '1') {
-      await this.sendInAppNotification(responsibleUserId, message)
+    // Email to technician (if reopened or status changed by caller)
+    if (technicianEmail && type === 'reopened') {
+      await this.sendEmail({
+        type,
+        ticketId,
+        ticketTitle,
+        recipientEmail: technicianEmail,
+        status: newStatus,
+      })
     }
 
-    // Notify caller
-    if (callerUserId && callerUserId !== responsibleUserId) {
-      await this.sendInAppNotification(callerUserId, message)
+    // In-app notification
+    if (technicianUserId && technicianUserId !== '1') {
+      await this.sendInAppNotification(technicianUserId,
+        `📋 Ticket #${ticketId} status → ${newStatus}: ${ticketTitle}`)
     }
   }
 
   /**
-   * Notify when a comment is added
+   * Comment added — notify the other party
    */
   async notifyCommentAdded(
     ticketId: string,
     ticketTitle: string,
     comment: string,
     authorUserId: string,
-    responsibleUserId: string,
-    callerUserId?: string,
+    technicianUserId: string,
+    technicianEmail?: string,
+    callerName?: string,
+    callerEmail?: string,
   ): Promise<void> {
-    const payload: NotificationPayload = {
-      type: 'ticket_comment_added',
-      ticketId,
-      ticketTitle,
-      recipientUserId: responsibleUserId,
-      comment: comment.length > 100 ? comment.substring(0, 100) + '...' : comment,
+    const shortComment = comment.length > 200 ? comment.substring(0, 200) + '...' : comment
+
+    // If author is technician → email the caller
+    if (authorUserId === technicianUserId && callerEmail) {
+      await this.sendEmail({
+        type: 'comment_added',
+        ticketId,
+        ticketTitle,
+        recipientEmail: callerEmail,
+        recipientName: callerName,
+        comment: shortComment,
+      })
     }
 
-    const message = buildMessage(payload)
-
-    // Notify responsible if they're not the author
-    if (responsibleUserId !== authorUserId && responsibleUserId !== '1') {
-      await this.sendInAppNotification(responsibleUserId, message)
+    // If author is caller → email the technician
+    if (authorUserId !== technicianUserId && technicianEmail) {
+      await this.sendEmail({
+        type: 'comment_added',
+        ticketId,
+        ticketTitle,
+        recipientEmail: technicianEmail,
+        comment: shortComment,
+        callerName,
+        callerEmail,
+      })
     }
 
-    // Notify caller if they're not the author
-    if (callerUserId && callerUserId !== authorUserId && callerUserId !== responsibleUserId) {
-      await this.sendInAppNotification(callerUserId, message)
+    // In-app to the other party
+    if (authorUserId !== technicianUserId && technicianUserId !== '1') {
+      await this.sendInAppNotification(technicianUserId,
+        `💬 New comment on Ticket #${ticketId}: ${shortComment.substring(0, 80)}`)
     }
   }
 }
