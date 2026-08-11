@@ -25,6 +25,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("jbmarks-release.keystore")
+            storePassword = "Jbmarks2026!"
+            keyAlias = "jbmarks"
+            keyPassword = "Jbmarks2026!"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -32,10 +41,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             applicationIdSuffix = ""
             versionNameSuffix = ""
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     
