@@ -1,6 +1,8 @@
 package com.example.jbmarks.comms.ui
 
 import android.app.Application
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,14 +15,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.jbmarks.chat.domain.Message
@@ -35,7 +40,6 @@ import com.example.jbmarks.user.data.Workgroup
 import com.example.jbmarks.user.data.WorkgroupMember
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommsScreen() {
     val context = LocalContext.current
@@ -45,10 +49,274 @@ fun CommsScreen() {
         )
     )
     val state by vm.state.collectAsState()
+
+    when (state.activeView) {
+        ActiveView.ChatList -> {
+            ChatListView(
+                state = state,
+                onSelectWorkgroup = { vm.selectWorkgroup(it) },
+                onOpenGroupChat = { vm.openGroupChat() },
+                onOpenDirectMessage = { member -> vm.loadDirectMessages(member.userId) }
+            )
+        }
+        ActiveView.GroupChat -> {
+            ConversationView(
+                title = state.selectedWorkgroup?.name ?: "Group",
+                subtitle = "${state.members.size} members",
+                isGroup = true,
+                state = state,
+                onBack = { vm.backToChatList() },
+                onSend = { vm.sendMessage(it) }
+            )
+        }
+        ActiveView.DirectMessage -> {
+            val member = state.members.find { it.userId == state.currentDialogId }
+            ConversationView(
+                title = member?.fullName ?: "Chat",
+                subtitle = member?.roleDisplayName ?: "",
+                isGroup = false,
+                state = state,
+                onBack = { vm.backToChatList() },
+                onSend = { vm.sendMessage(it) }
+            )
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CHAT LIST VIEW (iOS-style)
+// ═══════════════════════════════════════════════════════════════════
+
+@Composable
+private fun ChatListView(
+    state: CommsUiState,
+    onSelectWorkgroup: (Workgroup) -> Unit,
+    onOpenGroupChat: () -> Unit,
+    onOpenDirectMessage: (WorkgroupMember) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+        ) {
+            Text(
+                text = "Comms",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+
+        // Workgroup selector
+        if (state.workgroups.size > 1) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp)
+            ) {
+                items(state.workgroups) { workgroup ->
+                    val isSelected = workgroup.id == state.selectedWorkgroup?.id
+                    Surface(
+                        onClick = { onSelectWorkgroup(workgroup) },
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = if (isSelected) 0.dp else 1.dp
+                    ) {
+                        Text(
+                            text = workgroup.name,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (isSelected) Color.White
+                                   else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        // Loading
+        if (state.isLoadingWorkgroups || state.isLoadingMembers) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+            return
+        }
+
+        if (state.selectedWorkgroup == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Select a workgroup", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            return
+        }
+
+        // Chat list
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 8.dp)
+        ) {
+            // Section header — Group
+            item {
+                SectionHeader("Group Chat")
+            }
+
+            // Group chat
+            item {
+                IOSChatListItem(
+                    avatarContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.secondary
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "👥",
+                                fontSize = 24.sp
+                            )
+                        }
+                    },
+                    title = state.selectedWorkgroup!!.name,
+                    subtitle = "${state.members.size} members • Tap to open",
+                    onClick = { onOpenGroupChat() }
+                )
+            }
+
+            // Section header — Direct Messages
+            if (state.members.any { it.userId != state.currentUserId }) {
+                item {
+                    SectionHeader("Direct Messages")
+                }
+            }
+
+            // Members
+            items(state.members.filter { it.userId != state.currentUserId }) { member ->
+                IOSChatListItem(
+                    avatarContent = {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = member.fullName
+                                    .split(" ")
+                                    .take(2)
+                                    .map { it.firstOrNull()?.uppercase() ?: "" }
+                                    .joinToString(""),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    },
+                    title = member.fullName,
+                    subtitle = member.roleDisplayName,
+                    onClick = { onOpenDirectMessage(member) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp)
+    )
+}
+
+@Composable
+private fun IOSChatListItem(
+    avatarContent: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        avatarContent()
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        // iOS-style chevron
+        Text(
+            text = "›",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        )
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONVERSATION VIEW (iMessage-style)
+// ═══════════════════════════════════════════════════════════════════
+
+@Composable
+private fun ConversationView(
+    title: String,
+    subtitle: String,
+    isGroup: Boolean,
+    state: CommsUiState,
+    onBack: () -> Unit,
+    onSend: (String) -> Unit
+) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
             coroutineScope.launch {
@@ -57,108 +325,134 @@ fun CommsScreen() {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Workgroup selector chips
-        if (state.workgroups.size > 1) {
-            WorkgroupSelector(
-                workgroups = state.workgroups,
-                selectedWorkgroup = state.selectedWorkgroup,
-                onSelect = { vm.selectWorkgroup(it) }
-            )
-        } else if (state.selectedWorkgroup != null) {
-            // Single workgroup header
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // iOS-style navigation bar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = state.selectedWorkgroup!!.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                // Back button
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Avatar
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isGroup) Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.secondary
+                                )
+                            ) else Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.secondaryContainer,
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isGroup) {
+                        Text("👥", fontSize = 18.sp)
+                    } else {
+                        Text(
+                            text = title.split(" ").take(2)
+                                .map { it.firstOrNull()?.uppercase() ?: "" }
+                                .joinToString(""),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isGroup) Color.White 
+                                   else MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Column {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
         }
 
-        // Members bar (horizontal scrollable)
-        if (state.members.isNotEmpty()) {
-            MembersBar(members = state.members)
-        }
-
-        // Divider
-        HorizontalDivider(thickness = 0.5.dp)
-
-        // Messages area
-        Box(modifier = Modifier.weight(1f)) {
+        // Messages
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f))
+        ) {
             when {
-                state.isLoadingWorkgroups -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(8.dp))
-                            Text("Loading workgroups...", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
                 state.isLoadingMessages -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp
+                        )
                     }
                 }
-                state.messages.isEmpty() && state.currentDialogId != null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                state.messages.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "💬",
-                                style = MaterialTheme.typography.displayMedium
-                            )
-                            Spacer(Modifier.height(8.dp))
+                            Text("💬", fontSize = 48.sp)
+                            Spacer(Modifier.height(12.dp))
                             Text(
                                 "No messages yet",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(Modifier.height(4.dp))
                             Text(
-                                "Start the conversation!",
+                                "Start the conversation",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
                         }
-                    }
-                }
-                state.selectedWorkgroup == null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "Select a workgroup to start chatting",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
                 else -> {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         items(state.messages, key = { it.id }) { message ->
-                            MessageBubble(
+                            IOSMessageBubble(
                                 message = message,
-                                isCurrentUser = message.senderId == state.currentUserId
+                                isCurrentUser = message.senderId == state.currentUserId,
+                                showSenderName = isGroup
                             )
                         }
                     }
@@ -166,153 +460,67 @@ fun CommsScreen() {
             }
         }
 
-        // Message input
-        if (state.currentDialogId != null) {
-            MessageInput(
-                isSending = state.isSending,
-                onSend = { vm.sendMessage(it) }
-            )
-        }
-    }
-
-    // Error snackbar
-    state.error?.let { error ->
-        LaunchedEffect(error) {
-            // Auto-clear error after 3 seconds
-            kotlinx.coroutines.delay(3000)
-            vm.clearError()
-        }
+        // Input bar (iOS-style)
+        IOSMessageInput(
+            isSending = state.isSending,
+            onSend = onSend
+        )
     }
 }
 
 @Composable
-private fun WorkgroupSelector(
-    workgroups: List<Workgroup>,
-    selectedWorkgroup: Workgroup?,
-    onSelect: (Workgroup) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp)
-    ) {
-        items(workgroups) { workgroup ->
-            val isSelected = workgroup.id == selectedWorkgroup?.id
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelect(workgroup) },
-                label = {
-                    Text(
-                        text = workgroup.name,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun MembersBar(members: List<WorkgroupMember>) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp)
-    ) {
-        items(members) { member ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.width(56.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = member.fullName.take(1).uppercase(),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = member.fullName.split(" ").firstOrNull() ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageBubble(message: Message, isCurrentUser: Boolean) {
-    val bubbleColor = if (isCurrentUser) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val textColor = if (isCurrentUser) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+private fun IOSMessageBubble(message: Message, isCurrentUser: Boolean, showSenderName: Boolean) {
     val alignment = if (isCurrentUser) Alignment.End else Alignment.Start
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp),
         horizontalAlignment = alignment
     ) {
-        // Sender name (only for others)
-        if (!isCurrentUser && message.senderName.isNotBlank()) {
+        // Sender name for group chats
+        if (!isCurrentUser && showSenderName && message.senderName.isNotBlank()) {
             Text(
                 text = message.senderName,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                modifier = Modifier.padding(
+                    start = if (!isCurrentUser) 14.dp else 0.dp,
+                    bottom = 2.dp
+                )
             )
         }
 
+        // Bubble
         Surface(
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isCurrentUser) 16.dp else 4.dp,
-                bottomEnd = if (isCurrentUser) 4.dp else 16.dp
+                topStart = 20.dp,
+                topEnd = 20.dp,
+                bottomStart = if (isCurrentUser) 20.dp else 6.dp,
+                bottomEnd = if (isCurrentUser) 6.dp else 20.dp
             ),
-            color = bubbleColor,
+            color = if (isCurrentUser)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.surface,
+            shadowElevation = if (isCurrentUser) 0.dp else 0.5.dp,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = textColor
+                    color = if (isCurrentUser) Color.White
+                           else MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 20.sp
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
                     text = message.getFormattedTime(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = textColor.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = if (isCurrentUser) Color.White.copy(alpha = 0.6f)
+                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.align(Alignment.End)
                 )
             }
@@ -321,7 +529,7 @@ private fun MessageBubble(message: Message, isCurrentUser: Boolean) {
 }
 
 @Composable
-private fun MessageInput(
+private fun IOSMessageInput(
     isSending: Boolean,
     onSend: (String) -> Unit
 ) {
@@ -329,58 +537,87 @@ private fun MessageInput(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        tonalElevation = 2.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
+            // Input field (iOS-style pill)
+            Surface(
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Type a message...") },
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 4,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = {
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = null
+            ) {
+                TextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = {
+                        Text(
+                            "Message",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 5,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            if (text.isNotBlank() && !isSending) {
+                                onSend(text)
+                                text = ""
+                            }
+                        }
+                    ),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    )
+                )
+            }
+
+            // Send button (iOS-style circle)
+            AnimatedVisibility(
+                visible = text.isNotBlank(),
+                enter = scaleIn(tween(150)) + fadeIn(tween(150)),
+                exit = scaleOut(tween(100)) + fadeOut(tween(100))
+            ) {
+                FilledIconButton(
+                    onClick = {
                         if (text.isNotBlank() && !isSending) {
                             onSend(text)
                             text = ""
                         }
-                    }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                )
-            )
-
-            FilledIconButton(
-                onClick = {
-                    if (text.isNotBlank() && !isSending) {
-                        onSend(text)
-                        text = ""
-                    }
-                },
-                enabled = text.isNotBlank() && !isSending,
-                modifier = Modifier.size(48.dp)
-            ) {
-                if (isSending) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+                    },
+                    enabled = !isSending,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
-                } else {
-                    Icon(
-                        Icons.Default.Send,
-                        contentDescription = "Send"
-                    )
+                ) {
+                    if (isSending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            modifier = Modifier.size(20.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
             }
         }

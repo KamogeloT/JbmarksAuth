@@ -20,6 +20,8 @@ data class CommsUiState(
     val messages: List<Message> = emptyList(),
     val members: List<WorkgroupMember> = emptyList(),
     val currentDialogId: String? = null,
+    val groupDialogId: String? = null, // The workgroup's group chat dialog ID
+    val activeView: ActiveView = ActiveView.ChatList,
     val isLoadingWorkgroups: Boolean = true,
     val isLoadingMessages: Boolean = false,
     val isLoadingMembers: Boolean = false,
@@ -27,6 +29,12 @@ data class CommsUiState(
     val error: String? = null,
     val currentUserId: String = ""
 )
+
+enum class ActiveView {
+    ChatList,
+    GroupChat,
+    DirectMessage
+}
 
 class CommsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -83,12 +91,16 @@ class CommsViewModel(application: Application) : AndroidViewModel(application) {
     fun selectWorkgroup(workgroup: Workgroup) {
         if (_state.value.selectedWorkgroup?.id == workgroup.id) return
 
+        pollingActive = false // Stop any existing polling
+
         _state.value = _state.value.copy(
             selectedWorkgroup = workgroup,
             messages = emptyList(),
             members = emptyList(),
             currentDialogId = null,
-            isLoadingMessages = true,
+            groupDialogId = null,
+            activeView = ActiveView.ChatList,
+            isLoadingMessages = false,
             isLoadingMembers = true
         )
 
@@ -105,21 +117,10 @@ class CommsViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val dialogId = repository.getOrCreateWorkgroupChat(workgroup)
             if (dialogId != null) {
-                _state.value = _state.value.copy(currentDialogId = dialogId)
-                loadMessages(dialogId)
-                startPolling(dialogId)
-            } else {
-                _state.value = _state.value.copy(
-                    isLoadingMessages = false,
-                    error = "No chat found for ${workgroup.name}"
-                )
+                _state.value = _state.value.copy(groupDialogId = dialogId)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error loading workgroup chat", e)
-            _state.value = _state.value.copy(
-                isLoadingMessages = false,
-                error = "Failed to load chat"
-            )
         }
     }
 
@@ -162,7 +163,7 @@ class CommsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = repository.sendMessage(dialogId, text.trim())
                 if (result.isSuccess) {
-                    // Refresh messages after sending
+                    // Refresh messages for the ACTIVE dialog only
                     loadMessages(dialogId)
                 }
                 _state.value = _state.value.copy(isSending = false)
@@ -181,6 +182,66 @@ class CommsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             loadMessages(dialogId)
         }
+    }
+
+    /**
+     * Open the group chat for the selected workgroup.
+     */
+    fun openGroupChat() {
+        val dialogId = _state.value.groupDialogId ?: return
+        pollingActive = false
+
+        _state.value = _state.value.copy(
+            currentDialogId = dialogId,
+            messages = emptyList(),
+            isLoadingMessages = true,
+            activeView = ActiveView.GroupChat
+        )
+
+        viewModelScope.launch {
+            loadMessages(dialogId)
+            startPolling(dialogId)
+        }
+    }
+
+    /**
+     * Open a direct message with a specific user.
+     */
+    fun loadDirectMessages(userId: String) {
+        pollingActive = false
+
+        _state.value = _state.value.copy(
+            currentDialogId = userId,
+            messages = emptyList(),
+            isLoadingMessages = true,
+            activeView = ActiveView.DirectMessage
+        )
+
+        viewModelScope.launch {
+            try {
+                val messages = repository.getMessages(userId)
+                _state.value = _state.value.copy(
+                    messages = messages.sortedBy { it.timestamp },
+                    isLoadingMessages = false
+                )
+                startPolling(userId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading direct messages", e)
+                _state.value = _state.value.copy(isLoadingMessages = false)
+            }
+        }
+    }
+
+    /**
+     * Go back to the chat list.
+     */
+    fun backToChatList() {
+        pollingActive = false
+        _state.value = _state.value.copy(
+            currentDialogId = null,
+            messages = emptyList(),
+            activeView = ActiveView.ChatList
+        )
     }
 
     private fun startPolling(dialogId: String) {

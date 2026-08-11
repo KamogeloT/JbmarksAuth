@@ -17,6 +17,7 @@ struct ContentView: View {
     @StateObject private var authViewModel = AuthViewModel()
     @StateObject private var notificationHandler = NotificationNavigationHandler()
     @State private var selectedTab: TabItem = .dashboard
+    @State private var hasCommsAccess = false
     
     var body: some View {
         Group {
@@ -31,6 +32,8 @@ struct ContentView: View {
         }
         .task {
             await authViewModel.checkAuth()
+            // Check if user has Comms access (is in MANAGEMENT workgroup 16)
+            hasCommsAccess = await CommsViewModel.checkAccess()
         }
         .onChange(of: notificationHandler.selectedTab) { oldValue, newValue in
             selectedTab = newValue
@@ -106,33 +109,48 @@ struct ContentView: View {
             }
             .tag(TabItem.tasks)
             
-            // Chat Tab
-            NavigationStack {
-                VStack(spacing: 0) {
-                    TopNavigationBar()
-                    ChatListView()
-                }
-                .navigationDestination(for: NavigationRoute.self) { route in
-                    switch route {
-                    case .chatMessage(let dialogId, let chatName):
-                        MessageView(dialogId: dialogId, chatName: chatName) {
-                            // Navigation will be handled by NavigationStack
+            // Chat Tab (shown when user does NOT have Comms access)
+            if !hasCommsAccess {
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        TopNavigationBar()
+                        ChatListView()
+                    }
+                    .navigationDestination(for: NavigationRoute.self) { route in
+                        switch route {
+                        case .chatMessage(let dialogId, let chatName):
+                            MessageView(dialogId: dialogId, chatName: chatName) {
+                                // Navigation will be handled by NavigationStack
+                            }
+                        case .taskDetail, .taskEdit:
+                            // Not used in chat tab
+                            EmptyView()
                         }
-                    case .taskDetail, .taskEdit:
-                        // Not used in chat tab
-                        EmptyView()
+                    }
+                    .onChange(of: notificationHandler.navigationRoute) { oldValue, newValue in
+                        if case .chatMessage = newValue {
+                            // Navigation handled by NavigationStack
+                        }
                     }
                 }
-                .onChange(of: notificationHandler.navigationRoute) { oldValue, newValue in
-                    if case .chatMessage = newValue {
-                        // Navigation handled by NavigationStack
+                .tabItem {
+                    Label("Chat", systemImage: "message.fill")
+                }
+                .tag(TabItem.chat)
+            }
+            
+            // Comms Tab (shown when user HAS Comms access — replaces Chat)
+            if hasCommsAccess {
+                NavigationStack {
+                    VStack(spacing: 0) {
+                        CommsView()
                     }
                 }
+                .tabItem {
+                    Label("Comms", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                .tag(TabItem.comms)
             }
-            .tabItem {
-                Label("Chat", systemImage: "message.fill")
-            }
-            .tag(TabItem.chat)
             
             // Calendar Tab
             NavigationStack {

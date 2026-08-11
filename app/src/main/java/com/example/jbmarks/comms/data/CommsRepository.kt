@@ -22,7 +22,7 @@ class CommsRepository(private val context: Context) {
 
     companion object {
         /** Workgroup ID that gates access to the Comms feature */
-        const val MANAGEMENT_BOARD_GROUP_ID = "12"
+        const val MANAGEMENT_BOARD_GROUP_ID = "16"
     }
 
     /**
@@ -99,25 +99,36 @@ class CommsRepository(private val context: Context) {
 
     /**
      * Get or create a group chat for the workgroup.
-     * If the workgroup doesn't have a chat yet, create one.
+     * First checks for an existing chat linked to the workgroup entity.
+     * If not found, creates one.
      */
     suspend fun getOrCreateWorkgroupChat(workgroup: Workgroup): String? {
         return try {
-            // First try to find existing workgroup chat from Bitrix IM
+            // First try to find existing workgroup chat from recent chats
             val recentChats = chatRepository.getRecentChats()
+            
+            // Bitrix workgroup chats are named: 'Workgroup: "NAME"' or just the group name
             val existingChat = recentChats.find { chat ->
-                chat.name.equals(workgroup.name, ignoreCase = true)
+                chat.name.equals(workgroup.name, ignoreCase = true) ||
+                chat.name.equals("Workgroup: \"${workgroup.name}\"", ignoreCase = true) ||
+                chat.name.contains(workgroup.name, ignoreCase = true)
             }
 
             if (existingChat != null) {
+                Log.d(TAG, "Found existing chat for ${workgroup.name}: ${existingChat.dialogId}")
                 return existingChat.dialogId
             }
 
-            // If no chat exists, create one with all workgroup members
+            // If no chat exists, create one linked to the workgroup
             val members = getWorkgroupMembers(workgroup.id)
-            if (members.isEmpty()) return null
-
             val memberIds = members.map { it.userId }
+            
+            if (memberIds.isEmpty()) {
+                Log.w(TAG, "No members in workgroup ${workgroup.name}")
+                return null
+            }
+
+            Log.d(TAG, "Creating new group chat for ${workgroup.name} with ${memberIds.size} members")
             val result = chatRepository.createChat(
                 title = workgroup.name,
                 type = "CHAT",
