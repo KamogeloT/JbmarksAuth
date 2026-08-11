@@ -69,6 +69,8 @@ import androidx.navigation.navArgument
 import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
+import com.example.jbmarks.comms.data.CommsRepository
+import com.example.jbmarks.comms.ui.CommsScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
 import com.example.jbmarks.notifications.data.NotificationRepository
 import com.example.jbmarks.notifications.ui.NotificationsScreen
@@ -83,18 +85,39 @@ import com.example.jbmarks.user.data.Workgroup
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    val screens = listOf(
-        Screen.Dashboard,
-        Screen.Tasks,
-        Screen.Chat,
-        Screen.Calendar,
-        Screen.Notifications
-    )
 
     // Track unread notification count for badge
     val context = LocalContext.current
     val notificationRepo = remember { NotificationRepository(context) }
     val unreadCount by notificationRepo.unreadCount.collectAsState()
+
+    // Check if user has Comms access (member of TOP MANAGEMENT workgroup 12)
+    var hasCommsAccess by remember { mutableStateOf(false) }
+    val commsRepo = remember { CommsRepository(context) }
+    LaunchedEffect(Unit) {
+        hasCommsAccess = commsRepo.hasCommsAccess()
+    }
+
+    // Dynamic screen list based on access
+    val screens = remember(hasCommsAccess) {
+        if (hasCommsAccess) {
+            listOf(
+                Screen.Dashboard,
+                Screen.Tasks,
+                Screen.Comms,  // Replaces Chat for management board users
+                Screen.Calendar,
+                Screen.Notifications
+            )
+        } else {
+            listOf(
+                Screen.Dashboard,
+                Screen.Tasks,
+                Screen.Chat,
+                Screen.Calendar,
+                Screen.Notifications
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -401,6 +424,11 @@ fun AppNavigation() {
                         navController.navigate("chat_message/$dialogId")
                     }
                 )
+            }
+            
+            // Comms Screen (Teams-style workgroup chat for management board)
+            composable("comms") {
+                CommsScreen()
             }
             
             composable(
