@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,13 +52,32 @@ fun CommsScreen() {
     )
     val state by vm.state.collectAsState()
 
+    // Call state
+    var showCallScreen by remember { mutableStateOf(false) }
+    var callTargetName by remember { mutableStateOf("") }
+    var callTargetUserId by remember { mutableStateOf("") }
+
+    if (showCallScreen) {
+        com.example.jbmarks.comms.calling.CallScreen(
+            calleeName = callTargetName,
+            calleeUserId = callTargetUserId,
+            onDismiss = { showCallScreen = false }
+        )
+        return
+    }
+
     when (state.activeView) {
         ActiveView.ChatList -> {
             ChatListView(
                 state = state,
                 onSelectWorkgroup = { vm.selectWorkgroup(it) },
                 onOpenGroupChat = { vm.openGroupChat() },
-                onOpenDirectMessage = { member -> vm.loadDirectMessages(member.userId) }
+                onOpenDirectMessage = { member -> vm.loadDirectMessages(member.userId) },
+                onCallMember = { member ->
+                    callTargetName = member.fullName
+                    callTargetUserId = member.userId
+                    showCallScreen = true
+                }
             )
         }
         ActiveView.GroupChat -> {
@@ -92,7 +113,8 @@ private fun ChatListView(
     state: CommsUiState,
     onSelectWorkgroup: (Workgroup) -> Unit,
     onOpenGroupChat: () -> Unit,
-    onOpenDirectMessage: (WorkgroupMember) -> Unit
+    onOpenDirectMessage: (WorkgroupMember) -> Unit,
+    onCallMember: (WorkgroupMember) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -121,34 +143,110 @@ private fun ChatListView(
             )
         }
 
-        // Workgroup selector
+        // Workgroup selector — modern card style
         if (state.workgroups.size > 1) {
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 20.dp)
             ) {
                 items(state.workgroups) { workgroup ->
                     val isSelected = workgroup.id == state.selectedWorkgroup?.id
                     Surface(
                         onClick = { onSelectWorkgroup(workgroup) },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = if (isSelected) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.surfaceVariant,
-                        tonalElevation = if (isSelected) 0.dp else 1.dp
+                               else MaterialTheme.colorScheme.surface,
+                        shadowElevation = if (isSelected) 4.dp else 1.dp,
+                        modifier = if (!isSelected) Modifier.then(
+                            Modifier.clip(RoundedCornerShape(16.dp))
+                        ) else Modifier
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Workgroup icon
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isSelected) Color.White.copy(alpha = 0.2f)
+                                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = workgroup.name.take(1).uppercase(),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White
+                                           else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            // Name
+                            Column {
+                                Text(
+                                    text = workgroup.name,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (isSelected) Color.White
+                                           else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            // Checkmark for selected
+                            if (isSelected) {
+                                Text(
+                                    text = "✓",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (state.selectedWorkgroup != null) {
+            // Single workgroup — show as a compact bar
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = workgroup.name,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (isSelected) Color.White
-                                   else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            text = state.selectedWorkgroup!!.name.take(1).uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
+                    Text(
+                        text = state.selectedWorkgroup!!.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -240,6 +338,7 @@ private fun ChatListView(
                     },
                     title = member.fullName,
                     subtitle = member.roleDisplayName,
+                    onCall = { onCallMember(member) },
                     onClick = { onOpenDirectMessage(member) }
                 )
             }
@@ -264,6 +363,7 @@ private fun IOSChatListItem(
     avatarContent: @Composable () -> Unit,
     title: String,
     subtitle: String,
+    onCall: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -292,7 +392,18 @@ private fun IOSChatListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        // iOS-style chevron
+        // Call button
+        if (onCall != null) {
+            IconButton(onClick = onCall) {
+                Icon(
+                    Icons.Default.Call,
+                    contentDescription = "Call",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        // Chevron
         Text(
             text = "›",
             style = MaterialTheme.typography.headlineSmall,

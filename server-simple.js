@@ -982,6 +982,218 @@ app.get('/api/water-levels', async (req, res) => {
 });
 
 // ============================================
+// ACS CALLING — Token & Identity Management
+// ============================================
+
+/**
+ * POST /api/comms/token
+ * Issues an Azure Communication Services access token for calling.
+ * The app calls this with the user's Bitrix ID, and gets back an ACS token
+ * that allows them to make/receive VoIP calls.
+ *
+ * Body: { user_id: string }
+ * Returns: { token, expiresOn, acsUserId }
+ */
+app.post('/api/comms/token', async (req, res) => {
+    try {
+        const connectionString = process.env.ACS_CONNECTION_STRING;
+        if (!connectionString) {
+            return res.status(503).json({
+                error: 'Calling service not configured',
+                message: 'ACS_CONNECTION_STRING not set'
+            });
+        }
+
+        const { user_id } = req.body;
+        if (!user_id) {
+            return res.status(400).json({ error: 'user_id is required' });
+        }
+
+        console.log(`📞 Issuing ACS calling token for user: ${user_id}`);
+
+        const { endpoint, accessKey } = parseConnectionString(connectionString);
+
+        // Check if user already has an ACS identity stored in DB
+        let acsUserId = null;
+        if (pool) {
+            const existing = await pool.query(
+                'SELECT acs_user_id FROM acs_identities WHERE bitrix_user_id = $1',
+                [user_id]
+            ).catch(() => ({ rows: [] }));
+
+            if (existing.rows.length > 0) {
+                acsUserId = existing.rows[0].acs_user_id;
+            }
+        }
+
+        if (!acsUserId) {
+            // Create new ACS identity
+            const identity = await createAcsIdentity(endpoint, accessKey);
+            acsUserId = identity.id;
+
+            // Store mapping in DB
+            if (pool) {
+                await pool.query(`
+                    CREATE TABLE IF NOT EXISTS acs_identities (
+                        bitrix_user_id VARCHAR(50) PRIMARY KEY,
+                        acs_user_id VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                `).catch(() => {});
+
+                await pool.query(
+                    `INSERT INTO acs_identities (bitrix_user_id, acs_user_id) 
+                     VALUES ($1, $2) 
+                     ON CONFLICT (bitrix_user_id) DO UPDATE SET acs_user_id = $2`,
+                    [user_id, acsUserId]
+                ).catch(e => console.warn('DB store failed:', e.message));
+            }
+        }
+
+        // Issue access token with VOIP scope
+        const tokenResult = await issueAcsToken(endpoint, accessKey, acsUserId);
+
+        console.log(`✅ ACS token issued for user ${user_id} (ACS: ${acsUserId.substring(0, 20)}...)`);
+
+        res.json({
+            token: tokenResult.token,
+            expiresOn: tokenResult.expiresOn,
+            acsUserId: acsUserId,
+            userId: user_id
+        });
+
+    } catch (error) {
+        console.error('❌ ACS token error:', error.message);
+        res.status(500).json({ error: 'Failed to issue calling token', message: error.message });
+    }
+});
+
+/**
+ * POST /api/comms/lookup
+ * Look up the ACS identity for a Bitrix user (needed to call them)
+ * Body: { user_id: string }
+ * Returns: { acsUserId }
+ */
+app.post('/api/comms/lookup', async (req, res) => {
+    try {
+        const { user_id } = req.body;
+        if (!user_id) {
+            return res.status(400).json({ error: 'user_id is required' });
+        }
+
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+
+        const result = await pool.query(
+            'SELECT acs_user_id FROM acs_identities WHERE bitrix_user_id = $1',
+            [user_id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User has not registered for calling yet' });
+        }
+
+        res.json({ acsUserId: result.rows[0].acs_user_id, userId: user_id });
+    } catch (error) {
+        console.error('❌ ACS lookup error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ── ACS Identity & Token Helpers ─────────────────────────────────────
+
+async function createAcsIdentity(endpoint, accessKey) {
+    const url = `${endpoint}/identities?api-version=2023-10-01`;
+    const body = JSON.stringify({ createTokenWithScopes: ["voip"] });
+    const dateHeader = new Date().toUTCString();
+    const contentHash = crypto.createHash('sha256').update(body).digest('base64');
+
+    const parsedUrl = new URL(url);
+    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+    const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
+        .update(stringToSign, 'utf8').digest('base64');
+    const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
+
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body),
+                'Date': dateHeader,
+                'x-ms-content-sha256': contentHash,
+                'Authorization': authHeader,
+                'x-ms-date': dateHeader
+            }
+        };
+        const req = https.request(options, (response) => {
+            let data = '';
+            response.on('data', chunk => data += chunk);
+            response.on('end', () => {
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                    const parsed = JSON.parse(data);
+                    resolve({ id: parsed.identity.id, token: parsed.accessToken?.token, expiresOn: parsed.accessToken?.expiresOn });
+                } else {
+                    reject(new Error(`ACS identity creation failed ${response.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
+async function issueAcsToken(endpoint, accessKey, acsUserId) {
+    const url = `${endpoint}/identities/${encodeURIComponent(acsUserId)}/:issueAccessToken?api-version=2023-10-01`;
+    const body = JSON.stringify({ scopes: ["voip"] });
+    const dateHeader = new Date().toUTCString();
+    const contentHash = crypto.createHash('sha256').update(body).digest('base64');
+
+    const parsedUrl = new URL(url);
+    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+    const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
+        .update(stringToSign, 'utf8').digest('base64');
+    const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
+
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: 443,
+            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body),
+                'Date': dateHeader,
+                'x-ms-content-sha256': contentHash,
+                'Authorization': authHeader,
+                'x-ms-date': dateHeader
+            }
+        };
+        const req = https.request(options, (response) => {
+            let data = '';
+            response.on('data', chunk => data += chunk);
+            response.on('end', () => {
+                if (response.statusCode >= 200 && response.statusCode < 300) {
+                    const parsed = JSON.parse(data);
+                    resolve({ token: parsed.token, expiresOn: parsed.expiresOn });
+                } else {
+                    reject(new Error(`ACS token issue failed ${response.statusCode}: ${data}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
+// ============================================
 // EMAIL NOTIFICATION ENDPOINTS (Azure Communication Services)
 // ============================================
 

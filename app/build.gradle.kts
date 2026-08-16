@@ -120,6 +120,10 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-analytics")
 
+    // Azure Communication Services — Calling
+    implementation("com.azure.android:azure-communication-calling:2.12.0")
+    implementation("com.azure.android:azure-communication-common:1.3.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
