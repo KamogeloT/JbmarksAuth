@@ -1104,30 +1104,33 @@ app.post('/api/comms/lookup', async (req, res) => {
 // ── ACS Identity & Token Helpers ─────────────────────────────────────
 
 async function createAcsIdentity(endpoint, accessKey) {
-    const url = `${endpoint}/identities?api-version=2023-10-01`;
+    const apiVersion = '2023-10-01';
+    const path = `/identities?api-version=${apiVersion}`;
     const body = JSON.stringify({ createTokenWithScopes: ["voip"] });
     const dateHeader = new Date().toUTCString();
     const contentHash = crypto.createHash('sha256').update(body).digest('base64');
 
-    const parsedUrl = new URL(url);
-    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+    const parsedUrl = new URL(endpoint);
+    const host = parsedUrl.host;
+    
+    // ACS HMAC signing: "VERB\nurl_path_and_query\ndate;host;content-sha256"
+    const stringToSign = `POST\n${path}\n${dateHeader};${host};${contentHash}`;
     const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
         .update(stringToSign, 'utf8').digest('base64');
     const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
 
     return new Promise((resolve, reject) => {
         const options = {
-            hostname: parsedUrl.hostname,
+            hostname: host,
             port: 443,
-            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            path: path,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(body),
                 'Date': dateHeader,
                 'x-ms-content-sha256': contentHash,
-                'Authorization': authHeader,
-                'x-ms-date': dateHeader
+                'Authorization': authHeader
             }
         };
         const req = https.request(options, (response) => {
@@ -1149,30 +1152,32 @@ async function createAcsIdentity(endpoint, accessKey) {
 }
 
 async function issueAcsToken(endpoint, accessKey, acsUserId) {
-    const url = `${endpoint}/identities/${encodeURIComponent(acsUserId)}/:issueAccessToken?api-version=2023-10-01`;
+    const apiVersion = '2023-10-01';
+    const path = `/identities/${encodeURIComponent(acsUserId)}/:issueAccessToken?api-version=${apiVersion}`;
     const body = JSON.stringify({ scopes: ["voip"] });
     const dateHeader = new Date().toUTCString();
     const contentHash = crypto.createHash('sha256').update(body).digest('base64');
 
-    const parsedUrl = new URL(url);
-    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+    const parsedUrl = new URL(endpoint);
+    const host = parsedUrl.host;
+
+    const stringToSign = `POST\n${path}\n${dateHeader};${host};${contentHash}`;
     const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
         .update(stringToSign, 'utf8').digest('base64');
     const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
 
     return new Promise((resolve, reject) => {
         const options = {
-            hostname: parsedUrl.hostname,
+            hostname: host,
             port: 443,
-            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            path: path,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(body),
                 'Date': dateHeader,
                 'x-ms-content-sha256': contentHash,
-                'Authorization': authHeader,
-                'x-ms-date': dateHeader
+                'Authorization': authHeader
             }
         };
         const req = https.request(options, (response) => {
