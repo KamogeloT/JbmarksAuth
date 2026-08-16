@@ -1130,6 +1130,77 @@ app.post('/api/comms/lookup', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/comms/call-notify
+ * When user A calls user B, send a push notification to user B's device
+ * to wake the app and show incoming call screen.
+ * Body: { caller_user_id, caller_name, target_user_id }
+ */
+app.post('/api/comms/call-notify', async (req, res) => {
+    try {
+        const { caller_user_id, caller_name, target_user_id } = req.body;
+        if (!caller_user_id || !target_user_id) {
+            return res.status(400).json({ error: 'caller_user_id and target_user_id required' });
+        }
+
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured' });
+        }
+
+        console.log(`📞 Call notification: ${caller_name} (${caller_user_id}) → User ${target_user_id}`);
+
+        // Get target user's FCM token
+        const tokenResult = await pool.query(
+            'SELECT fcm_token FROM push_tokens WHERE user_id = $1 AND fcm_token IS NOT NULL',
+            [target_user_id]
+        );
+
+        if (tokenResult.rows.length === 0) {
+            console.log(`⚠️ No FCM token found for user ${target_user_id}`);
+            return res.json({ success: false, message: 'No FCM token for target user' });
+        }
+
+        if (!firebaseInitialized) {
+            return res.status(503).json({ error: 'FCM not configured' });
+        }
+
+        // Send high-priority FCM push with call data
+        let sent = 0;
+        for (const row of tokenResult.rows) {
+            try {
+                const message = {
+                    token: row.fcm_token,
+                    data: {
+                        type: 'INCOMING_CALL',
+                        caller_user_id: String(caller_user_id),
+                        caller_name: caller_name || 'Unknown',
+                        target_user_id: String(target_user_id),
+                        timestamp: Date.now().toString()
+                    },
+                    android: {
+                        priority: 'high',
+                        ttl: 30000 // 30 seconds — if not delivered in 30s, call is missed
+                    }
+                };
+
+                await admin.messaging().send(message);
+                sent++;
+                console.log(`✅ Call push sent to user ${target_user_id}`);
+            } catch (fcmError) {
+                console.error(`❌ FCM call push failed: ${fcmError.message}`);
+                if (fcmError.code === 'messaging/registration-token-not-registered') {
+                    pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [row.fcm_token]).catch(() => {});
+                }
+            }
+        }
+
+        res.json({ success: sent > 0, sent });
+    } catch (error) {
+        console.error('❌ Call notify error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ── ACS Identity & Token Helpers ─────────────────────────────────────
 
 async function createAcsIdentity(endpoint, accessKey) {

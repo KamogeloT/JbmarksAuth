@@ -76,6 +76,13 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
     private fun handleDataMessage(data: Map<String, String>) {
         try {
             val type = data["type"] ?: "GENERAL"
+
+            // Handle incoming call push notification
+            if (type == "INCOMING_CALL") {
+                handleIncomingCallPush(data)
+                return
+            }
+
             val title = data["title"] ?: "New Notification"
             val message = data["message"] ?: ""
             val relatedId = data["related_id"]
@@ -103,6 +110,77 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error handling data message", e)
         }
+    }
+
+    /**
+     * Handle incoming call push — initialize call agent and accept the call.
+     * This wakes the app even when it's in the background.
+     */
+    private fun handleIncomingCallPush(data: Map<String, String>) {
+        val callerName = data["caller_name"] ?: "Unknown"
+        val callerUserId = data["caller_user_id"] ?: ""
+        val targetUserId = data["target_user_id"] ?: ""
+
+        Log.d(TAG, "📞 INCOMING CALL PUSH from $callerName ($callerUserId)")
+
+        // Initialize the calling service in background so it can receive the ACS incoming call
+        serviceScope.launch {
+            try {
+                val result = com.example.jbmarks.comms.calling.CallingService.initialize(
+                    applicationContext, targetUserId
+                )
+                if (result.isSuccess) {
+                    Log.d(TAG, "✅ Call agent ready for incoming call from $callerName")
+                } else {
+                    Log.e(TAG, "❌ Failed to init call agent for incoming call")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling incoming call push", e)
+            }
+        }
+
+        // Show a high-priority notification to bring the user to the app
+        showIncomingCallNotification(callerName)
+    }
+
+    /**
+     * Show a full-screen incoming call notification (like WhatsApp).
+     */
+    private fun showIncomingCallNotification(callerName: String) {
+        val channelId = "incoming_calls"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId, "Incoming Calls",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "VoIP incoming calls"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 1000, 500, 1000)
+            }
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(channel)
+        }
+
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setContentTitle("Incoming Call")
+            .setContentText(callerName)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setFullScreenIntent(pendingIntent, true)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+            .build()
+
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(2001, notification)
     }
     
     /**

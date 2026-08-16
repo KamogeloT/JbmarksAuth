@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.jbmarks.chat.domain.Message
+import com.example.jbmarks.comms.calling.CallingService
 import com.example.jbmarks.user.data.Workgroup
 import com.example.jbmarks.user.data.WorkgroupMember
 import kotlinx.coroutines.launch
@@ -52,11 +53,41 @@ fun CommsScreen() {
     )
     val state by vm.state.collectAsState()
 
-    // Call state
+    // Call states
     var showCallScreen by remember { mutableStateOf(false) }
     var callTargetName by remember { mutableStateOf("") }
     var callTargetUserId by remember { mutableStateOf("") }
 
+    // Observe incoming calls
+    val incomingCall by CallingService.incomingCall.collectAsState()
+    var showIncomingCallScreen by remember { mutableStateOf(false) }
+    var incomingCallerName by remember { mutableStateOf("") }
+
+    // Initialize calling service when Comms tab opens (register for incoming calls)
+    LaunchedEffect(state.currentUserId) {
+        if (state.currentUserId.isNotBlank()) {
+            CallingService.initialize(context, state.currentUserId)
+        }
+    }
+
+    // React to incoming calls
+    LaunchedEffect(incomingCall) {
+        if (incomingCall != null) {
+            incomingCallerName = incomingCall!!.callerDisplayName
+            showIncomingCallScreen = true
+        }
+    }
+
+    // Show incoming call screen (full-screen like WhatsApp)
+    if (showIncomingCallScreen) {
+        com.example.jbmarks.comms.calling.IncomingCallScreen(
+            callerName = incomingCallerName,
+            onDismiss = { showIncomingCallScreen = false }
+        )
+        return
+    }
+
+    // Show outgoing call screen
     if (showCallScreen) {
         com.example.jbmarks.comms.calling.CallScreen(
             calleeName = callTargetName,
