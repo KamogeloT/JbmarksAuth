@@ -1070,7 +1070,8 @@ app.post('/api/comms/token', async (req, res) => {
 
 /**
  * POST /api/comms/lookup
- * Look up the ACS identity for a Bitrix user (needed to call them)
+ * Look up the ACS identity for a Bitrix user (needed to call them).
+ * If the user doesn't have an identity yet, create one automatically.
  * Body: { user_id: string }
  * Returns: { acsUserId }
  */
@@ -1085,16 +1086,44 @@ app.post('/api/comms/lookup', async (req, res) => {
             return res.status(503).json({ error: 'Database not configured' });
         }
 
+        const connectionString = process.env.ACS_CONNECTION_STRING;
+        if (!connectionString) {
+            return res.status(503).json({ error: 'ACS not configured' });
+        }
+
+        // Check if user already has an ACS identity
         const result = await pool.query(
             'SELECT acs_user_id FROM acs_identities WHERE bitrix_user_id = $1',
             [user_id]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'User has not registered for calling yet' });
+        if (result.rows.length > 0) {
+            return res.json({ acsUserId: result.rows[0].acs_user_id, userId: user_id });
         }
 
-        res.json({ acsUserId: result.rows[0].acs_user_id, userId: user_id });
+        // User doesn't have an identity yet — create one
+        console.log(`📞 Creating ACS identity for user ${user_id} (first call to them)`);
+        const { endpoint, accessKey } = parseConnectionString(connectionString);
+        const identity = await createAcsIdentity(endpoint, accessKey);
+
+        // Store mapping
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS acs_identities (
+                bitrix_user_id VARCHAR(50) PRIMARY KEY,
+                acs_user_id VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `).catch(() => {});
+
+        await pool.query(
+            `INSERT INTO acs_identities (bitrix_user_id, acs_user_id) 
+             VALUES ($1, $2) 
+             ON CONFLICT (bitrix_user_id) DO UPDATE SET acs_user_id = $2`,
+            [user_id, identity.id]
+        );
+
+        console.log(`✅ ACS identity created for user ${user_id}`);
+        res.json({ acsUserId: identity.id, userId: user_id });
     } catch (error) {
         console.error('❌ ACS lookup error:', error.message);
         res.status(500).json({ error: error.message });
