@@ -122,21 +122,15 @@ fun AppNavigation() {
     }
 
     // Global incoming call overlay — shows on top of everything
-    val incomingCall by CallingService.incomingCall.collectAsState()
     val callUiState by CallingService.callState.collectAsState()
-    var showGlobalIncomingCall by remember { mutableStateOf(false) }
 
-    LaunchedEffect(incomingCall) {
-        if (incomingCall != null) {
-            showGlobalIncomingCall = true
-        }
-    }
-
-    // Show incoming call screen on top of everything
-    if (showGlobalIncomingCall && (callUiState is CallingService.CallUiState.Ringing || callUiState is CallingService.CallUiState.InCall)) {
+    if (callUiState is CallingService.CallUiState.IncomingCall) {
+        val incoming = callUiState as CallingService.CallUiState.IncomingCall
         IncomingCallScreen(
-            callerName = incomingCall?.callerDisplayName ?: "Unknown",
-            onDismiss = { showGlobalIncomingCall = false }
+            callerName = incoming.callerName,
+            roomId = incoming.roomId,
+            callerUserId = incoming.callerUserId,
+            onDismiss = { CallingService.resetState() }
         )
         return
     }

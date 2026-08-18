@@ -1,23 +1,9 @@
 package com.example.jbmarks.comms.calling
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.media.AudioAttributes
-import android.media.AudioManager
-import android.media.Ringtone
-import android.media.RingtoneManager
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.azure.android.communication.calling.*
 import com.azure.android.communication.common.CommunicationTokenCredential
-import com.azure.android.communication.common.CommunicationUserIdentifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,261 +11,214 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.UUID
 
 /**
- * Singleton calling service — manages ACS calling like WhatsApp.
- * - Registers for incoming calls when user opens Comms
- * - Shows incoming call notification/ringtone
- * - Manages call lifecycle (outgoing, incoming, in-call, ended)
+ * Calling Service — Room-based approach (like WhatsApp).
+ *
+ * Flow:
+ * 1. Caller creates a room ID + gets ACS token
+ * 2. Caller joins the room and starts waiting
+ * 3. Backend sends FCM push to receiver with room ID + caller info
+ * 4. Receiver sees full-screen notification → taps Accept
+ * 5. Receiver gets ACS token + joins the same room
+ * 6. Both are connected — call is live
+ *
+ * No timing issues — receiver joins when ready.
  */
 object CallingService {
 
     private val TAG = "CallingService"
-    private const val TOKEN_URL = "https://jbmarksauth-production.up.railway.app/api/comms/token"
-    private const val LOOKUP_URL = "https://jbmarksauth-production.up.railway.app/api/comms/lookup"
-    private const val CHANNEL_ID = "incoming_calls"
+    private const val BASE_URL = "https://jbmarksauth-production.up.railway.app"
 
     private var context: Context? = null
-    private var callAgent: CallAgent? = null
     private var callClient: CallClient? = null
+    private var callAgent: CallAgent? = null
     private var currentCall: Call? = null
-    private var acsToken: String? = null
-    private var acsUserId: String? = null
+    private var currentRoomId: String? = null
     private var currentBitrixUserId: String? = null
 
-    // Observable state for UI
+    // Observable state
     private val _callState = MutableStateFlow<CallUiState>(CallUiState.Idle)
     val callState: StateFlow<CallUiState> = _callState
-
-    private val _incomingCall = MutableStateFlow<IncomingCallInfo?>(null)
-    val incomingCall: StateFlow<IncomingCallInfo?> = _incomingCall
-
-    data class IncomingCallInfo(
-        val call: IncomingCall,
-        val callerDisplayName: String,
-        val callerAcsId: String
-    )
 
     sealed class CallUiState {
         object Idle : CallUiState()
         object Connecting : CallUiState()
-        object Ringing : CallUiState()
+        object WaitingForAnswer : CallUiState()
         object InCall : CallUiState()
         object Ended : CallUiState()
+        data class IncomingCall(val callerName: String, val roomId: String, val callerUserId: String) : CallUiState()
         data class Error(val message: String) : CallUiState()
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // OUTGOING CALL (Caller)
+    // ═══════════════════════════════════════════════════════════
+
     /**
-     * Initialize the calling service — call this when user opens Comms tab.
-     * Creates call agent and registers for incoming calls.
+     * Start a call to another user.
+     * Creates a room, joins it, then sends push to the target.
      */
-    suspend fun initialize(ctx: Context, bitrixUserId: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun startCall(
+        ctx: Context,
+        callerBitrixUserId: String,
+        callerName: String,
+        targetBitrixUserId: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             context = ctx.applicationContext
-            currentBitrixUserId = bitrixUserId
-
-            Log.d(TAG, "Initializing calling service for user $bitrixUserId")
-
-            // Dispose existing agent
-            withContext(Dispatchers.Main) {
-                callAgent?.dispose()
-                callAgent = null
-                callClient = null
-            }
-
-            // Create notification channel for incoming calls
-
-
-            // Get ACS token from backend
-            val tokenResponse = fetchToken(bitrixUserId)
-            acsToken = tokenResponse.getString("token")
-            acsUserId = tokenResponse.getString("acsUserId")
-
-            Log.d(TAG, "Got ACS token, creating call agent...")
-
-            // Create call client and agent on main thread
-            withContext(Dispatchers.Main) {
-                callClient = CallClient()
-
-                val credential = CommunicationTokenCredential(acsToken)
-                val options = CallAgentOptions().apply {
-                    displayName = bitrixUserId
-                }
-
-                callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
-
-                // Register for incoming calls
-                callAgent!!.addOnIncomingCallListener { incomingCallEvent ->
-                    handleIncomingCall(incomingCallEvent)
-                }
-
-                Log.d(TAG, "✅ Call agent created + listening for incoming calls")
-            }
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize calling service", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * Make a 1-on-1 VoIP call (outgoing).
-     * Also sends a push notification to the target to wake their app.
-     */
-    suspend fun callUser(targetBitrixUserId: String, displayName: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (callAgent == null) {
-                return@withContext Result.failure(Exception("Call agent not initialized"))
-            }
+            currentBitrixUserId = callerBitrixUserId
 
             _callState.value = CallUiState.Connecting
 
-            // Send push notification to target user FIRST (wakes their app)
-            notifyCallTarget(targetBitrixUserId)
+            // 1. Generate a unique room ID for this call
+            val roomId = UUID.randomUUID().toString()
+            currentRoomId = roomId
+            Log.d(TAG, "📞 Starting call. Room: $roomId")
 
-            // Look up target's ACS identity
-            val lookupResponse = lookupUser(targetBitrixUserId)
-            val targetAcsUserId = lookupResponse.getString("acsUserId")
+            // 2. Get ACS token for caller
+            val tokenResponse = fetchToken(callerBitrixUserId)
+            val token = tokenResponse.getString("token")
 
-            Log.d(TAG, "Calling user $targetBitrixUserId (ACS: $targetAcsUserId)")
-
-            _callState.value = CallUiState.Ringing
-
-            val callees = arrayListOf<com.azure.android.communication.common.CommunicationIdentifier>(
-                CommunicationUserIdentifier(targetAcsUserId)
-            )
-
-            val callOptions = StartCallOptions()
-
+            // 3. Create call agent and join the room (group call with room ID)
             withContext(Dispatchers.Main) {
-                currentCall = callAgent!!.startCall(context!!, callees, callOptions)
+                callAgent?.dispose()
+                callClient = CallClient()
+                val credential = CommunicationTokenCredential(token)
+                val options = CallAgentOptions().apply {
+                    displayName = callerName
+                }
+                callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
 
-                // Listen for call state changes
-                currentCall!!.addOnStateChangedListener {
-                    onCallStateChanged(currentCall!!.state)
+                // Join as a group call using the room ID as the group ID
+                val groupId = UUID.fromString(roomId)
+                val joinOptions = JoinCallOptions()
+                currentCall = callAgent!!.join(ctx.applicationContext, GroupCallLocator(groupId), joinOptions)
+
+                currentCall?.addOnStateChangedListener {
+                    val state = currentCall?.state ?: return@addOnStateChangedListener
+                    handleCallStateChange(state)
                 }
 
-                Log.d(TAG, "✅ Call started: ${currentCall?.id}")
+                // Listen for participants joining (receiver accepted)
+                currentCall?.addOnRemoteParticipantsUpdatedListener { args ->
+                    if (args.addedParticipants.isNotEmpty()) {
+                        Log.d(TAG, "✅ Receiver joined the call!")
+                        _callState.value = CallUiState.InCall
+                    }
+                }
             }
+
+            _callState.value = CallUiState.WaitingForAnswer
+            Log.d(TAG, "📞 Joined room, waiting for receiver...")
+
+            // 4. Send push notification to receiver with room ID
+            sendCallPush(callerBitrixUserId, callerName, targetBitrixUserId, roomId)
 
             Result.success(Unit)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to call user", e)
+            Log.e(TAG, "Failed to start call", e)
             _callState.value = CallUiState.Error(e.message ?: "Call failed")
             Result.failure(e)
         }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // INCOMING CALL (Receiver)
+    // ═══════════════════════════════════════════════════════════
+
     /**
-     * Send push notification to target user to wake their app for incoming call.
+     * Called when FCM push arrives with call data.
+     * Shows the incoming call state (UI will react).
      */
-    private fun notifyCallTarget(targetUserId: String) {
-        try {
-            val url = URL("https://jbmarksauth-production.up.railway.app/api/comms/call-notify")
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.doOutput = true
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-
-            val body = """{"caller_user_id": "${currentBitrixUserId}", "caller_name": "JBmarks User", "target_user_id": "$targetUserId"}"""
-            connection.outputStream.use { it.write(body.toByteArray()) }
-
-            val code = connection.responseCode
-            Log.d(TAG, "Call notify push sent: HTTP $code")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to send call push (call still proceeds): ${e.message}")
-        }
+    fun onIncomingCallPush(callerName: String, callerUserId: String, roomId: String) {
+        Log.d(TAG, "📞 Incoming call push: $callerName, room: $roomId")
+        currentRoomId = roomId
+        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId)
     }
 
     /**
-     * Accept an incoming call.
+     * Accept the incoming call — join the room.
      */
-    fun acceptIncomingCall() {
-        val incoming = _incomingCall.value ?: return
+    suspend fun acceptCall(
+        ctx: Context,
+        receiverBitrixUserId: String,
+        receiverName: String,
+        roomId: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            // Stop ringing
-            context?.let { CallForegroundService.stop(it) }
+            context = ctx.applicationContext
+            currentBitrixUserId = receiverBitrixUserId
 
-            val acceptOptions = AcceptCallOptions()
-            currentCall = incoming.call.accept(context!!, acceptOptions).get()
+            _callState.value = CallUiState.Connecting
+            Log.d(TAG, "Accepting call, joining room: $roomId")
 
-            currentCall!!.addOnStateChangedListener {
-                onCallStateChanged(currentCall!!.state)
+            // Get ACS token for receiver
+            val tokenResponse = fetchToken(receiverBitrixUserId)
+            val token = tokenResponse.getString("token")
+
+            // Join the same room
+            withContext(Dispatchers.Main) {
+                callAgent?.dispose()
+                callClient = CallClient()
+                val credential = CommunicationTokenCredential(token)
+                val options = CallAgentOptions().apply {
+                    displayName = receiverName
+                }
+                callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
+
+                val groupId = UUID.fromString(roomId)
+                val joinOptions = JoinCallOptions()
+                currentCall = callAgent!!.join(ctx.applicationContext, GroupCallLocator(groupId), joinOptions)
+
+                currentCall?.addOnStateChangedListener {
+                    val state = currentCall?.state ?: return@addOnStateChangedListener
+                    handleCallStateChange(state)
+                }
             }
 
-            _incomingCall.value = null
             _callState.value = CallUiState.InCall
-            Log.d(TAG, "✅ Incoming call accepted")
+            Log.d(TAG, "✅ Joined call room — connected!")
+
+            // Stop the foreground service (ringtone + notification)
+            CallForegroundService.stop(ctx.applicationContext)
+
+            Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to accept call", e)
-            _callState.value = CallUiState.Error("Failed to accept: ${e.message}")
+            _callState.value = CallUiState.Error(e.message ?: "Failed to join")
+            Result.failure(e)
         }
     }
 
     /**
-     * Reject/decline an incoming call.
+     * Decline the incoming call.
      */
-    fun rejectIncomingCall() {
-        val incoming = _incomingCall.value ?: return
-        try {
-            // Stop ringing
-            context?.let { CallForegroundService.stop(it) }
-
-            incoming.call.reject()
-            _incomingCall.value = null
-            _callState.value = CallUiState.Idle
-            Log.d(TAG, "Incoming call rejected")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to reject call", e)
-        }
-    }
-
-    /**
-     * Handle missed call (timeout — no answer after 45 seconds).
-     */
-    fun handleMissedCall(callerName: String, callerId: String) {
-        Log.d(TAG, "📵 Missed call from $callerName")
-        _incomingCall.value?.let {
-            try { it.call.reject() } catch (_: Exception) {}
-        }
-        _incomingCall.value = null
+    fun declineCall(ctx: Context) {
+        Log.d(TAG, "❌ Call declined")
         _callState.value = CallUiState.Idle
-
-        // Show missed call notification
-        context?.let { ctx ->
-            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            val notification = androidx.core.app.NotificationCompat.Builder(ctx, "incoming_calls")
-                .setSmallIcon(android.R.drawable.ic_menu_call)
-                .setContentTitle("Missed Call")
-                .setContentText(callerName)
-                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .build()
-            nm.notify(4001, notification)
-        }
+        currentRoomId = null
+        CallForegroundService.stop(ctx)
     }
 
-    /**
-     * Hang up current call.
-     */
+    // ═══════════════════════════════════════════════════════════
+    // SHARED
+    // ═══════════════════════════════════════════════════════════
+
     fun hangUp() {
         try {
-
             currentCall?.hangUp(HangUpOptions())
             currentCall = null
+            currentRoomId = null
             _callState.value = CallUiState.Ended
+            context?.let { CallForegroundService.stop(it) }
             Log.d(TAG, "Call ended")
         } catch (e: Exception) {
             Log.e(TAG, "Error hanging up", e)
         }
     }
 
-    /**
-     * Toggle mute.
-     */
     fun toggleMute(): Boolean {
         val call = currentCall ?: return false
         return try {
@@ -290,16 +229,13 @@ object CallingService {
             }
             call.isMuted
         } catch (e: Exception) {
-            Log.e(TAG, "Error toggling mute", e)
+            Log.e(TAG, "Mute toggle error", e)
             false
         }
     }
 
-    /**
-     * Toggle speaker.
-     */
     fun toggleSpeaker(): Boolean {
-        val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return false
         val newState = !audioManager.isSpeakerphoneOn
         audioManager.isSpeakerphoneOn = newState
         return newState
@@ -311,108 +247,67 @@ object CallingService {
         _callState.value = CallUiState.Idle
     }
 
-    /**
-     * Clean up.
-     */
     fun dispose() {
         hangUp()
         callAgent?.dispose()
         callAgent = null
         callClient = null
-        _callState.value = CallUiState.Idle
     }
 
-    // ── Private ────────────────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════
+    // PRIVATE
+    // ═══════════════════════════════════════════════════════════
 
-    private fun handleIncomingCall(event: IncomingCall) {
-        Log.d(TAG, "📞 INCOMING CALL from: ${event.callerInfo.displayName}")
-
-        val info = IncomingCallInfo(
-            call = event,
-            callerDisplayName = event.callerInfo.displayName ?: "Unknown",
-            callerAcsId = event.callerInfo.identifier.rawId ?: ""
-        )
-
-        _incomingCall.value = info
-        _callState.value = CallUiState.Ringing
-
-        // Start persistent foreground service (ringtone + vibration + notification)
-        context?.let { ctx ->
-            CallForegroundService.start(ctx, info.callerDisplayName, info.callerAcsId)
-        }
-    }
-
-    private fun onCallStateChanged(state: CallState) {
-        Log.d(TAG, "Call state changed: $state")
+    private fun handleCallStateChange(state: CallState) {
+        Log.d(TAG, "Call state: $state")
         when (state) {
             CallState.CONNECTED -> {
                 _callState.value = CallUiState.InCall
-                // Play connection sound
                 playConnectionSound()
             }
             CallState.DISCONNECTED -> {
                 _callState.value = CallUiState.Ended
                 currentCall = null
-                context?.let { CallForegroundService.stop(it) }
-                stopCallerRingtone()
             }
-            CallState.RINGING -> {
-                _callState.value = CallUiState.Ringing
-                // Play ringing tone on caller's side
-                startCallerRingtone()
-            }
-            CallState.CONNECTING -> _callState.value = CallUiState.Connecting
             else -> {}
         }
     }
 
-    // ── Caller-side ringing (the "ring ring" you hear while waiting) ──
-
-    private var callerRingtonePlayer: android.media.MediaPlayer? = null
-
-    private fun startCallerRingtone() {
-        try {
-            val ctx = context ?: return
-            callerRingtonePlayer = android.media.MediaPlayer().apply {
-                // Use the notification sound as a ringing indicator
-                val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-                setDataSource(ctx, uri)
-                setAudioAttributes(
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                isLooping = true
-                prepare()
-                start()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not play caller ringtone: ${e.message}")
-        }
-    }
-
-    private fun stopCallerRingtone() {
-        callerRingtonePlayer?.stop()
-        callerRingtonePlayer?.release()
-        callerRingtonePlayer = null
-    }
-
     private fun playConnectionSound() {
         try {
-            val ctx = context ?: return
             val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 80)
             toneGen.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 200)
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toneGen.release() }, 300)
+        } catch (_: Exception) {}
+    }
+
+    private fun sendCallPush(callerUserId: String, callerName: String, targetUserId: String, roomId: String) {
+        try {
+            val url = URL("$BASE_URL/api/comms/call-notify")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            val body = JSONObject().apply {
+                put("caller_user_id", callerUserId)
+                put("caller_name", callerName)
+                put("target_user_id", targetUserId)
+                put("room_id", roomId)
+            }.toString()
+
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            val code = connection.responseCode
+            Log.d(TAG, "Call push sent: HTTP $code")
         } catch (e: Exception) {
-            Log.w(TAG, "Could not play connection sound: ${e.message}")
+            Log.w(TAG, "Failed to send call push: ${e.message}")
         }
     }
 
-    // ── Network helpers ────────────────────────────────────────
-
     private fun fetchToken(userId: String): JSONObject {
-        val url = URL(TOKEN_URL)
+        val url = URL("$BASE_URL/api/comms/token")
         val connection = url.openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.setRequestProperty("Content-Type", "application/json")
@@ -427,28 +322,6 @@ object CallingService {
         if (responseCode != 200) {
             val error = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
             throw Exception("Token fetch failed ($responseCode): $error")
-        }
-
-        val response = connection.inputStream.bufferedReader().readText()
-        return JSONObject(response)
-    }
-
-    private fun lookupUser(userId: String): JSONObject {
-        val url = URL(LOOKUP_URL)
-        val connection = url.openConnection() as HttpURLConnection
-        connection.requestMethod = "POST"
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
-        connection.connectTimeout = 15000
-        connection.readTimeout = 15000
-
-        val body = """{"user_id": "$userId"}"""
-        connection.outputStream.use { it.write(body.toByteArray()) }
-
-        val responseCode = connection.responseCode
-        if (responseCode != 200) {
-            val error = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
-            throw Exception("User lookup failed ($responseCode): $error")
         }
 
         val response = connection.inputStream.bufferedReader().readText()

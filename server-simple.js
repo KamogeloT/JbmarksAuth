@@ -1138,7 +1138,7 @@ app.post('/api/comms/lookup', async (req, res) => {
  */
 app.post('/api/comms/call-notify', async (req, res) => {
     try {
-        const { caller_user_id, caller_name, target_user_id } = req.body;
+        const { caller_user_id, caller_name, target_user_id, room_id } = req.body;
         if (!caller_user_id || !target_user_id) {
             return res.status(400).json({ error: 'caller_user_id and target_user_id required' });
         }
@@ -1147,7 +1147,7 @@ app.post('/api/comms/call-notify', async (req, res) => {
             return res.status(503).json({ error: 'Database not configured' });
         }
 
-        console.log(`📞 Call notification: ${caller_name} (${caller_user_id}) → User ${target_user_id}`);
+        console.log(`📞 Call notification: ${caller_name} (${caller_user_id}) → User ${target_user_id} | Room: ${room_id}`);
 
         // Get target user's FCM token
         const tokenResult = await pool.query(
@@ -1175,11 +1175,12 @@ app.post('/api/comms/call-notify', async (req, res) => {
                         caller_user_id: String(caller_user_id),
                         caller_name: caller_name || 'Unknown',
                         target_user_id: String(target_user_id),
+                        room_id: room_id || '',
                         timestamp: Date.now().toString()
                     },
                     android: {
                         priority: 'high',
-                        ttl: 30000 // 30 seconds — if not delivered in 30s, call is missed
+                        ttl: 45000 // 45 seconds
                     }
                 };
 

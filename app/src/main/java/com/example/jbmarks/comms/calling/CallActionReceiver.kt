@@ -17,23 +17,20 @@ class CallActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             CallForegroundService.ACTION_ACCEPT -> {
                 Log.d(TAG, "✅ Call accepted from notification")
-                CallingService.acceptIncomingCall()
-                CallForegroundService.stop(context)
-                
-                // Launch app to show in-call screen
+                // Launch app to show the call screen — it will handle accepting
                 val launchIntent = Intent(context, com.example.jbmarks.MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra("in_call", true)
+                    putExtra("accept_call", true)
                 }
                 context.startActivity(launchIntent)
+                CallForegroundService.stop(context)
             }
 
             CallForegroundService.ACTION_DECLINE -> {
                 Log.d(TAG, "❌ Call declined from notification")
-                CallingService.rejectIncomingCall()
+                CallingService.declineCall(context)
                 CallForegroundService.stop(context)
                 
-                // Clear the notification
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 nm.cancel(CallForegroundService.NOTIFICATION_ID)
             }

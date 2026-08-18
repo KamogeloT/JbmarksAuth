@@ -41,12 +41,14 @@ class CallForegroundService : Service() {
         const val ACTION_TIMEOUT = "com.example.jbmarks.CALL_TIMEOUT"
         const val EXTRA_CALLER_NAME = "caller_name"
         const val EXTRA_CALLER_ID = "caller_id"
+        const val EXTRA_ROOM_ID = "room_id"
         const val RING_TIMEOUT_MS = 45_000L // 45 seconds
 
-        fun start(context: Context, callerName: String, callerId: String) {
+        fun start(context: Context, callerName: String, callerId: String, roomId: String = "") {
             val intent = Intent(context, CallForegroundService::class.java).apply {
                 putExtra(EXTRA_CALLER_NAME, callerName)
                 putExtra(EXTRA_CALLER_ID, callerId)
+                putExtra(EXTRA_ROOM_ID, roomId)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -86,7 +88,7 @@ class CallForegroundService : Service() {
         // Set timeout — auto-end after 45 seconds (missed call)
         timeoutRunnable = Runnable {
             Log.d(TAG, "⏰ Call timeout — no answer")
-            CallingService.handleMissedCall(callerName, callerId)
+            CallingService.declineCall(this)
             stopSelf()
         }
         handler.postDelayed(timeoutRunnable!!, RING_TIMEOUT_MS)

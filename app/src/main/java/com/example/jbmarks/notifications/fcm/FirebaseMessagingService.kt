@@ -9,6 +9,8 @@ import com.example.jbmarks.notifications.domain.NotificationPriority
 import com.example.jbmarks.notifications.domain.NotificationType
 import com.example.jbmarks.notifications.service.NotificationService
 import com.example.jbmarks.notifications.data.NotificationRepository
+import com.example.jbmarks.comms.calling.CallingService
+import com.example.jbmarks.comms.calling.CallForegroundService
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -113,34 +115,21 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     /**
-     * Handle incoming call push — initialize call agent and accept the call.
-     * This wakes the app even when it's in the background.
+     * Handle incoming call push — show notification and set state.
+     * The receiver doesn't need to initialize a call agent until they accept.
      */
     private fun handleIncomingCallPush(data: Map<String, String>) {
         val callerName = data["caller_name"] ?: "Unknown"
         val callerUserId = data["caller_user_id"] ?: ""
-        val targetUserId = data["target_user_id"] ?: ""
+        val roomId = data["room_id"] ?: ""
 
-        Log.d(TAG, "📞 INCOMING CALL PUSH from $callerName ($callerUserId)")
+        Log.d(TAG, "📞 INCOMING CALL PUSH from $callerName | Room: $roomId")
 
-        // Initialize the calling service in background so it can receive the ACS incoming call
-        serviceScope.launch {
-            try {
-                val result = com.example.jbmarks.comms.calling.CallingService.initialize(
-                    applicationContext, targetUserId
-                )
-                if (result.isSuccess) {
-                    Log.d(TAG, "✅ Call agent ready for incoming call from $callerName")
-                } else {
-                    Log.e(TAG, "❌ Failed to init call agent for incoming call")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error handling incoming call push", e)
-            }
-        }
+        // Set the call state (the UI will react to this)
+        CallingService.onIncomingCallPush(callerName, callerUserId, roomId)
 
-        // Show a high-priority notification to bring the user to the app
-        showIncomingCallNotification(callerName)
+        // Start foreground service with ringtone + persistent notification
+        CallForegroundService.start(applicationContext, callerName, callerUserId, roomId)
     }
 
     /**

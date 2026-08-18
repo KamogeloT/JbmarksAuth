@@ -58,35 +58,6 @@ fun CommsScreen() {
     var callTargetName by remember { mutableStateOf("") }
     var callTargetUserId by remember { mutableStateOf("") }
 
-    // Observe incoming calls
-    val incomingCall by CallingService.incomingCall.collectAsState()
-    var showIncomingCallScreen by remember { mutableStateOf(false) }
-    var incomingCallerName by remember { mutableStateOf("") }
-
-    // Initialize calling service when Comms tab opens (register for incoming calls)
-    LaunchedEffect(state.currentUserId) {
-        if (state.currentUserId.isNotBlank()) {
-            CallingService.initialize(context, state.currentUserId)
-        }
-    }
-
-    // React to incoming calls
-    LaunchedEffect(incomingCall) {
-        if (incomingCall != null) {
-            incomingCallerName = incomingCall!!.callerDisplayName
-            showIncomingCallScreen = true
-        }
-    }
-
-    // Show incoming call screen (full-screen like WhatsApp)
-    if (showIncomingCallScreen) {
-        com.example.jbmarks.comms.calling.IncomingCallScreen(
-            callerName = incomingCallerName,
-            onDismiss = { showIncomingCallScreen = false }
-        )
-        return
-    }
-
     // Show outgoing call screen
     if (showCallScreen) {
         com.example.jbmarks.comms.calling.CallScreen(
