@@ -6,6 +6,7 @@ import com.example.jbmarks.network.RetrofitInstance
 import com.example.jbmarks.notifications.fcm.FCMTokenManager
 import com.example.jbmarks.notifications.sync.SyncManager
 import com.google.firebase.FirebaseApp
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 class JBmarksApplication : Application() {
     
@@ -17,6 +18,15 @@ class JBmarksApplication : Application() {
         // Initialize Firebase
         FirebaseApp.initializeApp(this)
         Log.d("JBmarksApplication", "Firebase initialized")
+        
+        // Initialize Crashlytics with custom keys
+        FirebaseCrashlytics.getInstance().apply {
+            setCrashlyticsCollectionEnabled(true)
+            setCustomKey("app_version", "1.2.0")
+            setCustomKey("build_type", "debug")
+            log("App started")
+        }
+        Log.d("JBmarksApplication", "Crashlytics initialized")
         
         // Initialize RetrofitInstance with application context
         RetrofitInstance.initialize(this)

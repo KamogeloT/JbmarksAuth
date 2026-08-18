@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services") apply false
+    id("com.google.firebase.crashlytics")
 }
 
 if (file("google-services.json").exists()) {
@@ -119,6 +120,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
 
     // Azure Communication Services — Calling
     implementation("com.azure.android:azure-communication-calling:2.12.0")

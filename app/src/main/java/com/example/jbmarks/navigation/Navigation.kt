@@ -69,6 +69,8 @@ import androidx.navigation.navArgument
 import com.example.jbmarks.calendar.ui.CalendarScreen
 import com.example.jbmarks.chat.ui.ChatListScreen
 import com.example.jbmarks.chat.ui.MessageScreen
+import com.example.jbmarks.comms.calling.CallingService
+import com.example.jbmarks.comms.calling.IncomingCallScreen
 import com.example.jbmarks.comms.data.CommsRepository
 import com.example.jbmarks.comms.ui.CommsScreen
 import com.example.jbmarks.dashboard.ui.DashboardScreen
@@ -117,6 +119,26 @@ fun AppNavigation() {
                 Screen.Notifications
             )
         }
+    }
+
+    // Global incoming call overlay — shows on top of everything
+    val incomingCall by CallingService.incomingCall.collectAsState()
+    val callUiState by CallingService.callState.collectAsState()
+    var showGlobalIncomingCall by remember { mutableStateOf(false) }
+
+    LaunchedEffect(incomingCall) {
+        if (incomingCall != null) {
+            showGlobalIncomingCall = true
+        }
+    }
+
+    // Show incoming call screen on top of everything
+    if (showGlobalIncomingCall && (callUiState is CallingService.CallUiState.Ringing || callUiState is CallingService.CallUiState.InCall)) {
+        IncomingCallScreen(
+            callerName = incomingCall?.callerDisplayName ?: "Unknown",
+            onDismiss = { showGlobalIncomingCall = false }
+        )
+        return
     }
 
     Scaffold(
