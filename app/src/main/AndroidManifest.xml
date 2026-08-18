@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -77,6 +81,17 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Call Foreground Service -->
+        <service
+            android:name=".comms.calling.CallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+
+        <!-- Call Action Receiver (Accept/Decline from notification) -->
+        <receiver
+            android:name=".comms.calling.CallActionReceiver"
+            android:exported="false" />
 
         <!-- Default notification channel metadata -->
         <meta-data

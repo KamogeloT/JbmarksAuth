@@ -46,8 +46,6 @@ object CallingService {
     private var acsToken: String? = null
     private var acsUserId: String? = null
     private var currentBitrixUserId: String? = null
-    private var ringtone: Ringtone? = null
-    private var vibrator: Vibrator? = null
 
     // Observable state for UI
     private val _callState = MutableStateFlow<CallUiState>(CallUiState.Idle)
@@ -90,7 +88,7 @@ object CallingService {
             }
 
             // Create notification channel for incoming calls
-            createNotificationChannel()
+
 
             // Get ACS token from backend
             val tokenResponse = fetchToken(bitrixUserId)
@@ -202,7 +200,9 @@ object CallingService {
     fun acceptIncomingCall() {
         val incoming = _incomingCall.value ?: return
         try {
-            stopRinging()
+            // Stop ringing
+            context?.let { CallForegroundService.stop(it) }
+
             val acceptOptions = AcceptCallOptions()
             currentCall = incoming.call.accept(context!!, acceptOptions).get()
 
@@ -225,7 +225,9 @@ object CallingService {
     fun rejectIncomingCall() {
         val incoming = _incomingCall.value ?: return
         try {
-            stopRinging()
+            // Stop ringing
+            context?.let { CallForegroundService.stop(it) }
+
             incoming.call.reject()
             _incomingCall.value = null
             _callState.value = CallUiState.Idle
@@ -236,11 +238,36 @@ object CallingService {
     }
 
     /**
+     * Handle missed call (timeout — no answer after 45 seconds).
+     */
+    fun handleMissedCall(callerName: String, callerId: String) {
+        Log.d(TAG, "📵 Missed call from $callerName")
+        _incomingCall.value?.let {
+            try { it.call.reject() } catch (_: Exception) {}
+        }
+        _incomingCall.value = null
+        _callState.value = CallUiState.Idle
+
+        // Show missed call notification
+        context?.let { ctx ->
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val notification = androidx.core.app.NotificationCompat.Builder(ctx, "incoming_calls")
+                .setSmallIcon(android.R.drawable.ic_menu_call)
+                .setContentTitle("Missed Call")
+                .setContentText(callerName)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(4001, notification)
+        }
+    }
+
+    /**
      * Hang up current call.
      */
     fun hangUp() {
         try {
-            stopRinging()
+
             currentCall?.hangUp(HangUpOptions())
             currentCall = null
             _callState.value = CallUiState.Ended
@@ -309,110 +336,77 @@ object CallingService {
         _incomingCall.value = info
         _callState.value = CallUiState.Ringing
 
-        // Start ringing + vibration
-        startRinging()
-
-        // Show notification (in case app is in background)
-        showIncomingCallNotification(info.callerDisplayName)
+        // Start persistent foreground service (ringtone + vibration + notification)
+        context?.let { ctx ->
+            CallForegroundService.start(ctx, info.callerDisplayName, info.callerAcsId)
+        }
     }
 
     private fun onCallStateChanged(state: CallState) {
         Log.d(TAG, "Call state changed: $state")
         when (state) {
-            CallState.CONNECTED -> _callState.value = CallUiState.InCall
+            CallState.CONNECTED -> {
+                _callState.value = CallUiState.InCall
+                // Play connection sound
+                playConnectionSound()
+            }
             CallState.DISCONNECTED -> {
                 _callState.value = CallUiState.Ended
                 currentCall = null
-                stopRinging()
+                context?.let { CallForegroundService.stop(it) }
+                stopCallerRingtone()
             }
-            CallState.RINGING -> _callState.value = CallUiState.Ringing
+            CallState.RINGING -> {
+                _callState.value = CallUiState.Ringing
+                // Play ringing tone on caller's side
+                startCallerRingtone()
+            }
             CallState.CONNECTING -> _callState.value = CallUiState.Connecting
             else -> {}
         }
     }
 
-    private fun startRinging() {
+    // ── Caller-side ringing (the "ring ring" you hear while waiting) ──
+
+    private var callerRingtonePlayer: android.media.MediaPlayer? = null
+
+    private fun startCallerRingtone() {
         try {
-            // Ringtone
-            val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ringtone = RingtoneManager.getRingtone(context, ringtoneUri)
-            ringtone?.play()
-
-            // Vibration
             val ctx = context ?: return
-            vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                vm.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                ctx.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            }
-
-            val pattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(pattern, 0)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting ringtone", e)
-        }
-    }
-
-    private fun stopRinging() {
-        ringtone?.stop()
-        ringtone = null
-        vibrator?.cancel()
-        vibrator = null
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Incoming Calls",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notifications for incoming VoIP calls"
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            callerRingtonePlayer = android.media.MediaPlayer().apply {
+                // Use the notification sound as a ringing indicator
+                val uri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                setDataSource(ctx, uri)
+                setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
-                enableVibration(true)
-                vibrationPattern = longArrayOf(0, 1000, 500, 1000)
+                isLooping = true
+                prepare()
+                start()
             }
-            val nm = context?.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-            nm?.createNotificationChannel(channel)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not play caller ringtone: ${e.message}")
         }
     }
 
-    private fun showIncomingCallNotification(callerName: String) {
-        val ctx = context ?: return
-        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private fun stopCallerRingtone() {
+        callerRingtonePlayer?.stop()
+        callerRingtonePlayer?.release()
+        callerRingtonePlayer = null
+    }
 
-        // Full-screen intent to show incoming call UI
-        val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
-        val pendingIntent = PendingIntent.getActivity(
-            ctx, 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(ctx, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_call)
-            .setContentTitle("Incoming Call")
-            .setContentText(callerName)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setFullScreenIntent(pendingIntent, true)
-            .setOngoing(true)
-            .setAutoCancel(false)
-            .build()
-
-        nm.notify(1001, notification)
+    private fun playConnectionSound() {
+        try {
+            val ctx = context ?: return
+            val toneGen = android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 80)
+            toneGen.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 200)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toneGen.release() }, 300)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not play connection sound: ${e.message}")
+        }
     }
 
     // ── Network helpers ────────────────────────────────────────
