@@ -158,28 +158,37 @@ object CallingService {
             val tokenResponse = fetchToken(receiverBitrixUserId)
             val token = tokenResponse.getString("token")
 
-            // Join the same room
+            // Join the same room on main thread
             withContext(Dispatchers.Main) {
-                callAgent?.dispose()
-                callClient = CallClient()
-                val credential = CommunicationTokenCredential(token)
-                val options = CallAgentOptions().apply {
-                    displayName = receiverName
-                }
-                callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
+                try {
+                    callAgent?.dispose()
+                    callAgent = null
+                    callClient = null
 
-                val groupId = UUID.fromString(roomId)
-                val joinOptions = JoinCallOptions()
-                currentCall = callAgent!!.join(ctx.applicationContext, GroupCallLocator(groupId), joinOptions)
+                    callClient = CallClient()
+                    val credential = CommunicationTokenCredential(token)
+                    val options = CallAgentOptions().apply {
+                        displayName = receiverName
+                    }
+                    callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
 
-                currentCall?.addOnStateChangedListener {
-                    val state = currentCall?.state ?: return@addOnStateChangedListener
-                    handleCallStateChange(state)
+                    val groupId = UUID.fromString(roomId)
+                    val joinOptions = JoinCallOptions()
+                    currentCall = callAgent!!.join(ctx.applicationContext, GroupCallLocator(groupId), joinOptions)
+
+                    currentCall?.addOnStateChangedListener {
+                        val state = currentCall?.state ?: return@addOnStateChangedListener
+                        handleCallStateChange(state)
+                    }
+
+                    Log.d(TAG, "✅ Joined call room — connected!")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error joining room on main thread", e)
+                    _callState.value = CallUiState.Error("Failed to join: ${e.message}")
                 }
             }
 
             _callState.value = CallUiState.InCall
-            Log.d(TAG, "✅ Joined call room — connected!")
 
             // Stop the foreground service (ringtone + notification)
             CallForegroundService.stop(ctx.applicationContext)

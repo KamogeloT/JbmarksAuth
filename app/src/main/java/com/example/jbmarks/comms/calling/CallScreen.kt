@@ -123,10 +123,19 @@ fun IncomingCallScreen(
             onAccept = {
                 accepted = true
                 coroutineScope.launch {
-                    val userRepo = com.example.jbmarks.user.data.UserRepository(context)
-                    val currentUser = userRepo.getCurrentUser().getOrNull()
-                    if (currentUser != null) {
-                        CallingService.acceptCall(context, currentUser.id, currentUser.fullName, roomId)
+                    try {
+                        val userRepo = com.example.jbmarks.user.data.UserRepository(context)
+                        val currentUser = userRepo.getCurrentUser().getOrNull()
+                        if (currentUser != null) {
+                            CallingService.acceptCall(context, currentUser.id, currentUser.fullName, roomId)
+                        } else {
+                            CallingService.resetState()
+                            onDismiss()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("IncomingCallScreen", "Accept failed", e)
+                        CallingService.resetState()
+                        onDismiss()
                     }
                 }
             },

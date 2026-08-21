@@ -1,0 +1,1 @@
+import"./chunk-35PI25VP.js";var e=[{path:"",loadComponent:()=>import("./chunk-VYPXT4OT.js").then(t=>t.FilePlanComponent)},{path:"tree",loadComponent:()=>import("./chunk-LPPMCHDP.js").then(t=>t.FilePlanTreeComponent)},{path:"retention-rules",loadComponent:()=>import("./chunk-FS6NYFLL.js").then(t=>t.RetentionRuleListComponent)}];export{e as FILE_PLAN_ROUTES};
