@@ -1333,7 +1333,7 @@ app.post('/api/email/send', async (req, res) => {
             });
         }
 
-        const senderAddress = from || process.env.EMAIL_SENDER || 'noreply@sdinmotion.co.za';
+        const senderAddress = from || process.env.EMAIL_SENDER || 'DoNotReply@sdinmotion.co.za';
         const recipients = Array.isArray(to) ? to : [to];
 
         console.log(`📧 Sending email to: ${recipients.join(', ')} | Subject: ${subject}`);
@@ -1413,7 +1413,7 @@ app.post('/api/email/ticket-notification', async (req, res) => {
             });
         }
 
-        const senderAddress = process.env.EMAIL_SENDER || 'noreply@sdinmotion.co.za';
+        const senderAddress = process.env.EMAIL_SENDER || 'DoNotReply@sdinmotion.co.za';
         const { subject, html } = buildTicketEmailContent({
             type, ticketId, ticketTitle, recipientName,
             technicianName, callerName, status, comment,
@@ -1467,34 +1467,36 @@ function parseConnectionString(connStr) {
 }
 
 async function sendAzureEmail(endpoint, accessKey, emailPayload) {
-    const url = `${endpoint}/emails:send?api-version=2023-03-31`;
+    const apiVersion = '2023-03-31';
+    const path = `/emails:send?api-version=${apiVersion}`;
     const dateHeader = new Date().toUTCString();
-    
+
     const bodyStr = JSON.stringify(emailPayload);
     const contentHash = crypto.createHash('sha256').update(bodyStr).digest('base64');
-    
-    // Create HMAC signature for Azure Communication Services
-    const parsedUrl = new URL(url);
-    const stringToSign = `POST\n${parsedUrl.pathname}${parsedUrl.search}\n${dateHeader};${parsedUrl.host};${contentHash}`;
+
+    const parsedUrl = new URL(endpoint);
+    const host = parsedUrl.host;
+
+    // ACS HMAC signing: "VERB\nurl_path_and_query\ndate;host;content-sha256"
+    const stringToSign = `POST\n${path}\n${dateHeader};${host};${contentHash}`;
     const signature = crypto.createHmac('sha256', Buffer.from(accessKey, 'base64'))
         .update(stringToSign, 'utf8')
         .digest('base64');
-    
+
     const authHeader = `HMAC-SHA256 SignedHeaders=date;host;x-ms-content-sha256&Signature=${signature}`;
 
     return new Promise((resolve, reject) => {
         const options = {
-            hostname: parsedUrl.hostname,
+            hostname: host,
             port: 443,
-            path: `${parsedUrl.pathname}${parsedUrl.search}`,
+            path: path,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(bodyStr),
                 'Date': dateHeader,
                 'x-ms-content-sha256': contentHash,
-                'Authorization': authHeader,
-                'x-ms-date': dateHeader
+                'Authorization': authHeader
             }
         };
 
