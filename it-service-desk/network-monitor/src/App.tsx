@@ -1,19 +1,35 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { NetworkNode, NodeStatus, checkNode, checkAllNodesBatch } from './lib/monitor'
-import { loadNodes, saveNodes } from './lib/storage'
+import { loadNodes, loadNodesCache, saveNodes } from './lib/storage'
 import { playAlertSound } from './lib/sounds'
 import { Dashboard } from './components/Dashboard'
 import { ConfigPanel } from './components/ConfigPanel'
 
 export default function App() {
-  const [nodes, setNodes] = useState<NetworkNode[]>(() => loadNodes())
+  // Seed from the offline cache so the UI renders instantly, then hydrate
+  // from the shared backend on mount.
+  const [nodes, setNodes] = useState<NetworkNode[]>(() => loadNodesCache())
   const [statuses, setStatuses] = useState<Record<string, NodeStatus>>({})
   const [showConfig, setShowConfig] = useState(false)
   const [checking, setChecking] = useState(false)
   const prevDownRef = useRef<Set<string>>(new Set())
+  // Skip the first server-save: the initial state came from load, not a user edit.
+  const hydratedRef = useRef(false)
 
-  // Save nodes whenever they change
+  // Load the shared node list from the backend once on mount.
   useEffect(() => {
+    let cancelled = false
+    loadNodes().then(serverNodes => {
+      if (cancelled) return
+      hydratedRef.current = true
+      setNodes(serverNodes)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // Save nodes to the shared backend whenever the user changes them.
+  useEffect(() => {
+    if (!hydratedRef.current) return
     saveNodes(nodes)
   }, [nodes])
 

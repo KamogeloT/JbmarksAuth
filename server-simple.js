@@ -67,6 +67,22 @@ async function setupDatabase() {
             CREATE INDEX IF NOT EXISTS idx_user_id ON push_tokens(user_id);
         `);
         console.log('✅ Database indexes created/verified');
+
+        // Network Monitor: shared node configuration (globally accessible across devices)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS network_nodes (
+                id VARCHAR(64) PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                url VARCHAR(1000) NOT NULL,
+                location VARCHAR(500),
+                type VARCHAR(32) DEFAULT 'other',
+                expected_status INTEGER,
+                timeout INTEGER,
+                sort_order INTEGER DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log('✅ network_nodes table created/verified');
         
     } catch (err) {
         console.error('❌ Database setup error:', err);
@@ -1298,6 +1314,98 @@ async function issueAcsToken(endpoint, accessKey, acsUserId) {
         req.end();
     });
 }
+
+// ============================================
+// NETWORK MONITOR ENDPOINTS (shared node config, global across devices)
+// ============================================
+
+/**
+ * GET /api/network-nodes
+ * Returns the shared list of monitored network nodes.
+ */
+app.get('/api/network-nodes', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
+        }
+
+        const result = await pool.query(
+            'SELECT id, name, url, location, type, expected_status, timeout FROM network_nodes ORDER BY sort_order ASC, name ASC'
+        );
+
+        const nodes = result.rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            url: r.url,
+            location: r.location || '',
+            type: r.type || 'other',
+            ...(r.expected_status != null ? { expectedStatus: r.expected_status } : {}),
+            ...(r.timeout != null ? { timeout: r.timeout } : {}),
+        }));
+
+        res.json({ nodes });
+    } catch (error) {
+        console.error('❌ network-nodes GET error:', error.message);
+        res.status(500).json({ error: 'Failed to load network nodes', message: error.message });
+    }
+});
+
+/**
+ * POST /api/network-nodes
+ * Replaces the full shared node list (whole-list save, matches the client model).
+ *
+ * Body: { nodes: [{ id, name, url, location, type, expectedStatus?, timeout? }, ...] }
+ */
+app.post('/api/network-nodes', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
+        }
+
+        const { nodes } = req.body;
+        if (!Array.isArray(nodes)) {
+            return res.status(400).json({ error: 'Body must include a "nodes" array' });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('DELETE FROM network_nodes');
+
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i] || {};
+                if (!n.id || !n.name || !n.url) continue; // skip invalid rows
+                await client.query(
+                    `INSERT INTO network_nodes (id, name, url, location, type, expected_status, timeout, sort_order, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+                    [
+                        String(n.id),
+                        String(n.name),
+                        String(n.url),
+                        n.location != null ? String(n.location) : '',
+                        n.type != null ? String(n.type) : 'other',
+                        Number.isInteger(n.expectedStatus) ? n.expectedStatus : null,
+                        Number.isInteger(n.timeout) ? n.timeout : null,
+                        i,
+                    ]
+                );
+            }
+
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+
+        console.log(`✅ network_nodes saved (${nodes.length} nodes)`);
+        res.json({ success: true, count: nodes.length });
+    } catch (error) {
+        console.error('❌ network-nodes POST error:', error.message);
+        res.status(500).json({ error: 'Failed to save network nodes', message: error.message });
+    }
+});
 
 // ============================================
 // EMAIL NOTIFICATION ENDPOINTS (Azure Communication Services)
