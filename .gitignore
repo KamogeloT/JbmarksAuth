@@ -60,3 +60,7 @@ AuthKey_*.p8
 # IMPLEMENTATION_PLAN.md
 # PROJECT_ANALYSIS.md
 node_modules
+
+# Azure Static Web Apps CLI deploy artifacts
+it-service-desk/**/.*-api.zip
+it-service-desk/**/.*-app.zip

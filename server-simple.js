@@ -83,6 +83,21 @@ async function setupDatabase() {
             );
         `);
         console.log('✅ network_nodes table created/verified');
+
+        // Network Monitor: latest status per node, pushed by the on-network probe agent
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS network_status (
+                node_id VARCHAR(64) PRIMARY KEY,
+                status VARCHAR(16) NOT NULL,
+                response_time INTEGER,
+                status_code INTEGER,
+                error TEXT,
+                method VARCHAR(16),
+                last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                agent_id VARCHAR(128)
+            );
+        `);
+        console.log('✅ network_status table created/verified');
         
     } catch (err) {
         console.error('❌ Database setup error:', err);
@@ -1404,6 +1419,114 @@ app.post('/api/network-nodes', async (req, res) => {
     } catch (error) {
         console.error('❌ network-nodes POST error:', error.message);
         res.status(500).json({ error: 'Failed to save network nodes', message: error.message });
+    }
+});
+
+/**
+ * GET /api/network-status
+ * Returns the latest status for every node, as reported by the on-network agent.
+ * Shape matches what the dashboard expects: { statuses: { [nodeId]: {...} } }
+ */
+app.get('/api/network-status', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
+        }
+
+        const result = await pool.query(
+            'SELECT node_id, status, response_time, status_code, error, method, last_checked, agent_id FROM network_status'
+        );
+
+        const statuses = {};
+        for (const r of result.rows) {
+            statuses[r.node_id] = {
+                status: r.status,
+                responseTime: r.response_time != null ? r.response_time : 0,
+                lastChecked: r.last_checked ? new Date(r.last_checked).toISOString() : new Date().toISOString(),
+                ...(r.status_code != null ? { statusCode: r.status_code } : {}),
+                ...(r.error ? { error: r.error } : {}),
+                ...(r.method ? { method: r.method } : {}),
+                ...(r.agent_id ? { agentId: r.agent_id } : {}),
+            };
+        }
+
+        res.json({ statuses });
+    } catch (error) {
+        console.error('❌ network-status GET error:', error.message);
+        res.status(500).json({ error: 'Failed to load network status', message: error.message });
+    }
+});
+
+/**
+ * POST /api/network-status
+ * The on-network probe agent pushes a batch of results here.
+ * Requires header  x-agent-token  matching NETWORK_AGENT_TOKEN.
+ *
+ * Body: {
+ *   agentId?: string,
+ *   results: [{ nodeId, status, responseTime, statusCode?, error?, method? }, ...]
+ * }
+ */
+app.post('/api/network-status', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
+        }
+
+        // Simple shared-token auth for the agent
+        const expected = process.env.NETWORK_AGENT_TOKEN;
+        if (expected) {
+            const provided = req.headers['x-agent-token'];
+            if (provided !== expected) {
+                return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing x-agent-token' });
+            }
+        }
+
+        const { agentId, results } = req.body;
+        if (!Array.isArray(results)) {
+            return res.status(400).json({ error: 'Body must include a "results" array' });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            for (const r of results) {
+                if (!r || !r.nodeId || !r.status) continue;
+                await client.query(
+                    `INSERT INTO network_status (node_id, status, response_time, status_code, error, method, last_checked, agent_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7)
+                     ON CONFLICT (node_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        response_time = EXCLUDED.response_time,
+                        status_code = EXCLUDED.status_code,
+                        error = EXCLUDED.error,
+                        method = EXCLUDED.method,
+                        last_checked = CURRENT_TIMESTAMP,
+                        agent_id = EXCLUDED.agent_id`,
+                    [
+                        String(r.nodeId),
+                        String(r.status),
+                        Number.isInteger(r.responseTime) ? r.responseTime : null,
+                        Number.isInteger(r.statusCode) ? r.statusCode : null,
+                        r.error != null ? String(r.error) : null,
+                        r.method != null ? String(r.method) : null,
+                        agentId != null ? String(agentId) : null,
+                    ]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+
+        console.log(`✅ network_status updated by agent "${agentId || 'unknown'}" (${results.length} results)`);
+        res.json({ success: true, count: results.length });
+    } catch (error) {
+        console.error('❌ network-status POST error:', error.message);
+        res.status(500).json({ error: 'Failed to save network status', message: error.message });
     }
 });
 

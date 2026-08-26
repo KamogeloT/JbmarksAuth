@@ -1,0 +1,14 @@
+{
+  "name": "jbmarks-network-agent",
+  "version": "1.0.0",
+  "description": "On-network probe agent for JBmarks Network Monitor (ICMP/TCP/HTTP checks reported to the backend)",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

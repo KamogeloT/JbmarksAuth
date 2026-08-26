@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { NetworkNode, NodeStatus, checkNode, checkAllNodesBatch } from './lib/monitor'
+import { NetworkNode, NodeStatus, checkAllNodesBatch, fetchAgentStatuses } from './lib/monitor'
 import { loadNodes, loadNodesCache, saveNodes } from './lib/storage'
 import { playAlertSound } from './lib/sounds'
 import { Dashboard } from './components/Dashboard'
@@ -38,8 +38,11 @@ export default function App() {
     if (nodes.length === 0) return
     setChecking(true)
 
-    // Use batch API for efficiency
-    const results = await checkAllNodesBatch(nodes)
+    // Prefer results from the on-network probe agent (real ICMP/TCP/HTTP,
+    // reaches internal devices). Fall back to the browser/Azure batch check
+    // if no agent has reported yet.
+    const agentResults = await fetchAgentStatuses()
+    const results = agentResults || (await checkAllNodesBatch(nodes))
 
     // Detect new failures and alert
     const currentDown = new Set<string>()

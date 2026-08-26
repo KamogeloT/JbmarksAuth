@@ -20,9 +20,30 @@ export interface NodeStatus {
   lastChecked: string    // ISO timestamp
   statusCode?: number
   error?: string
+  method?: 'icmp' | 'tcp' | 'http' | string  // how the agent checked it
+  agentId?: string                            // which probe reported it
 }
 
 const API_BASE = '/api'
+// Shared backend where the on-network agent reports real ICMP/TCP/HTTP results.
+const BACKEND_BASE = 'https://jbmarksauth-production.up.railway.app'
+
+/**
+ * Fetch statuses reported by the on-network probe agent.
+ * Returns null if the endpoint is unavailable or has no data yet, so the
+ * caller can fall back to the browser/Azure check.
+ */
+export async function fetchAgentStatuses(): Promise<Record<string, NodeStatus> | null> {
+  try {
+    const res = await fetch(`${BACKEND_BASE}/api/network-status`, { cache: 'no-store' })
+    if (!res.ok) return null
+    const data = await res.json()
+    const statuses: Record<string, NodeStatus> = data.statuses || {}
+    return Object.keys(statuses).length > 0 ? statuses : null
+  } catch {
+    return null
+  }
+}
 
 /** Check a single node via server-side API */
 export async function checkNode(node: NetworkNode): Promise<NodeStatus> {
