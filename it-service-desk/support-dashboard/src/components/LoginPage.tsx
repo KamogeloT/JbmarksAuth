@@ -2,69 +2,23 @@
 
 import { useState } from 'react'
 
-const WEBHOOK_URL = 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss'
-const IT_GROUP_ID = '14'
-
 interface LoginPageProps {
-  onLoginSuccess: (user: any) => void
+  /** Returns true on success. Errors surfaced via the `error` prop from useAuth. */
+  onLogin: (username: string, password: string) => Promise<boolean>
+  error?: string
 }
 
-export function LoginPage({ onLoginSuccess }: LoginPageProps) {
+export function LoginPage({ onLogin, error }: LoginPageProps) {
   const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!username.trim()) return
-
+    if (!username.trim() || !password) return
     setLoading(true)
-    setError('')
-
     try {
-      // Get IT group members first
-      const membersResp = await fetch(`${WEBHOOK_URL}/sonet_group.user.get.json`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ID: IT_GROUP_ID }),
-      })
-      const membersData = await membersResp.json()
-      const memberIds = (membersData.result || []).map((m: any) => m.USER_ID)
-
-      // Fetch all users
-      const resp = await fetch(`${WEBHOOK_URL}/user.get.json`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filter: { ACTIVE: true } }),
-      })
-
-      if (!resp.ok) throw new Error('Unable to connect to SDiM')
-      const data = await resp.json()
-      if (!data.result) throw new Error('Unable to fetch users')
-
-      const loginLower = username.trim().toLowerCase()
-      const found = data.result.find((u: any) =>
-        u.EMAIL?.toLowerCase() === loginLower ||
-        u.LOGIN?.toLowerCase() === loginLower ||
-        `${u.NAME} ${u.LAST_NAME}`.toLowerCase() === loginLower ||
-        u.NAME?.toLowerCase() === loginLower ||
-        u.LAST_NAME?.toLowerCase() === loginLower
-      )
-
-      if (!found) {
-        setError('User not found. Please check your username and try again.')
-        return
-      }
-
-      // Verify user is a member of IT group
-      if (!memberIds.includes(found.ID)) {
-        setError('Access denied. You must be a member of the IT Support team.')
-        return
-      }
-
-      onLoginSuccess(found)
-    } catch (err: any) {
-      setError(err.message || 'Login failed')
+      await onLogin(username.trim(), password)
     } finally {
       setLoading(false)
     }
@@ -83,19 +37,33 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">IT Support Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to manage IT tickets</p>
+          <p className="text-sm text-gray-500 mt-1">Sign in with your SDiM credentials</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Username or Email</label>
             <input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
-              placeholder="Enter your name, login, or email"
+              placeholder="Your SDiM login or email"
               required
               autoFocus
+              autoComplete="username"
+              className="w-full px-4 py-3 bg-gray-100/60 border-0 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-brand-medium/50 focus:bg-white outline-none transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Your SDiM password"
+              required
+              autoComplete="current-password"
               className="w-full px-4 py-3 bg-gray-100/60 border-0 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-brand-medium/50 focus:bg-white outline-none transition"
             />
           </div>
@@ -106,15 +74,15 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
           <button
             type="submit"
-            disabled={loading || !username.trim()}
+            disabled={loading || !username.trim() || !password}
             className="w-full bg-brand-dark text-white py-3.5 rounded-2xl font-semibold text-base hover:bg-brand-medium transition-all duration-200 disabled:opacity-50 shadow-ios"
           >
-            {loading ? 'Verifying...' : 'Sign In'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
         <p className="text-xs text-gray-400 text-center mt-6">
-          Only IT Support team members can access this dashboard
+          IT Support staff &amp; management only
         </p>
       </div>
     </div>

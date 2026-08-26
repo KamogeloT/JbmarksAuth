@@ -196,16 +196,442 @@ initFirebase();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS for Android app
+// CORS (Bearer-token auth, so wildcard origin is safe — no cookies used)
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-agent-token');
     if (req.method === 'OPTIONS') {
         return res.sendStatus(200);
     }
     next();
 });
+
+// ============================================
+// AUTHENTICATION & RBAC (server-side, JWT via crypto — no extra deps)
+// ============================================
+const authCrypto = require('crypto');
+const SDESK_WEBHOOK = process.env.BITRIX_WEBHOOK_URL || 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss';
+const SDESK_IT_GROUP = process.env.IT_GROUP_ID || '14';        // IT Support agents
+const SDESK_MGR_GROUP = process.env.SDESK_MANAGER_GROUP || '17'; // Service Desk Managers (read-only)
+const JWT_SECRET = process.env.JWT_SECRET || 'CHANGE_ME_dev_only_secret';
+const JWT_TTL_SECONDS = parseInt(process.env.JWT_TTL_SECONDS || '43200', 10); // 12h
+
+const ROLES = { ADMIN: 'admin', AGENT: 'agent', MANAGER: 'manager', REQUESTER: 'requester' };
+
+function b64url(buf) {
+    return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlJson(obj) { return b64url(JSON.stringify(obj)); }
+
+function signJwt(payload) {
+    const header = { alg: 'HS256', typ: 'JWT' };
+    const now = Math.floor(Date.now() / 1000);
+    const body = { ...payload, iat: now, exp: now + JWT_TTL_SECONDS };
+    const data = `${b64urlJson(header)}.${b64urlJson(body)}`;
+    const sig = b64url(authCrypto.createHmac('sha256', JWT_SECRET).update(data).digest());
+    return `${data}.${sig}`;
+}
+
+function verifyJwt(token) {
+    try {
+        const [h, p, s] = token.split('.');
+        if (!h || !p || !s) return null;
+        const expected = b64url(authCrypto.createHmac('sha256', JWT_SECRET).update(`${h}.${p}`).digest());
+        // constant-time compare
+        if (s.length !== expected.length || !authCrypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return null;
+        const payload = JSON.parse(Buffer.from(p.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+        if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
+        return payload;
+    } catch { return null; }
+}
+
+// Server-side Bitrix call (keeps the webhook token off the client)
+function sdeskBitrix(method, params) {
+    return new Promise((resolve, reject) => {
+        const url = new URL(`${SDESK_WEBHOOK.replace(/\/$/, '')}/${method}.json`);
+        const body = JSON.stringify(params || {});
+        const options = {
+            hostname: url.hostname, port: 443, path: url.pathname + url.search, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        };
+        const rq = https.request(options, (resp) => {
+            let data = '';
+            resp.on('data', c => data += c);
+            resp.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.error) return reject(new Error(parsed.error_description || parsed.error));
+                    resolve(parsed);
+                } catch (e) { reject(new Error(`Bitrix parse error: ${data.slice(0, 200)}`)); }
+            });
+        });
+        rq.on('error', reject);
+        rq.write(body); rq.end();
+    });
+}
+
+// Determine a user's Service Desk role from Bitrix group membership.
+// Manager group (read-only) takes precedence for reporting; group-14 role
+// (A/E owner-moderator = admin, else agent); otherwise requester.
+async function resolveRole(userId) {
+    let itRole = null, isManager = false;
+    try {
+        const it = await sdeskBitrix('sonet_group.user.get', { ID: SDESK_IT_GROUP });
+        const me = (it.result || []).find(m => String(m.USER_ID) === String(userId));
+        if (me) itRole = me.ROLE; // 'A' owner, 'E' moderator, 'K' member
+    } catch { /* ignore */ }
+    try {
+        const mg = await sdeskBitrix('sonet_group.user.get', { ID: SDESK_MGR_GROUP });
+        isManager = (mg.result || []).some(m => String(m.USER_ID) === String(userId));
+    } catch { /* ignore */ }
+
+    if (itRole === 'A' || itRole === 'E') return ROLES.ADMIN;
+    if (itRole === 'K') return ROLES.AGENT;
+    if (isManager) return ROLES.MANAGER;
+    return ROLES.REQUESTER;
+}
+
+// Middleware: require a valid JWT; attaches req.auth = { sub, role, name, email }
+function requireAuth(req, res, next) {
+    const hdr = req.headers['authorization'] || '';
+    const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : null;
+    const payload = token ? verifyJwt(token) : null;
+    if (!payload) return res.status(401).json({ error: 'unauthorized', message: 'Valid session token required' });
+    req.auth = payload;
+    next();
+}
+
+// Middleware: require one of the given roles
+function requireRole(...roles) {
+    return (req, res, next) => {
+        if (!req.auth) return res.status(401).json({ error: 'unauthorized' });
+        if (!roles.includes(req.auth.role)) {
+            return res.status(403).json({ error: 'forbidden', message: `Requires role: ${roles.join(' or ')}` });
+        }
+        next();
+    };
+}
+
+// Machine-endpoint guard (agent/cron). Uses NETWORK_AGENT_TOKEN or JWT admin.
+function requireAgentOrAdmin(req, res, next) {
+    const expected = process.env.NETWORK_AGENT_TOKEN;
+    const provided = req.headers['x-agent-token'];
+    if (expected && provided === expected) return next();
+    const hdr = req.headers['authorization'] || '';
+    const payload = hdr.startsWith('Bearer ') ? verifyJwt(hdr.slice(7)) : null;
+    if (payload && (payload.role === ROLES.ADMIN)) return next();
+    return res.status(401).json({ error: 'unauthorized', message: 'Agent token or admin session required' });
+}
+
+/**
+ * POST /api/auth/login
+ * Body: { username, password }
+ * Verifies the password against Bitrix, resolves role, returns a signed JWT.
+ */
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body || {};
+        if (!username || !password) {
+            return res.status(400).json({ error: 'bad_request', message: 'username and password required' });
+        }
+
+        // Verify credentials against Bitrix. The self-hosted portal accepts a
+        // login via the OAuth password grant on the box; we validate by calling
+        // user.get filtered to the login and confirming via the password endpoint.
+        // Bitrix webhooks can't verify passwords directly, so we use the portal
+        // login form endpoint to authenticate.
+        let authedUser = null;
+        try {
+            const bxUser = await bitrixVerifyPassword(username, password);
+            authedUser = bxUser;
+        } catch (e) {
+            return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid username or password' });
+        }
+        if (!authedUser) {
+            return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid username or password' });
+        }
+
+        const role = await resolveRole(authedUser.ID);
+        const token = signJwt({
+            sub: String(authedUser.ID),
+            role,
+            name: `${authedUser.NAME || ''} ${authedUser.LAST_NAME || ''}`.trim(),
+            email: authedUser.EMAIL || '',
+        });
+
+        console.log(`🔐 Login: user ${authedUser.ID} (${authedUser.EMAIL}) role=${role}`);
+        res.json({
+            token,
+            user: {
+                id: String(authedUser.ID),
+                name: authedUser.NAME || '',
+                lastName: authedUser.LAST_NAME || '',
+                email: authedUser.EMAIL || '',
+                position: authedUser.WORK_POSITION || '',
+                photo: authedUser.PERSONAL_PHOTO || null,
+                role,
+            },
+        });
+    } catch (error) {
+        console.error('❌ Login error:', error.message);
+        res.status(500).json({ error: 'login_failed', message: error.message });
+    }
+});
+
+/** GET /api/auth/me — returns current session identity + role */
+app.get('/api/auth/me', requireAuth, (req, res) => {
+    res.json({ id: req.auth.sub, role: req.auth.role, name: req.auth.name, email: req.auth.email });
+});
+
+// ============================================
+// SERVICE DESK TICKET PROXY (role-enforced; keeps Bitrix token server-side)
+// ============================================
+
+function extractDescField(description, label) {
+    if (!description) return '';
+    const re = new RegExp(`^${label}:\\s*(.+)`, 'im');
+    for (const line of String(description).split('\n')) {
+        const m = re.exec(line.trim());
+        if (m && m[1] && m[1].trim() && m[1].trim() !== 'Not provided') return m[1].trim();
+    }
+    return '';
+}
+
+/**
+ * GET /api/tickets
+ * Agents/Admins/Managers: all IT tickets. Requesters: only their own
+ * (tickets they created OR where description Email matches their session email).
+ */
+app.get('/api/tickets', requireAuth, async (req, res) => {
+    try {
+        const resp = await sdeskBitrix('tasks.task.list', {
+            filter: { GROUP_ID: SDESK_IT_GROUP },
+            select: ['ID', 'TITLE', 'DESCRIPTION', 'STATUS', 'PRIORITY', 'DEADLINE', 'CREATED_DATE', 'CLOSED_DATE', 'CREATED_BY', 'RESPONSIBLE_ID', 'GROUP_ID'],
+        });
+        let tasks = (resp.result && resp.result.tasks) || [];
+
+        // Requesters only see their own tickets
+        if (req.auth.role === ROLES.REQUESTER) {
+            const myId = String(req.auth.sub);
+            const myEmail = (req.auth.email || '').toLowerCase();
+            tasks = tasks.filter(t => {
+                const createdBy = String(t.createdBy || t.CREATED_BY || '');
+                const email = extractDescField(t.description || t.DESCRIPTION, 'Email').toLowerCase();
+                return createdBy === myId || (myEmail && email === myEmail);
+            });
+        }
+        res.json({ tickets: tasks, role: req.auth.role });
+    } catch (error) {
+        console.error('❌ /api/tickets error:', error.message);
+        res.status(500).json({ error: 'tickets_failed', message: error.message });
+    }
+});
+
+/** GET /api/tickets/:id — same ownership rules as the list */
+app.get('/api/tickets/:id', requireAuth, async (req, res) => {
+    try {
+        const resp = await sdeskBitrix('tasks.task.get', { taskId: req.params.id, select: ['*', 'UF_*'] });
+        const task = resp.result && resp.result.task;
+        if (!task) return res.status(404).json({ error: 'not_found' });
+
+        if (req.auth.role === ROLES.REQUESTER) {
+            const myId = String(req.auth.sub);
+            const myEmail = (req.auth.email || '').toLowerCase();
+            const createdBy = String(task.createdBy || '');
+            const email = extractDescField(task.description, 'Email').toLowerCase();
+            if (createdBy !== myId && !(myEmail && email === myEmail)) {
+                return res.status(403).json({ error: 'forbidden', message: 'You can only view your own tickets' });
+            }
+        }
+        res.json({ ticket: task });
+    } catch (error) {
+        console.error('❌ /api/tickets/:id error:', error.message);
+        res.status(500).json({ error: 'ticket_failed', message: error.message });
+    }
+});
+
+/**
+ * POST /api/tickets  — create a ticket (any authenticated user = requester+).
+ * The server stamps CREATED_BY from the session so ownership is trustworthy.
+ * Body: { title, description, priority (0-2), deadlineHours? }
+ */
+app.post('/api/tickets', requireAuth, async (req, res) => {
+    try {
+        const { title, description, priority, deadlineHours } = req.body || {};
+        if (!title) return res.status(400).json({ error: 'bad_request', message: 'title required' });
+
+        const fields = {
+            TITLE: String(title),
+            DESCRIPTION: String(description || ''),
+            GROUP_ID: SDESK_IT_GROUP,
+            RESPONSIBLE_ID: WEBHOOK_USER_ID,   // unassigned queue
+            CREATED_BY: String(req.auth.sub),  // trustworthy owner from session
+            PRIORITY: ['0', '1', '2'].includes(String(priority)) ? String(priority) : '1',
+        };
+        if (deadlineHours) {
+            const dl = new Date(Date.now() + Number(deadlineHours) * 3600000);
+            fields.DEADLINE = dl.toISOString();
+        }
+        const resp = await sdeskBitrix('tasks.task.add', { fields });
+        const taskId = resp.result && resp.result.task && resp.result.task.id;
+        res.json({ success: true, ticketId: taskId });
+    } catch (error) {
+        console.error('❌ ticket create error:', error.message);
+        res.status(500).json({ error: 'create_failed', message: error.message });
+    }
+});
+
+/** POST /api/tickets/:id/action  { action: start|complete|defer|reopen } — Agent/Admin only */
+app.post('/api/tickets/:id/action', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN), async (req, res) => {
+    try {
+        const { action } = req.body || {};
+        const map = { start: 'tasks.task.start', complete: 'tasks.task.complete', defer: 'tasks.task.defer', reopen: 'tasks.task.renew' };
+        if (!map[action]) return res.status(400).json({ error: 'bad_action' });
+        await sdeskBitrix(map[action], { taskId: req.params.id });
+        // Attributable audit comment
+        await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `📋 Status "${action}" by ${req.auth.name} (${req.auth.role})` }]).catch(() => {});
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ ticket action error:', error.message);
+        res.status(500).json({ error: 'action_failed', message: error.message });
+    }
+});
+
+/** POST /api/tickets/:id/assign { userId } — Agent/Admin only */
+app.post('/api/tickets/:id/assign', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN), async (req, res) => {
+    try {
+        const { userId } = req.body || {};
+        if (!userId) return res.status(400).json({ error: 'bad_request', message: 'userId required' });
+        await sdeskBitrix('tasks.task.update', { taskId: req.params.id, fields: { RESPONSIBLE_ID: String(userId) } });
+        await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `🔧 Assigned to user ${userId} by ${req.auth.name}` }]).catch(() => {});
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ ticket assign error:', error.message);
+        res.status(500).json({ error: 'assign_failed', message: error.message });
+    }
+});
+
+/** POST /api/tickets/:id/comment { text } — Agent/Admin (requesters can comment on own) */
+app.post('/api/tickets/:id/comment', requireAuth, async (req, res) => {
+    try {
+        const { text } = req.body || {};
+        if (!text) return res.status(400).json({ error: 'bad_request', message: 'text required' });
+        if (req.auth.role === ROLES.MANAGER) {
+            return res.status(403).json({ error: 'forbidden', message: 'Reporting/Management is read-only' });
+        }
+        // Requesters may only comment on their own tickets
+        if (req.auth.role === ROLES.REQUESTER) {
+            const resp = await sdeskBitrix('tasks.task.get', { taskId: req.params.id, select: ['CREATED_BY', 'DESCRIPTION'] });
+            const task = resp.result && resp.result.task;
+            const createdBy = String(task?.createdBy || '');
+            const email = extractDescField(task?.description, 'Email').toLowerCase();
+            if (createdBy !== String(req.auth.sub) && email !== (req.auth.email || '').toLowerCase()) {
+                return res.status(403).json({ error: 'forbidden' });
+            }
+        }
+        await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `${text}\n\n— ${req.auth.name}` }]);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ ticket comment error:', error.message);
+        res.status(500).json({ error: 'comment_failed', message: error.message });
+    }
+});
+
+/** GET /api/team — IT team members with details (Agent/Admin/Manager) */
+app.get('/api/team', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN, ROLES.MANAGER), async (req, res) => {
+    try {
+        const resp = await sdeskBitrix('sonet_group.user.get', { ID: SDESK_IT_GROUP });
+        const memberIds = (resp.result || []).map(m => m.USER_ID);
+        const members = [];
+        for (const uid of memberIds) {
+            try {
+                const u = await sdeskBitrix('user.get', { ID: uid });
+                const found = (u.result || [])[0];
+                if (found) members.push({
+                    ID: found.ID, NAME: found.NAME, LAST_NAME: found.LAST_NAME,
+                    EMAIL: found.EMAIL, WORK_POSITION: found.WORK_POSITION, PERSONAL_PHOTO: found.PERSONAL_PHOTO,
+                });
+            } catch { /* skip */ }
+        }
+        res.json({ members });
+    } catch (error) {
+        res.status(500).json({ error: 'team_failed', message: error.message });
+    }
+});
+
+// Health check
+
+/**
+ * Verify a Bitrix user's password against the self-hosted portal.
+ * Uses the box OAuth password grant. Falls back to rejecting if unavailable.
+ */
+function bitrixVerifyPassword(username, password) {
+    return new Promise((resolve, reject) => {
+        // Self-hosted Bitrix exposes /oauth/token/ with grant_type=password for
+        // the portal. We attempt it; on success we then look up the full user.
+        const portalHost = new URL(SDESK_WEBHOOK).host;
+        const form = new URLSearchParams({
+            grant_type: 'password',
+            client_id: process.env.BITRIX_CLIENT_ID || '',
+            client_secret: process.env.BITRIX_CLIENT_SECRET || '',
+            username,
+            password,
+        }).toString();
+
+        // If no OAuth client configured, use the login-check webhook fallback.
+        if (!process.env.BITRIX_CLIENT_ID) {
+            // Fallback: verify via a dedicated auth webhook that checks credentials.
+            // Requires BITRIX_AUTH_CHECK_URL (a small server-side script on the box).
+            const checkUrl = process.env.BITRIX_AUTH_CHECK_URL;
+            if (!checkUrl) return reject(new Error('No auth method configured'));
+            const body = JSON.stringify({ username, password });
+            const u = new URL(checkUrl);
+            const rq = https.request({
+                hostname: u.hostname, port: 443, path: u.pathname + u.search, method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                    'x-sdesk-secret': process.env.BITRIX_AUTH_SECRET || '',
+                },
+            }, (resp) => {
+                let data = '';
+                resp.on('data', c => data += c);
+                resp.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed && parsed.success && parsed.user) resolve(parsed.user);
+                        else reject(new Error('Invalid credentials'));
+                    } catch { reject(new Error('Auth check failed')); }
+                });
+            });
+            rq.on('error', reject);
+            rq.write(body); rq.end();
+            return;
+        }
+
+        const rq = https.request({
+            hostname: portalHost, port: 443, path: '/oauth/token/', method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(form) },
+        }, (resp) => {
+            let data = '';
+            resp.on('data', c => data += c);
+            resp.on('end', async () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.access_token && parsed.user_id) {
+                        const u = await sdeskBitrix('user.get', { ID: parsed.user_id });
+                        const found = (u.result || [])[0];
+                        if (found) return resolve(found);
+                    }
+                    reject(new Error('Invalid credentials'));
+                } catch { reject(new Error('Auth failed')); }
+            });
+        });
+        rq.on('error', reject);
+        rq.write(form); rq.end();
+    });
+}
 
 // Health check
 app.get('/health', (req, res) => {
@@ -1383,7 +1809,7 @@ app.get('/api/network-nodes', async (req, res) => {
  *
  * Body: { nodes: [{ id, name, url, location, type, expectedStatus?, timeout? }, ...] }
  */
-app.post('/api/network-nodes', async (req, res) => {
+app.post('/api/network-nodes', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN), async (req, res) => {
     try {
         if (!pool) {
             return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
@@ -1479,19 +1905,10 @@ app.get('/api/network-status', async (req, res) => {
  *   results: [{ nodeId, status, responseTime, statusCode?, error?, method? }, ...]
  * }
  */
-app.post('/api/network-status', async (req, res) => {
+app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
     try {
         if (!pool) {
             return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
-        }
-
-        // Simple shared-token auth for the agent
-        const expected = process.env.NETWORK_AGENT_TOKEN;
-        if (expected) {
-            const provided = req.headers['x-agent-token'];
-            if (provided !== expected) {
-                return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or missing x-agent-token' });
-            }
         }
 
         const { agentId, results } = req.body;
@@ -1558,7 +1975,7 @@ app.post('/api/network-status', async (req, res) => {
  *   from?: string                 // Sender (default: noreply@sdinmotion.co.za)
  * }
  */
-app.post('/api/email/send', async (req, res) => {
+app.post('/api/email/send', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN), async (req, res) => {
     try {
         const connectionString = process.env.AZURE_COMMS_CONNECTION_STRING;
         if (!connectionString) {
@@ -1634,7 +2051,7 @@ app.post('/api/email/send', async (req, res) => {
  *   department?: string
  * }
  */
-app.post('/api/email/ticket-notification', async (req, res) => {
+app.post('/api/email/ticket-notification', requireAuth, async (req, res) => {
     try {
         const connectionString = process.env.AZURE_COMMS_CONNECTION_STRING;
         if (!connectionString) {
@@ -2058,7 +2475,7 @@ async function runEscalationScan() {
 }
 
 /** Manual trigger for testing / on-demand runs. */
-app.post('/api/escalation/run', async (req, res) => {
+app.post('/api/escalation/run', requireAgentOrAdmin, async (req, res) => {
     console.log('▶️ Manual escalation scan triggered');
     const result = await runEscalationScan();
     res.json({ success: !result.error, ...result });

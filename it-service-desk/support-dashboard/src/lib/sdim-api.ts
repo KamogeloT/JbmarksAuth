@@ -1,10 +1,11 @@
 /**
- * SDiM REST API Client for IT Support Dashboard
- * Connects to the same portal as JBmarks app
+ * Service Desk API client.
+ * All calls go through the authenticated backend proxy (/api/tickets, /api/team).
+ * The Bitrix webhook token is server-side only and never exposed to the browser.
  */
 
-const WEBHOOK_URL = 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss'
-const IT_GROUP_ID = '14'
+import { apiFetch } from './api'
+
 const WEBHOOK_USER_ID = '1' // Tickets assigned to this user are considered "Unassigned"
 
 export interface SDiMTask {
@@ -98,113 +99,65 @@ export function parseCallerInfo(description: string | undefined): CallerInfo {
 }
 
 class SDiMApiClient {
-  private baseUrl: string
-
-  constructor() {
-    this.baseUrl = WEBHOOK_URL
+  private async json<T>(res: Response): Promise<T> {
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error((data as any).message || (data as any).error || `API error ${res.status}`)
+    return data as T
   }
 
-  private async request<T>(method: string, params: Record<string, any> = {}): Promise<T> {
-    const response = await fetch(`${this.baseUrl}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    })
-    if (!response.ok) throw new Error(`API error: ${response.status}`)
-    const data = await response.json()
-    if (data.error) throw new Error(data.error_description || data.error)
-    return data
-  }
-
-  /** Fetch all IT tickets (tasks in group 14) with pagination */
+  /** Fetch all IT tickets (server enforces role-based scope). */
   async getAllTickets(): Promise<SDiMTask[]> {
-    const allTasks: SDiMTask[] = []
-    let start = 0
-    let hasMore = true
-
-    while (hasMore) {
-      const response = await this.request<{ result: { tasks: SDiMTask[] }; next?: number }>(
-        'tasks.task.list',
-        { filter: { GROUP_ID: IT_GROUP_ID }, select: ['*', 'UF_*'], start }
-      )
-      const tasks = response.result?.tasks || []
-      allTasks.push(...tasks)
-      if (response.next) start = response.next
-      else hasMore = false
-    }
-
-    return allTasks
+    const res = await apiFetch('/api/tickets')
+    const data = await this.json<{ tickets: SDiMTask[] }>(res)
+    return data.tickets || []
   }
 
   /** Get a single ticket */
   async getTicket(taskId: string): Promise<SDiMTask | null> {
-    const response = await this.request<{ result: { task: SDiMTask } }>(
-      'tasks.task.get',
-      { taskId, select: ['*', 'UF_*'] }
-    )
-    return response.result?.task || null
+    const res = await apiFetch(`/api/tickets/${taskId}`)
+    const data = await this.json<{ ticket: SDiMTask }>(res)
+    return data.ticket || null
   }
 
-  /** Update ticket status */
-  async startTicket(taskId: string): Promise<void> {
-    await this.request('tasks.task.start', { taskId })
+  private async action(taskId: string, action: string): Promise<void> {
+    await this.json(await apiFetch(`/api/tickets/${taskId}/action`, {
+      method: 'POST', body: JSON.stringify({ action }),
+    }))
   }
 
-  async completeTicket(taskId: string): Promise<void> {
-    await this.request('tasks.task.complete', { taskId })
-  }
+  async startTicket(taskId: string): Promise<void> { await this.action(taskId, 'start') }
+  async completeTicket(taskId: string): Promise<void> { await this.action(taskId, 'complete') }
+  async deferTicket(taskId: string): Promise<void> { await this.action(taskId, 'defer') }
+  async renewTicket(taskId: string): Promise<void> { await this.action(taskId, 'reopen') }
 
-  async deferTicket(taskId: string): Promise<void> {
-    await this.request('tasks.task.defer', { taskId })
-  }
-
-  async renewTicket(taskId: string): Promise<void> {
-    await this.request('tasks.task.renew', { taskId })
-  }
-
-  /** Reassign ticket */
+  /** Reassign ticket (Agent/Admin only — enforced server-side) */
   async reassignTicket(taskId: string, newResponsibleId: string): Promise<void> {
-    await this.request('tasks.task.update', {
-      taskId,
-      fields: { RESPONSIBLE_ID: newResponsibleId },
-    })
+    await this.json(await apiFetch(`/api/tickets/${taskId}/assign`, {
+      method: 'POST', body: JSON.stringify({ userId: newResponsibleId }),
+    }))
   }
 
   /** Add comment to ticket */
   async addComment(taskId: string, text: string): Promise<void> {
-    await this.request('task.commentitem.add', [taskId, { POST_MESSAGE: text }])
+    await this.json(await apiFetch(`/api/tickets/${taskId}/comment`, {
+      method: 'POST', body: JSON.stringify({ text }),
+    }))
   }
 
-  /** Get comments for a ticket */
+  /** Comments are returned inline by the ticket detail proxy; kept for compatibility. */
   async getComments(taskId: string): Promise<any[]> {
-    const response = await this.request<{ result: any[] }>('task.commentitem.getlist', { TASK_ID: taskId })
-    return response.result || []
-  }
-
-  /** Get current user */
-  async getCurrentUser(): Promise<SDiMUser> {
-    const response = await this.request<{ result: SDiMUser }>('user.current')
-    return response.result
-  }
-
-  /** Get all users */
-  async getAllUsers(): Promise<SDiMUser[]> {
-    const response = await this.request<{ result: SDiMUser[] }>('user.get', { ACTIVE: true })
-    return response.result || []
+    try {
+      const res = await apiFetch(`/api/tickets/${taskId}`)
+      const data = await this.json<{ ticket: any }>(res)
+      return data.ticket?.comments || []
+    } catch { return [] }
   }
 
   /** Get IT team members (group 14) */
   async getTeamMembers(): Promise<any[]> {
-    const response = await this.request<{ result: any[] }>('sonet_group.user.get', { ID: IT_GROUP_ID })
-    return response.result || []
-  }
-
-  /** Log time */
-  async logTime(taskId: string, seconds: number, comment?: string): Promise<void> {
-    await this.request('task.elapseditem.add', {
-      TASKID: taskId,
-      FIELDS: { SECONDS: seconds, COMMENT_TEXT: comment || '' },
-    })
+    const res = await apiFetch('/api/team')
+    const data = await this.json<{ members: any[] }>(res)
+    return data.members || []
   }
 }
 

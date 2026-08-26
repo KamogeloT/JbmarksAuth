@@ -1,8 +1,9 @@
 export const config = {
+  // NOTE: The Bitrix webhook token is NO LONGER used in the browser. All SDiM
+  // access goes through the authenticated backend (see services/api.ts).
   sdim: {
-    webhookUrl: 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss',
-    groupId: '14', // IT Support workgroup
-    defaultResponsibleId: '1', // Default assignee for new tickets
+    groupId: '14', // IT Support workgroup (reference only)
+    defaultResponsibleId: '1', // Unassigned-queue user (reference only)
   },
   app: {
     name: 'IT Helpdesk',

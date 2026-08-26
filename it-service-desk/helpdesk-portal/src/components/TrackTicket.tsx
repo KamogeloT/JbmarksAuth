@@ -2,12 +2,11 @@ import { useState, useCallback } from 'react'
 import { storageService } from '../services/storageService'
 import { ITTicket } from '../types'
 import { useAutoRefresh } from '../hooks/useAutoRefresh'
+import { apiFetch } from '../services/api'
 
 interface TrackTicketProps {
   onBack: () => void
 }
-
-const WEBHOOK_URL = 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss'
 
 /**
  * Clean Bitrix BBCode and emoji codes from comment text
@@ -78,13 +77,14 @@ export function TrackTicket({ onBack }: TrackTicketProps) {
     setComments([])
 
     try {
-      const resp = await fetch(`${WEBHOOK_URL}/tasks.task.get.json?taskId=${taskId}&select[]=*`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
+      // Ownership is enforced server-side: requesters can only fetch their own tickets.
+      const resp = await apiFetch(`/api/tickets/${taskId}`)
+      const data = await resp.json().catch(() => ({}))
+      if (resp.status === 403) throw new Error('You can only track your own tickets.')
+      if (resp.status === 401) throw new Error('Please sign in again to track tickets.')
+      if (!resp.ok) throw new Error(data.message || 'Ticket not found')
 
-      if (data.error) throw new Error(data.error_description || 'Ticket not found')
-
-      const task = data.result?.task
+      const task = data.ticket
       if (!task) throw new Error('Ticket not found')
 
       setLiveStatus({
@@ -98,27 +98,17 @@ export function TrackTicket({ onBack }: TrackTicketProps) {
       })
       setWatchingTaskId(taskId)
 
-      // Fetch comments
+      // Comments come inline with the ticket from the proxy (if present)
       setLoadingComments(true)
       try {
-        const commResp = await fetch(`${WEBHOOK_URL}/task.commentitem.getlist.json`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ TASK_ID: taskId }),
-        })
-        if (commResp.ok) {
-          const commData = await commResp.json()
-          const rawComments = commData.result || []
-          const parsed: Comment[] = rawComments.map((c: any) => ({
-            id: c.ID || c.id || '',
-            authorName: c.AUTHOR_NAME || c.author?.name || `User ${c.AUTHOR_ID || c.authorId || ''}`,
-            text: c.POST_MESSAGE || c.postMessage || c.POST_MESSAGE_HTML || '',
-            date: c.POST_DATE || c.createdDate || '',
-          }))
-          setComments(parsed)
-        }
-      } catch {
-        // Comments fetch failed silently — ticket status still shown
+        const rawComments = task.comments || []
+        const parsed: Comment[] = rawComments.map((c: any) => ({
+          id: c.ID || c.id || '',
+          authorName: c.AUTHOR_NAME || c.author?.name || `User ${c.AUTHOR_ID || c.authorId || ''}`,
+          text: c.POST_MESSAGE || c.postMessage || c.POST_MESSAGE_HTML || '',
+          date: c.POST_DATE || c.createdDate || '',
+        }))
+        setComments(parsed)
       } finally {
         setLoadingComments(false)
       }

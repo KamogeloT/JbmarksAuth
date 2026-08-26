@@ -13,8 +13,9 @@
  * - Ticket reopened → technician
  */
 
-const WEBHOOK_URL = 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss'
-const EMAIL_API_URL = 'https://jbmarksauth-production.up.railway.app/api/email/ticket-notification'
+import { apiFetch } from './api'
+
+const EMAIL_API_PATH = '/api/email/ticket-notification'
 
 export type NotificationType = 
   | 'created'
@@ -43,42 +44,29 @@ interface NotificationPayload {
 
 class EmailNotificationService {
 
-  /** Send email notification via Railway backend */
+  /** Send email notification via the authenticated backend */
   private async sendEmail(payload: NotificationPayload): Promise<boolean> {
     try {
-      const response = await fetch(EMAIL_API_URL, {
+      const response = await apiFetch(EMAIL_API_PATH, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const data = await response.json()
-      if (data.success) {
+      const data = await response.json().catch(() => ({}))
+      if (response.ok && data.success) {
         console.log(`✅ Email sent: ${payload.type} to ${payload.recipientEmail}`)
         return true
-      } else {
-        console.warn(`⚠️ Email API error: ${data.message || data.error}`)
-        return false
       }
+      console.warn(`⚠️ Email API error: ${data.message || data.error}`)
+      return false
     } catch (e) {
       console.error('Failed to send email notification:', e)
       return false
     }
   }
 
-  /** Send in-app notification to a Bitrix user */
-  private async sendInAppNotification(userId: string, message: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${WEBHOOK_URL}/im.notify.system.add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ USER_ID: userId, MESSAGE: message }),
-      })
-      const data = await response.json()
-      return !data.error
-    } catch (e) {
-      console.error('Failed to send in-app notification:', e)
-      return false
-    }
+  /** In-app notifications now handled server-side via the ticket proxy audit comments. */
+  private async sendInAppNotification(_userId: string, _message: string): Promise<boolean> {
+    return true
   }
 
   /**

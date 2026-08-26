@@ -14,7 +14,7 @@ import { isBefore } from 'date-fns'
 type View = 'overview' | 'queue' | 'reports' | 'detail'
 
 export default function Home() {
-  const { isAuthenticated, user, loading, login, logout } = useAuth()
+  const { isAuthenticated, user, loading, error, login, logout } = useAuth()
   const [view, setView] = useState<View>('overview')
   const [tickets, setTickets] = useState<SDiMTask[]>([])
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
@@ -61,8 +61,11 @@ export default function Home() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage onLoginSuccess={login} />
+    return <LoginPage onLogin={login} error={error} />
   }
+
+  const role = user?.role || 'agent'
+  const isManager = role === 'manager'  // read-only: reports only
 
   // Stats
   const now = new Date()
@@ -72,11 +75,16 @@ export default function Home() {
   const resolvedTickets = tickets.filter(t => t.status === '5')
   const overdueTickets = openTickets.filter(t => t.deadline && isBefore(new Date(t.deadline), now))
 
-  const navItems = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'queue', label: 'Ticket Queue', icon: '📋' },
-    { id: 'reports', label: 'Reports', icon: '📈' },
-  ]
+  const navItems = isManager
+    ? [
+        { id: 'overview', label: 'Overview', icon: '📊' },
+        { id: 'reports', label: 'Reports', icon: '📈' },
+      ]
+    : [
+        { id: 'overview', label: 'Overview', icon: '📊' },
+        { id: 'queue', label: 'Ticket Queue', icon: '📋' },
+        { id: 'reports', label: 'Reports', icon: '📈' },
+      ]
 
   const externalLinks = [
     { label: 'Network Monitor', icon: '📡', url: 'https://polite-hill-057872e0f.7.azurestaticapps.net' },
@@ -179,9 +187,12 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {user && (
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-ios-label hidden sm:inline">{user.NAME} {user.LAST_NAME}</span>
+                <span className="text-[13px] font-medium text-ios-label hidden sm:inline">
+                  {user.name} {user.lastName || ''}
+                  <span className="ml-2 px-2 py-0.5 rounded-full bg-primary-50 text-brand-dark text-[10px] font-semibold uppercase tracking-wide">{user.role}</span>
+                </span>
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-medium to-brand-dark text-white flex items-center justify-center text-[12px] font-bold">
-                  {user.NAME?.[0]}{user.LAST_NAME?.[0]}
+                  {user.name?.[0]}{user.lastName?.[0] || ''}
                 </div>
               </div>
             )}
@@ -200,7 +211,7 @@ export default function Home() {
                 onTicketClick={openTicket}
               />
             )}
-            {view === 'queue' && (
+            {view === 'queue' && !isManager && (
               <TicketQueue
                 tickets={tickets}
                 loading={loadingTickets}
@@ -211,11 +222,12 @@ export default function Home() {
             {view === 'reports' && (
               <Reports tickets={tickets} loading={loadingTickets} />
             )}
-            {view === 'detail' && selectedTicketId && (
+            {view === 'detail' && selectedTicketId && !isManager && (
               <TicketDetail
                 ticketId={selectedTicketId}
                 onBack={() => { setView('queue'); setSelectedTicketId(null) }}
                 onRefresh={fetchTickets}
+                canAct={role === 'agent' || role === 'admin'}
               />
             )}
           </div>

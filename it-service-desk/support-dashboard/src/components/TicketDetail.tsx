@@ -10,9 +10,10 @@ interface Props {
   ticketId: string
   onBack: () => void
   onRefresh: () => void
+  canAct?: boolean
 }
 
-export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
+export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Props) {
   const [ticket, setTicket] = useState<SDiMTask | null>(null)
   const [comments, setComments] = useState<any[]>([])
   const [teamMembers, setTeamMembers] = useState<SDiMUser[]>([])
@@ -34,20 +35,8 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
         ])
         setTicket(t)
         setComments(c)
-
-        // Fetch full user details for team members
-        if (members.length > 0) {
-          const userIds = members.map((m: any) => m.USER_ID)
-          const users: SDiMUser[] = []
-          for (const uid of userIds) {
-            try {
-              const resp = await fetch(`https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss/user.get.json?ID=${uid}`)
-              const data = await resp.json()
-              if (data.result?.[0]) users.push(data.result[0])
-            } catch { /* skip */ }
-          }
-          setTeamMembers(users)
-        }
+        // /api/team returns full user records already (no direct Bitrix calls)
+        setTeamMembers(members as SDiMUser[])
       } catch (e) {
         console.error('Failed to load ticket:', e)
       } finally {
@@ -223,23 +212,25 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
               ))}
             </div>
             {/* Add comment */}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="flex-1 px-4 py-2 bg-gray-100 rounded-xl text-[13px] outline-none focus:ring-2 focus:ring-brand-medium/30"
-                onKeyDown={e => { if (e.key === 'Enter') handleComment() }}
-              />
-              <button
-                onClick={handleComment}
-                disabled={submitting || !newComment.trim()}
-                className="px-4 py-2 bg-brand-dark text-white rounded-xl text-[13px] font-semibold disabled:opacity-40 hover:bg-brand-medium transition-colors"
-              >
-                {submitting ? '...' : 'Send'}
-              </button>
-            </div>
+            {canAct && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1 px-4 py-2 bg-gray-100 rounded-xl text-[13px] outline-none focus:ring-2 focus:ring-brand-medium/30"
+                  onKeyDown={e => { if (e.key === 'Enter') handleComment() }}
+                />
+                <button
+                  onClick={handleComment}
+                  disabled={submitting || !newComment.trim()}
+                  className="px-4 py-2 bg-brand-dark text-white rounded-xl text-[13px] font-semibold disabled:opacity-40 hover:bg-brand-medium transition-colors"
+                >
+                  {submitting ? '...' : 'Send'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -261,15 +252,18 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
                 <p className="text-[11px] text-ios-secondary">{isUnassigned(ticket) ? 'Needs assignment' : 'IT Support'}</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowAssignModal(true)}
-              className="w-full py-2 bg-primary-50 text-brand-dark rounded-xl text-[13px] font-semibold hover:bg-primary-100 transition-colors"
-            >
-              {ticket.responsible?.name ? 'Reassign' : 'Assign Technician'}
-            </button>
+            {canAct && (
+              <button
+                onClick={() => setShowAssignModal(true)}
+                className="w-full py-2 bg-primary-50 text-brand-dark rounded-xl text-[13px] font-semibold hover:bg-primary-100 transition-colors"
+              >
+                {ticket.responsible?.name ? 'Reassign' : 'Assign Technician'}
+              </button>
+            )}
           </div>
 
           {/* Actions */}
+          {canAct && (
           <div className="card">
             <h3 className="text-[13px] font-semibold text-ios-secondary uppercase tracking-wide mb-3">Actions</h3>
             <div className="space-y-2">
@@ -295,6 +289,7 @@ export function TicketDetail({ ticketId, onBack, onRefresh }: Props) {
               )}
             </div>
           </div>
+          )}
 
           {/* Caller / Reporter Info */}
           <div className="card">
