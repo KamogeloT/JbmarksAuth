@@ -98,6 +98,18 @@ async function setupDatabase() {
             );
         `);
         console.log('✅ network_status table created/verified');
+
+        // Service Desk: escalation tracking (dedupe so a ticket isn't re-escalated each cycle)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ticket_escalations (
+                ticket_id VARCHAR(64) NOT NULL,
+                level INTEGER NOT NULL,
+                reason VARCHAR(64) NOT NULL,
+                escalated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (ticket_id, level)
+            );
+        `);
+        console.log('✅ ticket_escalations table created/verified');
         
     } catch (err) {
         console.error('❌ Database setup error:', err);
@@ -1824,6 +1836,20 @@ function buildTicketEmailContent({ type, ticketId, ticketTitle, recipientName, t
                 <p><strong>Subject:</strong> ${ticketTitle}</p>`;
             break;
 
+        case 'escalated':
+            subject = `[Ticket #${ticketId}] ⚠️ ESCALATED: ${ticketTitle}`;
+            heading = '🚨 Ticket Escalated';
+            body = `
+                <p>${greeting}</p>
+                <p>Ticket <strong>#${ticketId}</strong> has been <strong>automatically escalated</strong> and its priority raised.</p>
+                <div style="background:#fef2f2;border-left:4px solid #DC2626;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;">
+                    <p style="margin:0;"><strong>Reason:</strong> ${comment || 'SLA breach'}</p>
+                    ${status ? `<p style="margin:6px 0 0;"><strong>Current status:</strong> ${status}</p>` : ''}
+                </div>
+                <p><strong>Subject:</strong> ${ticketTitle}</p>
+                <p>Please action this ticket promptly.</p>`;
+            break;
+
         default:
             subject = `[Ticket #${ticketId}] Update: ${ticketTitle}`;
             heading = '📨 Ticket Update';
@@ -1853,6 +1879,199 @@ function buildTicketEmailContent({ type, ticketId, ticketTitle, recipientName, t
 
     return { subject, html };
 }
+
+// ============================================
+// SERVICE DESK ESCALATION ENGINE
+// ============================================
+// Runs on the always-on backend (Bitrix webhook exposes no scheduler, and a
+// browser SPA can't reliably run background jobs). Every ESCALATION_INTERVAL it
+// scans IT Support tickets (Bitrix group 14) and escalates:
+//   • Overdue open tickets (past deadline)              → level 1
+//   • Tickets unassigned longer than the SLA threshold  → level 1 (assignment breach)
+//   • Overdue by 2x the grace window                    → level 2 (management)
+// Escalation actions: bump Bitrix priority, add an audit comment, and send a
+// branded escalation email. De-duplicated via the ticket_escalations table.
+
+const BITRIX_WEBHOOK = process.env.BITRIX_WEBHOOK_URL || 'https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss';
+const IT_GROUP_ID = process.env.IT_GROUP_ID || '14';
+const ESCALATION_INTERVAL_MS = parseInt(process.env.ESCALATION_INTERVAL_MS || '900000', 10); // 15 min
+const UNASSIGNED_SLA_MINUTES = parseInt(process.env.UNASSIGNED_SLA_MINUTES || '60', 10);      // 1h to first assignment
+const ESCALATION_EMAIL = process.env.ESCALATION_EMAIL || 'admin@t3ssystems.co.za';           // manager/queue mailbox
+const WEBHOOK_USER_ID = '1';
+
+function bitrixCall(method, params) {
+    return new Promise((resolve, reject) => {
+        const url = new URL(`${BITRIX_WEBHOOK.replace(/\/$/, '')}/${method}.json`);
+        const body = JSON.stringify(params || {});
+        const options = {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        };
+        const reqB = https.request(options, (resp) => {
+            let data = '';
+            resp.on('data', (c) => (data += c));
+            resp.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.error) return reject(new Error(parsed.error_description || parsed.error));
+                    resolve(parsed);
+                } catch (e) { reject(new Error(`Bitrix parse error: ${data.slice(0, 200)}`)); }
+            });
+        });
+        reqB.on('error', reject);
+        reqB.write(body);
+        reqB.end();
+    });
+}
+
+// Parse a "Field: value" line out of the ticket description (caller info).
+function parseDescField(description, label) {
+    if (!description) return '';
+    const re = new RegExp(`^${label}:\\s*(.+)`, 'im');
+    for (const line of description.split('\n')) {
+        const m = re.exec(line.trim());
+        if (m && m[1] && m[1].trim() && m[1].trim() !== 'Not provided') return m[1].trim();
+    }
+    return '';
+}
+
+async function alreadyEscalated(ticketId, level) {
+    if (!pool) return false;
+    const r = await pool.query('SELECT 1 FROM ticket_escalations WHERE ticket_id = $1 AND level = $2', [String(ticketId), level]);
+    return r.rows.length > 0;
+}
+
+async function recordEscalation(ticketId, level, reason) {
+    if (!pool) return;
+    await pool.query(
+        `INSERT INTO ticket_escalations (ticket_id, level, reason, escalated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT (ticket_id, level) DO NOTHING`,
+        [String(ticketId), level, reason]
+    ).catch(() => {});
+}
+
+async function escalateTicket(task, level, reason) {
+    const ticketId = task.id;
+    const title = task.title || `Ticket #${ticketId}`;
+    const reasonLabel = reason === 'unassigned' ? 'Unassigned beyond SLA'
+        : reason === 'overdue' ? 'Past resolution deadline'
+        : reason === 'overdue_critical' ? 'Severely overdue' : reason;
+
+    // 1) Bump Bitrix priority (max is 2 = High in Bitrix)
+    try {
+        await bitrixCall('tasks.task.update', { taskId: ticketId, fields: { PRIORITY: '2' } });
+    } catch (e) { console.warn(`   ⚠️ priority bump failed for #${ticketId}: ${e.message}`); }
+
+    // 2) Add an audit comment on the ticket
+    const comment = `⚠️ [AUTO-ESCALATION L${level}] ${reasonLabel}. This ticket has been flagged and priority raised. Please action promptly.`;
+    try {
+        await bitrixCall('task.commentitem.add', [ticketId, { POST_MESSAGE: comment }]);
+    } catch (e) { console.warn(`   ⚠️ comment failed for #${ticketId}: ${e.message}`); }
+
+    // 3) Send a branded escalation email (to manager mailbox + caller if known)
+    const callerEmail = parseDescField(task.description, 'Email');
+    const callerName = parseDescField(task.description, 'Reported By') || parseDescField(task.description, 'Full Name');
+    if (process.env.AZURE_COMMS_CONNECTION_STRING) {
+        try {
+            const { endpoint, accessKey } = parseConnectionString(process.env.AZURE_COMMS_CONNECTION_STRING);
+            const { subject, html } = buildTicketEmailContent({
+                type: 'escalated', ticketId, ticketTitle: title,
+                recipientName: 'IT Manager', status: TICKET_STATUS_LABEL(task.status),
+                comment: reasonLabel,
+            });
+            const recipients = [{ address: ESCALATION_EMAIL, displayName: 'IT Manager' }];
+            if (callerEmail && callerEmail !== ESCALATION_EMAIL) {
+                recipients.push({ address: callerEmail, displayName: callerName || callerEmail });
+            }
+            await sendAzureEmail(endpoint, accessKey, {
+                senderAddress: process.env.EMAIL_SENDER || 'DoNotReply@sdinmotion.co.za',
+                recipients: { to: recipients },
+                content: { subject, html, plainText: subject },
+            });
+        } catch (e) { console.warn(`   ⚠️ escalation email failed for #${ticketId}: ${e.message}`); }
+    }
+
+    await recordEscalation(ticketId, level, reason);
+    console.log(`   🚨 Escalated #${ticketId} (L${level}, ${reason}): ${title}`);
+}
+
+function TICKET_STATUS_LABEL(code) {
+    return ({ '2': 'New', '3': 'In Progress', '4': 'Awaiting User', '5': 'Resolved', '6': 'Deferred' })[String(code)] || 'Open';
+}
+
+async function runEscalationScan() {
+    if (!pool) return { skipped: 'no database' };
+    let escalated = 0, scanned = 0;
+    try {
+        // Pull open IT tickets (not Resolved '5' / Deferred '6')
+        const resp = await bitrixCall('tasks.task.list', {
+            filter: { GROUP_ID: IT_GROUP_ID },
+            select: ['ID', 'TITLE', 'STATUS', 'PRIORITY', 'DEADLINE', 'CREATED_DATE', 'RESPONSIBLE_ID', 'DESCRIPTION'],
+        });
+        const tasks = (resp.result && resp.result.tasks) || [];
+        const now = Date.now();
+
+        for (const t of tasks) {
+            // Normalize field names (Bitrix returns camelCase via tasks.task.list)
+            const task = {
+                id: t.id || t.ID,
+                title: t.title || t.TITLE,
+                status: String(t.status || t.STATUS),
+                deadline: t.deadline || t.DEADLINE || null,
+                createdDate: t.createdDate || t.CREATED_DATE || null,
+                responsibleId: String(t.responsibleId || t.RESPONSIBLE_ID || ''),
+                description: t.description || t.DESCRIPTION || '',
+            };
+            if (task.status === '5' || task.status === '6') continue; // closed
+            scanned++;
+
+            const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
+            const createdMs = task.createdDate ? new Date(task.createdDate).getTime() : null;
+            const isUnassigned = !task.responsibleId || task.responsibleId === WEBHOOK_USER_ID;
+
+            // Level 2 — severely overdue (past deadline by >= grace window again)
+            if (deadlineMs && now > deadlineMs + ESCALATION_INTERVAL_MS && !(await alreadyEscalated(task.id, 2))) {
+                await escalateTicket(task, 2, 'overdue_critical');
+                escalated++;
+                continue;
+            }
+            // Level 1 — past deadline
+            if (deadlineMs && now > deadlineMs && !(await alreadyEscalated(task.id, 1))) {
+                await escalateTicket(task, 1, 'overdue');
+                escalated++;
+                continue;
+            }
+            // Level 1 — unassigned beyond SLA
+            if (isUnassigned && createdMs && now > createdMs + UNASSIGNED_SLA_MINUTES * 60000 && !(await alreadyEscalated(task.id, 1))) {
+                await escalateTicket(task, 1, 'unassigned');
+                escalated++;
+            }
+        }
+    } catch (e) {
+        console.error('❌ Escalation scan error:', e.message);
+        return { error: e.message };
+    }
+    return { scanned, escalated };
+}
+
+/** Manual trigger for testing / on-demand runs. */
+app.post('/api/escalation/run', async (req, res) => {
+    console.log('▶️ Manual escalation scan triggered');
+    const result = await runEscalationScan();
+    res.json({ success: !result.error, ...result });
+});
+
+// Kick off the periodic scan (only if DB is available)
+setTimeout(() => {
+    if (pool) {
+        console.log(`🕒 Escalation engine active (every ${Math.round(ESCALATION_INTERVAL_MS / 60000)} min)`);
+        runEscalationScan().then(r => console.log('   Initial scan:', JSON.stringify(r)));
+        setInterval(() => { runEscalationScan().catch(e => console.error('Escalation loop error:', e.message)); }, ESCALATION_INTERVAL_MS);
+    }
+}, 5000);
 
 // 404 handler
 app.use((req, res) => {

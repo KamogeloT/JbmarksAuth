@@ -7,10 +7,11 @@ import { sdimApi, SDiMTask, SDiMUser, TICKET_STATUS_MAP, TICKET_STATUS_COLORS, P
 import { TicketQueue } from '@/components/TicketQueue'
 import { TicketDetail } from '@/components/TicketDetail'
 import { DashboardOverview } from '@/components/DashboardOverview'
+import { Reports } from '@/components/Reports'
 import { LoginPage } from '@/components/LoginPage'
 import { isBefore } from 'date-fns'
 
-type View = 'overview' | 'queue' | 'detail'
+type View = 'overview' | 'queue' | 'reports' | 'detail'
 
 export default function Home() {
   const { isAuthenticated, user, loading, login, logout } = useAuth()
@@ -74,6 +75,7 @@ export default function Home() {
   const navItems = [
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'queue', label: 'Ticket Queue', icon: '📋' },
+    { id: 'reports', label: 'Reports', icon: '📈' },
   ]
 
   const externalLinks = [
@@ -205,6 +207,9 @@ export default function Home() {
                 onTicketClick={openTicket}
                 onRefresh={fetchTickets}
               />
+            )}
+            {view === 'reports' && (
+              <Reports tickets={tickets} loading={loadingTickets} />
             )}
             {view === 'detail' && selectedTicketId && (
               <TicketDetail
