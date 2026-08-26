@@ -14,7 +14,7 @@ import { isBefore } from 'date-fns'
 type View = 'overview' | 'queue' | 'reports' | 'detail'
 
 export default function Home() {
-  const { isAuthenticated, user, loading, error, login, logout } = useAuth()
+  const { isAuthenticated, user, loading, error, startLogin, logout } = useAuth()
   const [view, setView] = useState<View>('overview')
   const [tickets, setTickets] = useState<SDiMTask[]>([])
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
@@ -61,7 +61,7 @@ export default function Home() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage onLogin={login} error={error} />
+    return <LoginPage onSignIn={startLogin} error={error} />
   }
 
   const role = user?.role || 'agent'

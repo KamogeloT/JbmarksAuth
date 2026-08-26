@@ -9,7 +9,7 @@ import { useAuth } from './hooks/useAuth'
 type View = 'home' | 'new-ticket' | 'my-tickets' | 'track'
 
 function App() {
-  const { isAuthenticated, user, loading, error, login, logout } = useAuth()
+  const { isAuthenticated, user, loading, error, startLogin, logout } = useAuth()
   const [view, setView] = useState<View>('home')
 
   if (loading) {
@@ -24,7 +24,7 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage onLogin={login} error={error} />
+    return <LoginPage onSignIn={startLogin} error={error} />
   }
 
   return (

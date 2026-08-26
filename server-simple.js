@@ -324,65 +324,133 @@ function requireAgentOrAdmin(req, res, next) {
     return res.status(401).json({ error: 'unauthorized', message: 'Agent token or admin session required' });
 }
 
-/**
- * POST /api/auth/login
- * Body: { username, password }
- * Verifies the password against Bitrix, resolves role, returns a signed JWT.
- */
-app.post('/api/auth/login', async (req, res) => {
-    try {
-        const { username, password } = req.body || {};
-        if (!username || !password) {
-            return res.status(400).json({ error: 'bad_request', message: 'username and password required' });
-        }
-
-        // Verify credentials against Bitrix. The self-hosted portal accepts a
-        // login via the OAuth password grant on the box; we validate by calling
-        // user.get filtered to the login and confirming via the password endpoint.
-        // Bitrix webhooks can't verify passwords directly, so we use the portal
-        // login form endpoint to authenticate.
-        let authedUser = null;
-        try {
-            const bxUser = await bitrixVerifyPassword(username, password);
-            authedUser = bxUser;
-        } catch (e) {
-            return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid username or password' });
-        }
-        if (!authedUser) {
-            return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid username or password' });
-        }
-
-        const role = await resolveRole(authedUser.ID);
-        const token = signJwt({
-            sub: String(authedUser.ID),
-            role,
-            name: `${authedUser.NAME || ''} ${authedUser.LAST_NAME || ''}`.trim(),
-            email: authedUser.EMAIL || '',
-        });
-
-        console.log(`🔐 Login: user ${authedUser.ID} (${authedUser.EMAIL}) role=${role}`);
-        res.json({
-            token,
-            user: {
-                id: String(authedUser.ID),
-                name: authedUser.NAME || '',
-                lastName: authedUser.LAST_NAME || '',
-                email: authedUser.EMAIL || '',
-                position: authedUser.WORK_POSITION || '',
-                photo: authedUser.PERSONAL_PHOTO || null,
-                role,
-            },
-        });
-    } catch (error) {
-        console.error('❌ Login error:', error.message);
-        res.status(500).json({ error: 'login_failed', message: error.message });
-    }
-});
+// NOTE: Password-based login was replaced by the Bitrix OAuth flow
+// (GET /api/auth/authorize-url + POST /api/auth/oauth). Users authenticate on
+// Bitrix's own login page — the apps never handle passwords.
 
 /** GET /api/auth/me — returns current session identity + role */
 app.get('/api/auth/me', requireAuth, (req, res) => {
     res.json({ id: req.auth.sub, role: req.auth.role, name: req.auth.name, email: req.auth.email });
 });
+
+/**
+ * GET /api/auth/authorize-url?redirect_uri=...
+ * Returns the Bitrix OAuth authorize URL for the service desk web apps to
+ * redirect the browser to. The user authenticates on Bitrix's own page.
+ */
+app.get('/api/auth/authorize-url', (req, res) => {
+    const clientId = process.env.BITRIX_CLIENT_ID;
+    const portal = process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za';
+    const redirectUri = req.query.redirect_uri;
+    if (!clientId) return res.status(500).json({ error: 'oauth_not_configured', message: 'BITRIX_CLIENT_ID not set' });
+    if (!redirectUri) return res.status(400).json({ error: 'bad_request', message: 'redirect_uri required' });
+    // Minimal scopes needed for the service desk
+    const scope = 'user,task,tasks_extended,sonet_group,im';
+    const url = `${portal}/oauth/authorize/?client_id=${encodeURIComponent(clientId)}` +
+        `&response_type=code&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    res.json({ url });
+});
+
+/**
+ * POST /api/auth/oauth
+ * Body: { code, redirect_uri }
+ * Exchanges a Bitrix OAuth authorization code for an access token, identifies
+ * the real logged-in user, resolves their Service Desk role, and issues our JWT.
+ * The user's password is only ever entered on Bitrix's own login page.
+ */
+app.post('/api/auth/oauth', async (req, res) => {
+    try {
+        const { code, redirect_uri } = req.body || {};
+        if (!code || !redirect_uri) {
+            return res.status(400).json({ error: 'bad_request', message: 'code and redirect_uri required' });
+        }
+
+        const clientId = process.env.BITRIX_CLIENT_ID;
+        const clientSecret = process.env.BITRIX_CLIENT_SECRET;
+        if (!clientId || !clientSecret) {
+            return res.status(500).json({ error: 'oauth_not_configured', message: 'Bitrix OAuth client not configured' });
+        }
+
+        // Exchange the code for a Bitrix access token.
+        const bx = await exchangeBitrixCode(code, redirect_uri, clientId, clientSecret);
+        if (!bx || !bx.access_token) {
+            return res.status(401).json({ error: 'oauth_failed', message: 'Could not exchange authorization code' });
+        }
+
+        // Identify the authenticated user with their own access token.
+        const me = await bitrixUserCurrent(bx.access_token, bx.client_endpoint || bx.server_endpoint);
+        if (!me || !me.ID) {
+            return res.status(401).json({ error: 'oauth_failed', message: 'Could not resolve authenticated user' });
+        }
+
+        const role = await resolveRole(me.ID);
+        const token = signJwt({
+            sub: String(me.ID),
+            role,
+            name: `${me.NAME || ''} ${me.LAST_NAME || ''}`.trim(),
+            email: me.EMAIL || '',
+        });
+
+        console.log(`🔐 OAuth login: user ${me.ID} (${me.EMAIL}) role=${role}`);
+        res.json({
+            token,
+            user: {
+                id: String(me.ID), name: me.NAME || '', lastName: me.LAST_NAME || '',
+                email: me.EMAIL || '', position: me.WORK_POSITION || '', photo: me.PERSONAL_PHOTO || null, role,
+            },
+        });
+    } catch (error) {
+        console.error('❌ OAuth login error:', error.message);
+        res.status(500).json({ error: 'oauth_failed', message: error.message });
+    }
+});
+
+// Exchange a Bitrix authorization code for tokens (local.* → oauth.bitrix.info).
+function exchangeBitrixCode(code, redirectUri, clientId, clientSecret) {
+    return new Promise((resolve, reject) => {
+        const useOAuthServer = clientId.startsWith('local.');
+        const tokenUrl = useOAuthServer
+            ? 'https://oauth.bitrix.info/oauth/token/'
+            : `${(process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za')}/oauth/token/`;
+        const postData = new URLSearchParams({
+            grant_type: 'authorization_code',
+            client_id: clientId, client_secret: clientSecret,
+            code, redirect_uri: redirectUri,
+        }).toString();
+        const u = new URL(tokenUrl);
+        const rq = https.request({
+            hostname: u.hostname, port: 443, path: u.pathname, method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(postData), 'Accept': 'application/json' },
+        }, (resp) => {
+            let data = '';
+            resp.on('data', c => data += c);
+            resp.on('end', () => {
+                try { resolve(JSON.parse(data)); }
+                catch { reject(new Error(`Token exchange non-JSON: ${data.slice(0, 150)}`)); }
+            });
+        });
+        rq.on('error', reject);
+        rq.write(postData); rq.end();
+    });
+}
+
+// Call user.current with the user's own access token to identify them.
+function bitrixUserCurrent(accessToken, clientEndpoint) {
+    return new Promise((resolve, reject) => {
+        const base = (clientEndpoint || `${process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za'}/rest/`).replace(/\/$/, '');
+        const url = new URL(`${base}/user.current.json?auth=${encodeURIComponent(accessToken)}`);
+        https.get({ hostname: url.hostname, port: 443, path: url.pathname + url.search }, (resp) => {
+            let data = '';
+            resp.on('data', c => data += c);
+            resp.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    resolve(parsed.result || null);
+                } catch { reject(new Error(`user.current non-JSON: ${data.slice(0, 150)}`)); }
+            });
+        }).on('error', reject);
+    });
+}
 
 // ============================================
 // SERVICE DESK TICKET PROXY (role-enforced; keeps Bitrix token server-side)
@@ -561,77 +629,6 @@ app.get('/api/team', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN, ROLES.MA
 });
 
 // Health check
-
-/**
- * Verify a Bitrix user's password against the self-hosted portal.
- * Uses the box OAuth password grant. Falls back to rejecting if unavailable.
- */
-function bitrixVerifyPassword(username, password) {
-    return new Promise((resolve, reject) => {
-        // Self-hosted Bitrix exposes /oauth/token/ with grant_type=password for
-        // the portal. We attempt it; on success we then look up the full user.
-        const portalHost = new URL(SDESK_WEBHOOK).host;
-        const form = new URLSearchParams({
-            grant_type: 'password',
-            client_id: process.env.BITRIX_CLIENT_ID || '',
-            client_secret: process.env.BITRIX_CLIENT_SECRET || '',
-            username,
-            password,
-        }).toString();
-
-        // If no OAuth client configured, use the login-check webhook fallback.
-        if (!process.env.BITRIX_CLIENT_ID) {
-            // Fallback: verify via a dedicated auth webhook that checks credentials.
-            // Requires BITRIX_AUTH_CHECK_URL (a small server-side script on the box).
-            const checkUrl = process.env.BITRIX_AUTH_CHECK_URL;
-            if (!checkUrl) return reject(new Error('No auth method configured'));
-            const body = JSON.stringify({ username, password });
-            const u = new URL(checkUrl);
-            const rq = https.request({
-                hostname: u.hostname, port: 443, path: u.pathname + u.search, method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(body),
-                    'x-sdesk-secret': process.env.BITRIX_AUTH_SECRET || '',
-                },
-            }, (resp) => {
-                let data = '';
-                resp.on('data', c => data += c);
-                resp.on('end', () => {
-                    try {
-                        const parsed = JSON.parse(data);
-                        if (parsed && parsed.success && parsed.user) resolve(parsed.user);
-                        else reject(new Error('Invalid credentials'));
-                    } catch { reject(new Error('Auth check failed')); }
-                });
-            });
-            rq.on('error', reject);
-            rq.write(body); rq.end();
-            return;
-        }
-
-        const rq = https.request({
-            hostname: portalHost, port: 443, path: '/oauth/token/', method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(form) },
-        }, (resp) => {
-            let data = '';
-            resp.on('data', c => data += c);
-            resp.on('end', async () => {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.access_token && parsed.user_id) {
-                        const u = await sdeskBitrix('user.get', { ID: parsed.user_id });
-                        const found = (u.result || [])[0];
-                        if (found) return resolve(found);
-                    }
-                    reject(new Error('Invalid credentials'));
-                } catch { reject(new Error('Auth failed')); }
-            });
-        });
-        rq.on('error', reject);
-        rq.write(form); rq.end();
-    });
-}
 
 // Health check
 app.get('/health', (req, res) => {

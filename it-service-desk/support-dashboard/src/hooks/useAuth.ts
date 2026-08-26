@@ -20,11 +20,17 @@ interface AuthState {
   user: AuthUser | null
   loading: boolean
   error: string
-  login: (username: string, password: string) => Promise<boolean>
+  startLogin: () => Promise<void>
   logout: () => void
 }
 
 const USER_KEY = 'it_support_user'
+
+/** The app's own URL is the OAuth redirect target (Bitrix returns ?code= here). */
+function redirectUri(): string {
+  if (typeof window === 'undefined') return ''
+  return window.location.origin + window.location.pathname
+}
 
 export function useAuth(): AuthState {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -32,46 +38,67 @@ export function useAuth(): AuthState {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // On mount: validate the stored token against the server (no trusting localStorage alone)
   useEffect(() => {
-    const token = getToken()
-    if (!token) { setLoading(false); return }
-    fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then((me) => {
-        const stored = localStorage.getItem(USER_KEY)
-        const base = stored ? JSON.parse(stored) : {}
-        const u: AuthUser = { ...base, id: me.id, name: me.name, email: me.email, role: me.role }
-        setUser(u); setIsAuthenticated(true)
-      })
-      .catch(() => { clearToken(); localStorage.removeItem(USER_KEY) })
-      .finally(() => setLoading(false))
-  }, [])
-
-  const login = useCallback(async (username: string, password: string) => {
-    setError('')
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data.message || 'Login failed'); return false }
-
-      // Only IT roles may use the support dashboard
-      if (!['admin', 'agent', 'manager'].includes(data.user.role)) {
-        setError('Access denied. This console is for IT Support staff and management only.')
-        return false
+    (async () => {
+      // 1) Handle OAuth callback if Bitrix redirected back with ?code=
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+      if (code) {
+        try {
+          const res = await fetch(`${API_BASE}/api/auth/oauth`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, redirect_uri: redirectUri() }),
+          })
+          const data = await res.json()
+          // Clean the code from the URL regardless of outcome
+          window.history.replaceState({}, '', redirectUri())
+          if (res.ok) {
+            if (!['admin', 'agent', 'manager'].includes(data.user.role)) {
+              setError('Access denied. This console is for IT Support staff and management only.')
+            } else {
+              setToken(data.token)
+              localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+              setUser(data.user); setIsAuthenticated(true)
+              setLoading(false); return
+            }
+          } else {
+            setError(data.message || 'Sign-in failed')
+          }
+        } catch {
+          setError('Unable to complete sign-in.')
+        }
       }
 
-      setToken(data.token)
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user))
-      setUser(data.user); setIsAuthenticated(true)
-      return true
-    } catch (e: any) {
+      // 2) Otherwise validate any stored token
+      const token = getToken()
+      if (!token) { setLoading(false); return }
+      try {
+        const meRes = await fetch(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+        if (!meRes.ok) throw new Error()
+        const me = await meRes.json()
+        const stored = localStorage.getItem(USER_KEY)
+        const base = stored ? JSON.parse(stored) : {}
+        setUser({ ...base, id: me.id, name: me.name, email: me.email, role: me.role })
+        setIsAuthenticated(true)
+      } catch {
+        clearToken(); localStorage.removeItem(USER_KEY)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  /** Redirect the browser to Bitrix's login page. */
+  const startLogin = useCallback(async () => {
+    setError('')
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/authorize-url?redirect_uri=${encodeURIComponent(redirectUri())}`)
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else setError(data.message || 'Sign-in is not configured.')
+    } catch {
       setError('Unable to reach the authentication server.')
-      return false
     }
   }, [])
 
@@ -80,5 +107,5 @@ export function useAuth(): AuthState {
     setUser(null); setIsAuthenticated(false)
   }, [])
 
-  return { isAuthenticated, user, loading, error, login, logout }
+  return { isAuthenticated, user, loading, error, startLogin, logout }
 }

@@ -3,25 +3,16 @@
 import { useState } from 'react'
 
 interface LoginPageProps {
-  /** Returns true on success. Errors surfaced via the `error` prop from useAuth. */
-  onLogin: (username: string, password: string) => Promise<boolean>
+  onSignIn: () => Promise<void>
   error?: string
 }
 
-export function LoginPage({ onLogin, error }: LoginPageProps) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+export function LoginPage({ onSignIn, error }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!username.trim() || !password) return
+  const handleClick = async () => {
     setLoading(true)
-    try {
-      await onLogin(username.trim(), password)
-    } finally {
-      setLoading(false)
-    }
+    try { await onSignIn() } finally { setLoading(false) }
   }
 
   return (
@@ -37,52 +28,23 @@ export function LoginPage({ onLogin, error }: LoginPageProps) {
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">IT Support Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in with your SDiM credentials</p>
+          <p className="text-sm text-gray-500 mt-1">Sign in securely with your SDiM account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Username or Email</label>
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Your SDiM login or email"
-              required
-              autoFocus
-              autoComplete="username"
-              className="w-full px-4 py-3 bg-gray-100/60 border-0 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-brand-medium/50 focus:bg-white outline-none transition"
-            />
-          </div>
+        {error && (
+          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium mb-4">{error}</div>
+        )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Your SDiM password"
-              required
-              autoComplete="current-password"
-              className="w-full px-4 py-3 bg-gray-100/60 border-0 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-brand-medium/50 focus:bg-white outline-none transition"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium">{error}</div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !username.trim() || !password}
-            className="w-full bg-brand-dark text-white py-3.5 rounded-2xl font-semibold text-base hover:bg-brand-medium transition-all duration-200 disabled:opacity-50 shadow-ios"
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-        </form>
+        <button
+          onClick={handleClick}
+          disabled={loading}
+          className="w-full bg-brand-dark text-white py-3.5 rounded-2xl font-semibold text-base hover:bg-brand-medium transition-all duration-200 disabled:opacity-50 shadow-ios flex items-center justify-center gap-2"
+        >
+          {loading ? 'Redirecting…' : 'Sign in with SDiM'}
+        </button>
 
         <p className="text-xs text-gray-400 text-center mt-6">
-          IT Support staff &amp; management only
+          You'll be taken to the SDiM portal to sign in. IT Support staff &amp; management only.
         </p>
       </div>
     </div>
