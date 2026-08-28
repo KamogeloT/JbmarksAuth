@@ -397,7 +397,9 @@ app.post('/api/auth/oauth', async (req, res) => {
         // Exchange the code for a Bitrix access token.
         const bx = await exchangeBitrixCode(code, redirect_uri, clientId, clientSecret);
         if (!bx || !bx.access_token) {
-            return res.status(401).json({ error: 'oauth_failed', message: 'Could not exchange authorization code' });
+            const detail = bx && (bx.error_description || bx.error) ? `${bx.error || ''}: ${bx.error_description || ''}` : 'unknown';
+            console.error('❌ Token exchange returned no access_token:', JSON.stringify(bx));
+            return res.status(401).json({ error: 'oauth_failed', message: `Could not exchange authorization code (${detail})` });
         }
 
         // Identify the authenticated user with their own access token.
@@ -428,33 +430,48 @@ app.post('/api/auth/oauth', async (req, res) => {
     }
 });
 
-// Exchange a Bitrix authorization code for tokens (local.* → oauth.bitrix.info).
-function exchangeBitrixCode(code, redirectUri, clientId, clientSecret) {
+// Low-level token POST to a given host/path with given params.
+function bitrixTokenPost(hostname, path, params) {
     return new Promise((resolve, reject) => {
-        const useOAuthServer = clientId.startsWith('local.');
-        const tokenUrl = useOAuthServer
-            ? 'https://oauth.bitrix.info/oauth/token/'
-            : `${(process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za')}/oauth/token/`;
-        const postData = new URLSearchParams({
-            grant_type: 'authorization_code',
-            client_id: clientId, client_secret: clientSecret,
-            code, redirect_uri: redirectUri,
-        }).toString();
-        const u = new URL(tokenUrl);
+        const postData = new URLSearchParams(params).toString();
         const rq = https.request({
-            hostname: u.hostname, port: 443, path: u.pathname, method: 'POST',
+            hostname, port: 443, path, method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(postData), 'Accept': 'application/json' },
         }, (resp) => {
             let data = '';
             resp.on('data', c => data += c);
             resp.on('end', () => {
                 try { resolve(JSON.parse(data)); }
-                catch { reject(new Error(`Token exchange non-JSON: ${data.slice(0, 150)}`)); }
+                catch { resolve({ error: 'non_json', error_description: data.slice(0, 200) }); }
             });
         });
         rq.on('error', reject);
         rq.write(postData); rq.end();
     });
+}
+
+// Exchange a Bitrix authorization code for tokens.
+// local.* apps use oauth.bitrix.info. We try with redirect_uri first, then
+// without (some Box configs reject a redirect_uri on the server-side exchange).
+async function exchangeBitrixCode(code, redirectUri, clientId, clientSecret) {
+    const useOAuthServer = clientId.startsWith('local.');
+    const base = { grant_type: 'authorization_code', client_id: clientId, client_secret: clientSecret, code };
+
+    if (useOAuthServer) {
+        // Attempt 1: with redirect_uri
+        let r = await bitrixTokenPost('oauth.bitrix.info', '/oauth/token/', { ...base, redirect_uri: redirectUri });
+        if (r && r.access_token) return r;
+        console.warn('⚠️ oauth.bitrix.info (with redirect_uri) failed:', JSON.stringify(r));
+        // Attempt 2: without redirect_uri
+        let r2 = await bitrixTokenPost('oauth.bitrix.info', '/oauth/token/', base);
+        if (r2 && r2.access_token) return r2;
+        console.warn('⚠️ oauth.bitrix.info (no redirect_uri) failed:', JSON.stringify(r2));
+        return r2 || r;
+    }
+
+    // Cloud/portal-hosted OAuth
+    const portalHost = new URL(process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za').host;
+    return bitrixTokenPost(portalHost, '/oauth/token/', { ...base, redirect_uri: redirectUri });
 }
 
 // Call user.current with the user's own access token to identify them.
