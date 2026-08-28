@@ -334,16 +334,39 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 });
 
 /**
+ * Pick the Bitrix OAuth client based on which web app is logging in.
+ * Each app has its own registered handler path in Bitrix, so we match on the
+ * redirect_uri's host. Dashboard → SDESK_BITRIX_*, Portal → SDESK_PORTAL_*.
+ */
+function pickOAuthClient(redirectUri) {
+    const portalHostMatch = process.env.SDESK_PORTAL_HOST || 'zealous-sand-0050fce00';
+    let host = '';
+    try { host = new URL(redirectUri).host; } catch { /* ignore */ }
+
+    if (host.includes(portalHostMatch) && process.env.SDESK_PORTAL_CLIENT_ID) {
+        return {
+            clientId: process.env.SDESK_PORTAL_CLIENT_ID,
+            clientSecret: process.env.SDESK_PORTAL_CLIENT_SECRET,
+        };
+    }
+    // Default: dashboard app (falls back to shared app if unset)
+    return {
+        clientId: process.env.SDESK_BITRIX_CLIENT_ID || process.env.BITRIX_CLIENT_ID,
+        clientSecret: process.env.SDESK_BITRIX_CLIENT_SECRET || process.env.BITRIX_CLIENT_SECRET,
+    };
+}
+
+/**
  * GET /api/auth/authorize-url?redirect_uri=...
  * Returns the Bitrix OAuth authorize URL for the service desk web apps to
  * redirect the browser to. The user authenticates on Bitrix's own page.
  */
 app.get('/api/auth/authorize-url', (req, res) => {
-    const clientId = process.env.SDESK_BITRIX_CLIENT_ID || process.env.BITRIX_CLIENT_ID;
     const portal = process.env.BITRIX_PORTAL_URL || 'https://jbmarks.sdinmotion.co.za';
     const redirectUri = req.query.redirect_uri;
-    if (!clientId) return res.status(500).json({ error: 'oauth_not_configured', message: 'BITRIX_CLIENT_ID not set' });
     if (!redirectUri) return res.status(400).json({ error: 'bad_request', message: 'redirect_uri required' });
+    const { clientId } = pickOAuthClient(redirectUri);
+    if (!clientId) return res.status(500).json({ error: 'oauth_not_configured', message: 'OAuth client not configured' });
     // Minimal scopes needed for the service desk
     const scope = 'user,task,tasks_extended,sonet_group,im';
     const url = `${portal}/oauth/authorize/?client_id=${encodeURIComponent(clientId)}` +
@@ -365,9 +388,8 @@ app.post('/api/auth/oauth', async (req, res) => {
             return res.status(400).json({ error: 'bad_request', message: 'code and redirect_uri required' });
         }
 
-        // Prefer the dedicated Service Desk OAuth app; fall back to the shared one.
-        const clientId = process.env.SDESK_BITRIX_CLIENT_ID || process.env.BITRIX_CLIENT_ID;
-        const clientSecret = process.env.SDESK_BITRIX_CLIENT_SECRET || process.env.BITRIX_CLIENT_SECRET;
+        // Choose the OAuth app matching the web app that started login.
+        const { clientId, clientSecret } = pickOAuthClient(redirect_uri);
         if (!clientId || !clientSecret) {
             return res.status(500).json({ error: 'oauth_not_configured', message: 'Bitrix OAuth client not configured' });
         }
