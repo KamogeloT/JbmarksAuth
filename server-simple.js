@@ -343,13 +343,16 @@ function pickOAuthClient(redirectUri) {
     let host = '';
     try { host = new URL(redirectUri).host; } catch { /* ignore */ }
 
-    if (host.includes(portalHostMatch) && process.env.SDESK_PORTAL_CLIENT_ID) {
+    // Portal: use its dedicated app only if explicitly enabled (once its
+    // oauth.bitrix.info sync is confirmed). Otherwise both web apps use the
+    // dashboard app, which must have BOTH handler paths registered in Bitrix.
+    if (host.includes(portalHostMatch) && process.env.SDESK_PORTAL_ENABLED === 'true' && process.env.SDESK_PORTAL_CLIENT_ID) {
         return {
             clientId: process.env.SDESK_PORTAL_CLIENT_ID,
             clientSecret: process.env.SDESK_PORTAL_CLIENT_SECRET,
         };
     }
-    // Default: dashboard app (falls back to shared app if unset)
+    // Default: dashboard app (confirmed working / synced). Falls back to shared app if unset.
     return {
         clientId: process.env.SDESK_BITRIX_CLIENT_ID || process.env.BITRIX_CLIENT_ID,
         clientSecret: process.env.SDESK_BITRIX_CLIENT_SECRET || process.env.BITRIX_CLIENT_SECRET,
