@@ -70,11 +70,14 @@ export function TrackTicket({ onBack }: TrackTicketProps) {
   const [error, setError] = useState('')
   const [localTickets] = useState<ITTicket[]>(storageService.getAllTickets().filter(t => t.taskId))
 
-  const lookupTicket = async (taskId: string) => {
-    setLoading(true)
-    setError('')
-    setLiveStatus(null)
-    setComments([])
+  const lookupTicket = async (taskId: string, silent = false) => {
+    // On a silent background refresh, don't clear the view or flash the spinner.
+    if (!silent) {
+      setLoading(true)
+      setError('')
+      setLiveStatus(null)
+      setComments([])
+    }
 
     try {
       // Ownership is enforced server-side: requesters can only fetch their own tickets.
@@ -99,7 +102,7 @@ export function TrackTicket({ onBack }: TrackTicketProps) {
       setWatchingTaskId(taskId)
 
       // Comments come inline with the ticket from the proxy (if present)
-      setLoadingComments(true)
+      if (!silent) setLoadingComments(true)
       try {
         const rawComments = task.comments || []
         const parsed: Comment[] = rawComments.map((c: any) => ({
@@ -110,23 +113,24 @@ export function TrackTicket({ onBack }: TrackTicketProps) {
         }))
         setComments(parsed)
       } finally {
-        setLoadingComments(false)
+        if (!silent) setLoadingComments(false)
       }
     } catch (e: any) {
-      setError(e.message || 'Unable to fetch ticket status')
+      // On silent refresh, keep the last known state instead of showing an error.
+      if (!silent) setError(e.message || 'Unable to fetch ticket status')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
-  // Auto-refresh ticket status every 30 seconds while viewing
+  // Auto-refresh ticket status/comments every 15s while viewing (silent).
   const [watchingTaskId, setWatchingTaskId] = useState<string | null>(null)
 
   useAutoRefresh(useCallback(() => {
     if (watchingTaskId) {
-      lookupTicket(watchingTaskId)
+      lookupTicket(watchingTaskId, true)
     }
-  }, [watchingTaskId]), 30000)
+  }, [watchingTaskId]), 15000)
 
   const handleSearch = () => {
     // Check if the input matches a local ref number

@@ -24,7 +24,9 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [assigningTo, setAssigningTo] = useState('')
 
+  // Initial full load (with spinner)
   useEffect(() => {
+    let cancelled = false
     const load = async () => {
       setLoading(true)
       try {
@@ -33,6 +35,7 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
           sdimApi.getComments(ticketId),
           sdimApi.getTeamMembers(),
         ])
+        if (cancelled) return
         setTicket(t)
         setComments(c)
         // /api/team returns full user records already (no direct Bitrix calls)
@@ -40,10 +43,37 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
       } catch (e) {
         console.error('Failed to load ticket:', e)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => { cancelled = true }
+  }, [ticketId])
+
+  // Silent background refresh — keeps comments/status/assignee live without a
+  // spinner. Polls every 15s and immediately when the tab regains focus.
+  useEffect(() => {
+    let stopped = false
+    const refresh = async () => {
+      if (document.hidden) return
+      try {
+        const [t, c] = await Promise.all([
+          sdimApi.getTicket(ticketId),
+          sdimApi.getComments(ticketId),
+        ])
+        if (stopped) return
+        if (t) setTicket(t)
+        setComments(prev => (c && c.length !== prev.length ? c : (c && c.length ? c : prev)))
+      } catch { /* transient — keep showing last known state */ }
+    }
+    const interval = setInterval(refresh, 15000)
+    const onVisible = () => { if (!document.hidden) refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      stopped = true
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [ticketId])
 
   const handleAction = async (action: string) => {
