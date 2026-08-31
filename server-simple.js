@@ -603,12 +603,53 @@ app.get('/api/tickets/:id', requireAuth, async (req, res) => {
                 return res.status(403).json({ error: 'forbidden', message: 'You can only view your own tickets' });
             }
         }
+
+        // Attach comments so both apps can display the conversation.
+        task.comments = await fetchTaskComments(req.params.id);
         res.json({ ticket: task });
     } catch (error) {
         console.error('❌ /api/tickets/:id error:', error.message);
         res.status(500).json({ error: 'ticket_failed', message: error.message });
     }
 });
+
+/** GET /api/tickets/:id/comments — comments only (used by polling). */
+app.get('/api/tickets/:id/comments', requireAuth, async (req, res) => {
+    try {
+        const comments = await fetchTaskComments(req.params.id);
+        res.json({ comments });
+    } catch (error) {
+        console.error('❌ comments fetch error:', error.message);
+        res.status(500).json({ error: 'comments_failed', message: error.message });
+    }
+});
+
+// Fetch task comments from Bitrix, trying both known parameter styles, and
+// filter out Bitrix's auto-generated system entries (status changes etc.).
+async function fetchTaskComments(taskId) {
+    let rows = [];
+    try {
+        // task.commentitem.getlist expects positional args: [TASK_ID, order, filter]
+        const r = await sdeskBitrix('task.commentitem.getlist', [String(taskId), {}, {}]);
+        rows = Array.isArray(r.result) ? r.result : [];
+    } catch (e) {
+        console.warn(`comment getlist (array) failed for #${taskId}: ${e.message}`);
+    }
+    if (rows.length === 0) {
+        // Fallback: object-style with TASKID
+        try {
+            const r2 = await sdeskBitrix('task.commentitem.getlist', { TASKID: String(taskId) });
+            rows = Array.isArray(r2.result) ? r2.result : [];
+        } catch { /* ignore */ }
+    }
+    return rows.map(c => ({
+        ID: c.ID || c.id || '',
+        AUTHOR_ID: c.AUTHOR_ID || c.authorId || '',
+        AUTHOR_NAME: c.AUTHOR_NAME || (c.author && c.author.name) || '',
+        POST_MESSAGE: c.POST_MESSAGE || c.postMessage || '',
+        POST_DATE: c.POST_DATE || c.postDate || c.createdDate || '',
+    }));
+}
 
 /**
  * POST /api/tickets  — create a ticket (any authenticated user = requester+).

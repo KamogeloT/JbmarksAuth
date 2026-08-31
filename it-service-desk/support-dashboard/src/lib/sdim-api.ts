@@ -144,12 +144,12 @@ class SDiMApiClient {
     }))
   }
 
-  /** Comments are returned inline by the ticket detail proxy; kept for compatibility. */
+  /** Fetch a ticket's comments via the dedicated backend endpoint. */
   async getComments(taskId: string): Promise<any[]> {
     try {
-      const res = await apiFetch(`/api/tickets/${taskId}`)
-      const data = await this.json<{ ticket: any }>(res)
-      return data.ticket?.comments || []
+      const res = await apiFetch(`/api/tickets/${taskId}/comments`)
+      const data = await this.json<{ comments: any[] }>(res)
+      return data.comments || []
     } catch { return [] }
   }
 
