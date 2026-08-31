@@ -334,6 +334,54 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 });
 
 /**
+ * POST /api/auth/helpdesk-login
+ * Helpdesk (end-user portal) ONLY: username/email lookup, no password.
+ * Issues a JWT capped at the "requester" role — regardless of the user's real
+ * Bitrix role — so this easy-login path can NEVER grant agent/admin/manager
+ * access. Requester scope (own-tickets-only) is still enforced server-side.
+ * The Support Dashboard does NOT use this endpoint; it stays on OAuth.
+ */
+app.post('/api/auth/helpdesk-login', async (req, res) => {
+    try {
+        const { username } = req.body || {};
+        if (!username) return res.status(400).json({ error: 'bad_request', message: 'username required' });
+
+        const u = await sdeskBitrix('user.get', { FILTER: { ACTIVE: true } });
+        const list = u.result || [];
+        const q = String(username).trim().toLowerCase();
+        const found = list.find(x =>
+            (x.EMAIL && x.EMAIL.toLowerCase() === q) ||
+            (x.LOGIN && x.LOGIN.toLowerCase() === q) ||
+            (`${x.NAME || ''} ${x.LAST_NAME || ''}`.trim().toLowerCase() === q) ||
+            (x.NAME && x.NAME.toLowerCase() === q) ||
+            (x.LAST_NAME && x.LAST_NAME.toLowerCase() === q)
+        );
+        if (!found) return res.status(404).json({ error: 'user_not_found', message: 'User not found. Check your name or email.' });
+
+        // Force requester role — this endpoint can never mint staff access.
+        const token = signJwt({
+            sub: String(found.ID),
+            role: ROLES.REQUESTER,
+            name: `${found.NAME || ''} ${found.LAST_NAME || ''}`.trim(),
+            email: found.EMAIL || '',
+        });
+
+        console.log(`🔓 Helpdesk login: user ${found.ID} (${found.EMAIL}) role=requester`);
+        res.json({
+            token,
+            user: {
+                id: String(found.ID), name: found.NAME || '', lastName: found.LAST_NAME || '',
+                email: found.EMAIL || '', position: found.WORK_POSITION || '', photo: found.PERSONAL_PHOTO || null,
+                role: ROLES.REQUESTER,
+            },
+        });
+    } catch (error) {
+        console.error('❌ Helpdesk login error:', error.message);
+        res.status(500).json({ error: 'login_failed', message: error.message });
+    }
+});
+
+/**
  * Pick the Bitrix OAuth client based on which web app is logging in.
  * Each app has its own registered handler path in Bitrix, so we match on the
  * redirect_uri's host. Dashboard → SDESK_BITRIX_*, Portal → SDESK_PORTAL_*.
