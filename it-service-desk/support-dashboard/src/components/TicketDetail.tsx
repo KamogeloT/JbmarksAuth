@@ -59,15 +59,19 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
       setTicket(t)
       onRefresh()
 
-      // Send notifications on status change
+      // Send notifications on status change — notify the CALLER (by their email)
       if (t) {
         const statusName = TICKET_STATUS_MAP[t.status] || 'Updated'
+        const caller = parseCallerInfo(t.description)
+        const tech = teamMembers.find(u => u.ID === t.responsibleId)
         await emailNotifications.notifyStatusChanged(
           ticketId,
           t.title,
           statusName,
           t.responsibleId,
-          t.createdBy,
+          tech?.EMAIL || '',   // technician email (for reopened notifications)
+          caller.name,
+          caller.email,        // caller email — the person who logged the ticket
         )
         playNotificationSound()
       }
@@ -82,9 +86,10 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
     setAssigningTo(userId)
     try {
       await sdimApi.reassignTicket(ticketId, userId)
-      // Add a comment noting the assignment
+      // Look up the assigned technician's real details (name + EMAIL) from the team list
       const tech = teamMembers.find(u => u.ID === userId)
       const techName = tech ? `${tech.NAME} ${tech.LAST_NAME}` : `User ${userId}`
+      const techEmail = tech?.EMAIL || ''
       await sdimApi.addComment(ticketId, `🔧 Ticket assigned to ${techName}`)
 
       const t = await sdimApi.getTicket(ticketId)
@@ -94,15 +99,21 @@ export function TicketDetail({ ticketId, onBack, onRefresh, canAct = true }: Pro
       setShowAssignModal(false)
       onRefresh()
 
-      // Send notification to assigned technician and caller
+      // Notify the assigned technician (by their email) and the caller
       if (t) {
+        const caller = parseCallerInfo(t.description)
         await emailNotifications.notifyTicketAssigned(
           ticketId,
           t.title,
           userId,
           techName,
-          t.createdBy,
+          techEmail,          // technician's actual email (was mistakenly t.createdBy)
+          caller.name,
+          caller.email,
         )
+        if (!techEmail) {
+          console.warn(`No email on record for ${techName} (user ${userId}) — technician notification skipped`)
+        }
         playNotificationSound()
       }
     } catch (e) {
