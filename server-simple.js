@@ -110,6 +110,19 @@ async function setupDatabase() {
             );
         `);
         console.log('✅ ticket_escalations table created/verified');
+
+        // Service Desk: single-row JSON configuration register (categories,
+        // priorities, statuses, assignment, escalation, notifications, reporting)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS service_desk_config (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                config JSONB NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_by VARCHAR(255),
+                CONSTRAINT single_row CHECK (id = 1)
+            );
+        `);
+        console.log('✅ service_desk_config table created/verified');
         
     } catch (err) {
         console.error('❌ Database setup error:', err);
@@ -764,6 +777,112 @@ app.post('/api/tickets/:id/comment', requireAuth, async (req, res) => {
     } catch (error) {
         console.error('❌ ticket comment error:', error.message);
         res.status(500).json({ error: 'comment_failed', message: error.message });
+    }
+});
+
+// ============================================
+// SERVICE DESK CONFIGURATION REGISTER
+// ============================================
+
+// Default config — used to seed the DB on first run and as a fallback.
+const DEFAULT_SDESK_CONFIG = {
+    categories: [
+        { id: 'hardware', label: 'Hardware', icon: '💻', issues: ['Laptop/PC not working', 'Printer issue', 'Monitor problem', 'Keyboard/Mouse', 'Docking station', 'Other hardware'] },
+        { id: 'software', label: 'Software', icon: '🖥️', issues: ['Application not opening', 'Software installation', 'Software update needed', 'License issue', 'Application error/crash', 'Other software'] },
+        { id: 'network', label: 'Network', icon: '🌐', issues: ['No internet', 'Slow connection', 'WiFi not working', 'VPN issue', 'Network drive inaccessible', 'Other network'] },
+        { id: 'access', label: 'Access & Permissions', icon: '🔐', issues: ['Password reset', 'Account locked', 'New account request', 'Permission change', 'Email access', 'Other access'] },
+        { id: 'email', label: 'Email', icon: '📧', issues: ['Cannot send/receive', 'Outlook not working', 'Calendar issue', 'Email storage full', 'Shared mailbox', 'Other email'] },
+        { id: 'other', label: 'Other', icon: '🔧', issues: ['General enquiry', 'New equipment request', 'Training request', 'Other'] },
+    ],
+    priorities: [
+        { id: 'low', label: 'Low', value: '0', description: 'Minimal impact, can wait', color: '#6b7280', deadlineHours: 48 },
+        { id: 'normal', label: 'Normal', value: '1', description: 'Standard request', color: '#2E7D32', deadlineHours: 24 },
+        { id: 'high', label: 'High', value: '2', description: 'Affecting work significantly', color: '#F9A825', deadlineHours: 8 },
+        { id: 'critical', label: 'Critical', value: '2', description: 'Work completely stopped', color: '#DC2626', deadlineHours: 4 },
+    ],
+    statuses: [
+        { code: '2', label: 'New', color: '#3b82f6' },
+        { code: '3', label: 'In Progress', color: '#F9A825' },
+        { code: '4', label: 'Awaiting User', color: '#8b5cf6' },
+        { code: '5', label: 'Resolved', color: '#1B5E20' },
+        { code: '6', label: 'Deferred', color: '#6b7280' },
+    ],
+    assignment: {
+        itGroupId: SDESK_IT_GROUP,
+        unassignedUserId: WEBHOOK_USER_ID,
+        autoAssign: false,          // future: round-robin
+    },
+    escalation: {
+        enabled: true,
+        intervalMinutes: 15,
+        unassignedSlaMinutes: 60,
+        notifyEmail: process.env.ESCALATION_EMAIL || 'admin@t3ssystems.co.za',
+    },
+    notifications: {
+        onCreated: true,
+        onAssigned: true,
+        onStatusChanged: true,
+        onCommentAdded: true,
+        onResolved: true,
+        onReopened: true,
+        senderAddress: process.env.EMAIL_SENDER || 'DoNotReply@sdinmotion.co.za',
+    },
+    reporting: {
+        enabled: true,
+        defaultRangeDays: 30,
+        slaTargetPercent: 80,
+    },
+};
+
+let cachedConfig = null;
+
+async function loadSdeskConfig() {
+    if (!pool) return DEFAULT_SDESK_CONFIG;
+    try {
+        const r = await pool.query('SELECT config FROM service_desk_config WHERE id = 1');
+        if (r.rows.length && r.rows[0].config) {
+            cachedConfig = r.rows[0].config;
+            return cachedConfig;
+        }
+        // Seed defaults on first run
+        await pool.query(
+            'INSERT INTO service_desk_config (id, config, updated_by) VALUES (1, $1, $2) ON CONFLICT (id) DO NOTHING',
+            [JSON.stringify(DEFAULT_SDESK_CONFIG), 'system']
+        );
+        cachedConfig = DEFAULT_SDESK_CONFIG;
+        return cachedConfig;
+    } catch (e) {
+        console.warn('config load failed, using defaults:', e.message);
+        return DEFAULT_SDESK_CONFIG;
+    }
+}
+
+/** GET /api/config — readable by any authenticated user (apps read taxonomy). */
+app.get('/api/config', requireAuth, async (req, res) => {
+    const config = await loadSdeskConfig();
+    res.json({ config });
+});
+
+/** PUT /api/config — Admin only. Replaces the config register. */
+app.put('/api/config', requireAuth, requireRole(ROLES.ADMIN), async (req, res) => {
+    try {
+        if (!pool) return res.status(503).json({ error: 'db_unavailable' });
+        const { config } = req.body || {};
+        if (!config || typeof config !== 'object') {
+            return res.status(400).json({ error: 'bad_request', message: 'config object required' });
+        }
+        await pool.query(
+            `INSERT INTO service_desk_config (id, config, updated_at, updated_by)
+             VALUES (1, $1, CURRENT_TIMESTAMP, $2)
+             ON CONFLICT (id) DO UPDATE SET config = $1, updated_at = CURRENT_TIMESTAMP, updated_by = $2`,
+            [JSON.stringify(config), req.auth.name || req.auth.sub]
+        );
+        cachedConfig = config;
+        console.log(`⚙️ Service Desk config updated by ${req.auth.name} (${req.auth.sub})`);
+        res.json({ success: true, config });
+    } catch (error) {
+        console.error('❌ config save error:', error.message);
+        res.status(500).json({ error: 'config_save_failed', message: error.message });
     }
 });
 
@@ -2581,6 +2700,13 @@ async function runEscalationScan() {
     if (!pool) return { skipped: 'no database' };
     let escalated = 0, scanned = 0;
     try {
+        // Read configurable escalation settings (fall back to env defaults).
+        const cfg = (await loadSdeskConfig()) || {};
+        const esc = cfg.escalation || {};
+        if (esc.enabled === false) return { skipped: 'escalation disabled', scanned: 0, escalated: 0 };
+        const graceMs = (Number.isFinite(esc.intervalMinutes) ? esc.intervalMinutes * 60000 : ESCALATION_INTERVAL_MS);
+        const unassignedMs = (Number.isFinite(esc.unassignedSlaMinutes) ? esc.unassignedSlaMinutes : UNASSIGNED_SLA_MINUTES) * 60000;
+
         // Pull open IT tickets (not Resolved '5' / Deferred '6')
         const resp = await bitrixCall('tasks.task.list', {
             filter: { GROUP_ID: IT_GROUP_ID },
@@ -2608,7 +2734,7 @@ async function runEscalationScan() {
             const isUnassigned = !task.responsibleId || task.responsibleId === WEBHOOK_USER_ID;
 
             // Level 2 — severely overdue (past deadline by >= grace window again)
-            if (deadlineMs && now > deadlineMs + ESCALATION_INTERVAL_MS && !(await alreadyEscalated(task.id, 2))) {
+            if (deadlineMs && now > deadlineMs + graceMs && !(await alreadyEscalated(task.id, 2))) {
                 await escalateTicket(task, 2, 'overdue_critical');
                 escalated++;
                 continue;
@@ -2620,7 +2746,7 @@ async function runEscalationScan() {
                 continue;
             }
             // Level 1 — unassigned beyond SLA
-            if (isUnassigned && createdMs && now > createdMs + UNASSIGNED_SLA_MINUTES * 60000 && !(await alreadyEscalated(task.id, 1))) {
+            if (isUnassigned && createdMs && now > createdMs + unassignedMs && !(await alreadyEscalated(task.id, 1))) {
                 await escalateTicket(task, 1, 'unassigned');
                 escalated++;
             }

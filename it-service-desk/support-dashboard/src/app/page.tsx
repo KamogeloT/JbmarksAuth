@@ -8,10 +8,11 @@ import { TicketQueue } from '@/components/TicketQueue'
 import { TicketDetail } from '@/components/TicketDetail'
 import { DashboardOverview } from '@/components/DashboardOverview'
 import { Reports } from '@/components/Reports'
+import { Settings } from '@/components/Settings'
 import { LoginPage } from '@/components/LoginPage'
 import { isBefore } from 'date-fns'
 
-type View = 'overview' | 'queue' | 'reports' | 'detail'
+type View = 'overview' | 'queue' | 'reports' | 'settings' | 'detail'
 
 export default function Home() {
   const { isAuthenticated, user, loading, error, startLogin, logout } = useAuth()
@@ -66,6 +67,7 @@ export default function Home() {
 
   const role = user?.role || 'agent'
   const isManager = role === 'manager'  // read-only: reports only
+  const isAdmin = role === 'admin'      // can access Settings
 
   // Stats
   const now = new Date()
@@ -84,6 +86,7 @@ export default function Home() {
         { id: 'overview', label: 'Overview', icon: '📊' },
         { id: 'queue', label: 'Ticket Queue', icon: '📋' },
         { id: 'reports', label: 'Reports', icon: '📈' },
+        ...(isAdmin ? [{ id: 'settings', label: 'Settings', icon: '⚙️' }] : []),
       ]
 
   const externalLinks = [
@@ -221,6 +224,9 @@ export default function Home() {
             )}
             {view === 'reports' && (
               <Reports tickets={tickets} loading={loadingTickets} />
+            )}
+            {view === 'settings' && isAdmin && (
+              <Settings />
             )}
             {view === 'detail' && selectedTicketId && !isManager && (
               <TicketDetail
