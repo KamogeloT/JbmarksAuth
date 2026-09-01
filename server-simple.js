@@ -808,8 +808,8 @@ const DEFAULT_SDESK_CONFIG = {
         { code: '6', label: 'Deferred', color: '#6b7280' },
     ],
     assignment: {
-        itGroupId: SDESK_IT_GROUP,
-        unassignedUserId: WEBHOOK_USER_ID,
+        itGroupId: process.env.IT_GROUP_ID || '14',
+        unassignedUserId: '1',      // webhook user = "unassigned" convention
         autoAssign: false,          // future: round-robin
     },
     escalation: {
