@@ -624,31 +624,60 @@ app.get('/api/tickets/:id/comments', requireAuth, async (req, res) => {
     }
 });
 
-// Fetch task comments from Bitrix, trying both known parameter styles, and
-// filter out Bitrix's auto-generated system entries (status changes etc.).
+// Fetch task comments. On the new Bitrix task card (tasks module >= 25.700.0)
+// comments are messages in the task's linked chat — task.commentitem.getlist
+// no longer returns them. So: get the task's CHAT_ID, then read the chat via
+// im.dialog.messages.get (DIALOG_ID = "chat{CHAT_ID}"). Falls back to the old
+// forum getlist for legacy tasks that still have a forum topic.
 async function fetchTaskComments(taskId) {
-    let rows = [];
+    // 1) New task card: read the linked chat.
     try {
-        // task.commentitem.getlist expects positional args: [TASK_ID, order, filter]
-        const r = await sdeskBitrix('task.commentitem.getlist', [String(taskId), {}, {}]);
-        rows = Array.isArray(r.result) ? r.result : [];
+        const tg = await sdeskBitrix('tasks.task.get', { taskId: String(taskId), select: ['ID', 'CHAT_ID'] });
+        const chatId = tg.result && tg.result.task && tg.result.task.chatId;
+        if (chatId) {
+            const dm = await sdeskBitrix('im.dialog.messages.get', { DIALOG_ID: `chat${chatId}`, LIMIT: 100 });
+            const result = dm.result || {};
+            const messages = result.messages || [];
+            const users = {};
+            (result.users || []).forEach(u => { users[String(u.id)] = u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim(); });
+            const mapped = messages
+                // Drop pure system lines (author_id 0 = system notifications)
+                .filter(m => String(m.author_id) !== '0' && (m.text || '').trim())
+                .map(m => ({
+                    ID: String(m.id),
+                    AUTHOR_ID: String(m.author_id),
+                    AUTHOR_NAME: users[String(m.author_id)] || `User ${m.author_id}`,
+                    POST_MESSAGE: cleanBitrixText(m.text || ''),
+                    POST_DATE: m.date || '',
+                }));
+            // Chat returns newest-first; present oldest-first for a natural thread.
+            return mapped.reverse();
+        }
     } catch (e) {
-        console.warn(`comment getlist (array) failed for #${taskId}: ${e.message}`);
+        console.warn(`chat comments failed for #${taskId}: ${e.message}`);
     }
-    if (rows.length === 0) {
-        // Fallback: object-style with TASKID
-        try {
-            const r2 = await sdeskBitrix('task.commentitem.getlist', { TASKID: String(taskId) });
-            rows = Array.isArray(r2.result) ? r2.result : [];
-        } catch { /* ignore */ }
-    }
-    return rows.map(c => ({
-        ID: c.ID || c.id || '',
-        AUTHOR_ID: c.AUTHOR_ID || c.authorId || '',
-        AUTHOR_NAME: c.AUTHOR_NAME || (c.author && c.author.name) || '',
-        POST_MESSAGE: c.POST_MESSAGE || c.postMessage || '',
-        POST_DATE: c.POST_DATE || c.postDate || c.createdDate || '',
-    }));
+
+    // 2) Legacy fallback: old forum-based comments.
+    try {
+        const r = await sdeskBitrix('task.commentitem.getlist', [String(taskId), {}, {}]);
+        const rows = Array.isArray(r.result) ? r.result : [];
+        return rows.map(c => ({
+            ID: c.ID || c.id || '',
+            AUTHOR_ID: c.AUTHOR_ID || c.authorId || '',
+            AUTHOR_NAME: c.AUTHOR_NAME || (c.author && c.author.name) || '',
+            POST_MESSAGE: cleanBitrixText(c.POST_MESSAGE || c.postMessage || ''),
+            POST_DATE: c.POST_DATE || c.postDate || c.createdDate || '',
+        }));
+    } catch { return []; }
+}
+
+// Strip Bitrix BBCode / emoji hex codes from message text for clean display.
+function cleanBitrixText(text) {
+    return String(text)
+        .replace(/\[USER=\d+\]([^\[]*)\[\/USER\]/gi, '$1')
+        .replace(/\[\/?[A-Z]+(=[^\]]*)?\]/gi, '')
+        .replace(/:[0-9a-f]{8}:/gi, '')
+        .trim();
 }
 
 /**
