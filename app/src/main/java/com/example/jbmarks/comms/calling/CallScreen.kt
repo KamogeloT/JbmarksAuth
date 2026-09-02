@@ -82,6 +82,60 @@ fun CallScreen(
 }
 
 /**
+ * Outgoing GROUP (conference) call screen — rings the whole group.
+ */
+@Composable
+fun GroupCallScreen(
+    groupName: String,
+    memberUserIds: List<String>,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val callState by CallingService.callState.collectAsState()
+    val participants by CallingService.participants.collectAsState()
+    var callDuration by remember { mutableIntStateOf(0) }
+    var isMuted by remember { mutableStateOf(false) }
+    var isSpeaker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val userRepo = com.example.jbmarks.user.data.UserRepository(context)
+        val currentUser = userRepo.getCurrentUser().getOrNull() ?: run { onDismiss(); return@LaunchedEffect }
+        CallingService.startGroupCall(context, currentUser.id, currentUser.fullName, groupName, memberUserIds)
+    }
+
+    LaunchedEffect(callState) {
+        if (callState is CallingService.CallUiState.InCall) {
+            while (true) { delay(1000); callDuration++ }
+        }
+    }
+    LaunchedEffect(callState) {
+        if (callState is CallingService.CallUiState.Ended) { delay(2000); CallingService.resetState(); onDismiss() }
+    }
+
+    CallUI(
+        name = groupName,
+        statusText = when (callState) {
+            is CallingService.CallUiState.Connecting -> "Starting meeting…"
+            is CallingService.CallUiState.WaitingForAnswer -> "Ringing group…"
+            is CallingService.CallUiState.InCall -> formatDuration(callDuration)
+            is CallingService.CallUiState.Ended -> "Meeting Ended"
+            is CallingService.CallUiState.Error -> (callState as CallingService.CallUiState.Error).message
+            else -> ""
+        },
+        isRinging = callState is CallingService.CallUiState.WaitingForAnswer || callState is CallingService.CallUiState.Connecting,
+        showControls = true,
+        isMuted = isMuted,
+        isSpeaker = isSpeaker,
+        participants = participants,
+        isGroup = true,
+        onMuteToggle = { isMuted = CallingService.toggleMute() },
+        onSpeakerToggle = { isSpeaker = CallingService.toggleSpeaker() },
+        onHangUp = { CallingService.hangUp() },
+        onDismiss = { CallingService.resetState(); onDismiss() }
+    )
+}
+
+/**
  * Incoming call screen — shown when push arrives.
  */
 @Composable
@@ -181,6 +235,7 @@ fun IncomingCallScreen(
 // SHARED UI COMPONENTS
 // ═══════════════════════════════════════════════════════════════
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CallUI(
     name: String,
@@ -189,6 +244,8 @@ private fun CallUI(
     showControls: Boolean,
     isMuted: Boolean,
     isSpeaker: Boolean,
+    participants: List<String> = emptyList(),
+    isGroup: Boolean = false,
     onMuteToggle: () -> Unit,
     onSpeakerToggle: () -> Unit,
     onHangUp: () -> Unit,
@@ -227,6 +284,40 @@ private fun CallUI(
                 Text(name, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 Spacer(Modifier.height(8.dp))
                 Text(statusText, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f))
+
+                // Conference participant roster (Teams-style)
+                if (isGroup && participants.isNotEmpty()) {
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "In this call (${participants.size})",
+                        fontSize = 12.sp, color = Color(0xFFF9A825), fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        participants.take(12).forEach { p ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(48.dp).clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        p.split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercase() }.joinToString(""),
+                                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                Text(p.split(" ").first(), color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.weight(1f))

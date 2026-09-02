@@ -48,9 +48,17 @@ object CallingService {
     val autoAccept: StateFlow<Boolean> = _autoAccept
 
     /** Restore incoming-call state from notification extras (survives process death). */
-    fun restoreIncomingCall(callerName: String, callerUserId: String, roomId: String, autoAccept: Boolean) {
+    fun restoreIncomingCall(
+        callerName: String,
+        callerUserId: String,
+        roomId: String,
+        autoAccept: Boolean,
+        isGroup: Boolean = false,
+        groupName: String = ""
+    ) {
         currentRoomId = roomId
-        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId)
+        _isGroupCall.value = isGroup
+        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId, isGroup, groupName)
         _autoAccept.value = autoAccept
     }
 
@@ -66,8 +74,32 @@ object CallingService {
         object WaitingForAnswer : CallUiState()
         object InCall : CallUiState()
         object Ended : CallUiState()
-        data class IncomingCall(val callerName: String, val roomId: String, val callerUserId: String) : CallUiState()
+        data class IncomingCall(
+            val callerName: String,
+            val roomId: String,
+            val callerUserId: String,
+            val isGroup: Boolean = false,
+            val groupName: String = ""
+        ) : CallUiState()
         data class Error(val message: String) : CallUiState()
+    }
+
+    // Live participant roster (display names) for conference calls.
+    private val _participants = MutableStateFlow<List<String>>(emptyList())
+    val participants: StateFlow<List<String>> = _participants
+
+    // Whether the current call is a group/conference call.
+    private val _isGroupCall = MutableStateFlow(false)
+    val isGroupCall: StateFlow<Boolean> = _isGroupCall
+
+    private fun refreshParticipants() {
+        try {
+            val remote = currentCall?.remoteParticipants ?: emptyList()
+            val names = remote.mapNotNull { p ->
+                p.displayName?.takeIf { it.isNotBlank() } ?: "Participant"
+            }
+            _participants.value = names
+        } catch (_: Exception) { /* roster read best-effort */ }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -142,6 +174,67 @@ object CallingService {
         }
     }
 
+    /**
+     * Start a CONFERENCE call to an entire group (Teams-style).
+     * Creates one room, joins it, and rings every member. Each member
+     * accepts/declines independently and joins the same room.
+     */
+    suspend fun startGroupCall(
+        ctx: Context,
+        callerBitrixUserId: String,
+        callerName: String,
+        groupName: String,
+        memberUserIds: List<String>
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            context = ctx.applicationContext
+            currentBitrixUserId = callerBitrixUserId
+            _isGroupCall.value = true
+            _callState.value = CallUiState.Connecting
+
+            val roomId = UUID.randomUUID().toString()
+            currentRoomId = roomId
+            Log.d(TAG, "📞 Starting GROUP call. Room: $roomId, members: ${memberUserIds.size}")
+
+            val tokenResponse = fetchToken(callerBitrixUserId)
+            val token = tokenResponse.getString("token")
+
+            withContext(Dispatchers.Main) {
+                callAgent?.dispose()
+                callClient = CallClient()
+                val credential = CommunicationTokenCredential(token)
+                val options = CallAgentOptions().apply { displayName = callerName }
+                callAgent = callClient!!.createCallAgent(ctx.applicationContext, credential, options).get()
+
+                val groupId = UUID.fromString(roomId)
+                currentCall = callAgent!!.join(ctx.applicationContext, GroupCallLocator(groupId), JoinCallOptions())
+
+                currentCall?.addOnStateChangedListener {
+                    val state = currentCall?.state ?: return@addOnStateChangedListener
+                    handleCallStateChange(state)
+                }
+                currentCall?.addOnRemoteParticipantsUpdatedListener {
+                    refreshParticipants()
+                    if ((currentCall?.remoteParticipants?.size ?: 0) > 0) {
+                        _callState.value = CallUiState.InCall
+                    }
+                }
+            }
+
+            _callState.value = CallUiState.WaitingForAnswer
+            _participants.value = listOf(callerName)
+
+            // Ring everyone in the group
+            sendGroupCallPush(callerBitrixUserId, callerName, groupName, roomId, memberUserIds)
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start group call", e)
+            _callState.value = CallUiState.Error(e.message ?: "Group call failed")
+            Result.failure(e)
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     // INCOMING CALL (Receiver)
     // ═══════════════════════════════════════════════════════════
@@ -150,10 +243,17 @@ object CallingService {
      * Called when FCM push arrives with call data.
      * Shows the incoming call state (UI will react).
      */
-    fun onIncomingCallPush(callerName: String, callerUserId: String, roomId: String) {
-        Log.d(TAG, "📞 Incoming call push: $callerName, room: $roomId")
+    fun onIncomingCallPush(
+        callerName: String,
+        callerUserId: String,
+        roomId: String,
+        isGroup: Boolean = false,
+        groupName: String = ""
+    ) {
+        Log.d(TAG, "📞 Incoming ${if (isGroup) "GROUP " else ""}call push: $callerName, room: $roomId")
         currentRoomId = roomId
-        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId)
+        _isGroupCall.value = isGroup
+        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId, isGroup, groupName)
     }
 
     /**
@@ -198,6 +298,10 @@ object CallingService {
                         val state = currentCall?.state ?: return@addOnStateChangedListener
                         handleCallStateChange(state)
                     }
+                    currentCall?.addOnRemoteParticipantsUpdatedListener {
+                        refreshParticipants()
+                    }
+                    refreshParticipants()
 
                     Log.d(TAG, "✅ Joined call room — connected!")
                 } catch (e: Exception) {
@@ -238,6 +342,8 @@ object CallingService {
             currentCall?.hangUp(HangUpOptions())
             currentCall = null
             currentRoomId = null
+            _participants.value = emptyList()
+            _isGroupCall.value = false
             _callState.value = CallUiState.Ended
             context?.let { CallForegroundService.stop(it) }
             Log.d(TAG, "Call ended")
@@ -312,6 +418,37 @@ object CallingService {
             toneGen.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 200)
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ toneGen.release() }, 300)
         } catch (_: Exception) {}
+    }
+
+    private fun sendGroupCallPush(
+        callerUserId: String,
+        callerName: String,
+        groupName: String,
+        roomId: String,
+        memberUserIds: List<String>
+    ) {
+        try {
+            val url = URL("$BASE_URL/api/comms/group-call-notify")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            val body = JSONObject().apply {
+                put("caller_user_id", callerUserId)
+                put("caller_name", callerName)
+                put("group_name", groupName)
+                put("room_id", roomId)
+                put("member_user_ids", org.json.JSONArray(memberUserIds))
+            }.toString()
+
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            Log.d(TAG, "Group call push sent: HTTP ${connection.responseCode}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send group call push: ${e.message}")
+        }
     }
 
     private fun sendCallPush(callerUserId: String, callerName: String, targetUserId: String, roomId: String) {

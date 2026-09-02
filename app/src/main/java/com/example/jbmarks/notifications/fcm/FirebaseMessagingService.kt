@@ -122,14 +122,18 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
         val callerName = data["caller_name"] ?: "Unknown"
         val callerUserId = data["caller_user_id"] ?: ""
         val roomId = data["room_id"] ?: ""
+        val isGroup = data["call_kind"] == "group"
+        val groupName = data["group_name"] ?: ""
 
-        Log.d(TAG, "📞 INCOMING CALL PUSH from $callerName | Room: $roomId")
+        Log.d(TAG, "📞 INCOMING ${if (isGroup) "GROUP " else ""}CALL PUSH from $callerName | Room: $roomId")
 
         // Set the call state (the UI will react to this)
-        CallingService.onIncomingCallPush(callerName, callerUserId, roomId)
+        CallingService.onIncomingCallPush(callerName, callerUserId, roomId, isGroup, groupName)
 
-        // Start foreground service with ringtone + persistent notification
-        CallForegroundService.start(applicationContext, callerName, callerUserId, roomId)
+        // Start foreground service with ringtone + persistent notification.
+        // For group calls, show the group name as the caller label.
+        val displayName = if (isGroup && groupName.isNotBlank()) "$groupName (group call)" else callerName
+        CallForegroundService.start(applicationContext, displayName, callerUserId, roomId)
     }
 
     /**

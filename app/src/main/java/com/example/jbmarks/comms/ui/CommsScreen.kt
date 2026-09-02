@@ -57,13 +57,27 @@ fun CommsScreen() {
     var showCallScreen by remember { mutableStateOf(false) }
     var callTargetName by remember { mutableStateOf("") }
     var callTargetUserId by remember { mutableStateOf("") }
+    var showGroupCall by remember { mutableStateOf(false) }
 
-    // Show outgoing call screen
+    // Show 1:1 outgoing call screen
     if (showCallScreen) {
         com.example.jbmarks.comms.calling.CallScreen(
             calleeName = callTargetName,
             calleeUserId = callTargetUserId,
             onDismiss = { showCallScreen = false }
+        )
+        return
+    }
+
+    // Show group (conference) call screen — rings the whole workgroup
+    if (showGroupCall) {
+        val memberIds = state.members
+            .filter { it.userId != state.currentUserId }
+            .map { it.userId }
+        com.example.jbmarks.comms.calling.GroupCallScreen(
+            groupName = state.selectedWorkgroup?.name ?: "Group Call",
+            memberUserIds = memberIds,
+            onDismiss = { showGroupCall = false }
         )
         return
     }
@@ -79,7 +93,8 @@ fun CommsScreen() {
                     callTargetName = member.fullName
                     callTargetUserId = member.userId
                     showCallScreen = true
-                }
+                },
+                onStartGroupCall = { showGroupCall = true }
             )
         }
         ActiveView.GroupChat -> {
@@ -116,14 +131,15 @@ private fun ChatListView(
     onSelectWorkgroup: (Workgroup) -> Unit,
     onOpenGroupChat: () -> Unit,
     onOpenDirectMessage: (WorkgroupMember) -> Unit,
-    onCallMember: (WorkgroupMember) -> Unit = {}
+    onCallMember: (WorkgroupMember) -> Unit = {},
+    onStartGroupCall: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header
+        // Header — Teams-style with a "Meet now" action
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -137,12 +153,35 @@ private fun ChatListView(
                 )
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
-            Text(
-                text = "Comms",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Comms",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                // Meet now — starts a conference call to the whole workgroup
+                if (state.selectedWorkgroup != null && state.members.size > 1) {
+                    Surface(
+                        onClick = onStartGroupCall,
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFFF9A825)  // JBmarks gold accent
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Text("Meet now", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
         }
 
         // Workgroup selector — modern card style

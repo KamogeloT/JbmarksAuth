@@ -94,11 +94,13 @@ class MainActivity : ComponentActivity() {
         val callerName = intent.getStringExtra("caller_name") ?: "Unknown"
         val callerId = intent.getStringExtra("caller_id") ?: ""
         val roomId = intent.getStringExtra("room_id") ?: ""
+        val isGroup = intent.getStringExtra("call_kind") == "group"
+        val groupName = intent.getStringExtra("group_name") ?: ""
         if (roomId.isEmpty()) return
 
-        android.util.Log.d("MainActivity", "Restoring incoming call | room=$roomId accept=$isAccept")
+        android.util.Log.d("MainActivity", "Restoring incoming call | room=$roomId accept=$isAccept group=$isGroup")
         com.example.jbmarks.comms.calling.CallingService.restoreIncomingCall(
-            callerName, callerId, roomId, autoAccept = isAccept
+            callerName, callerId, roomId, autoAccept = isAccept, isGroup = isGroup, groupName = groupName
         )
         // Clear the flags so a config change / relaunch doesn't re-trigger.
         intent.removeExtra("incoming_call")

@@ -1948,6 +1948,68 @@ app.post('/api/comms/call-notify', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/comms/group-call-notify
+ * Rings EVERY member of a group for a conference call (Teams-style).
+ * The caller creates one room and this notifies all members (except the caller);
+ * each member independently accepts/declines and joins the same room.
+ * Body: { caller_user_id, caller_name, group_name, room_id, member_user_ids: [] }
+ */
+app.post('/api/comms/group-call-notify', async (req, res) => {
+    try {
+        const { caller_user_id, caller_name, group_name, room_id, member_user_ids } = req.body;
+        if (!caller_user_id || !room_id || !Array.isArray(member_user_ids)) {
+            return res.status(400).json({ error: 'caller_user_id, room_id and member_user_ids[] required' });
+        }
+        if (!pool) return res.status(503).json({ error: 'Database not configured' });
+        if (!firebaseInitialized) return res.status(503).json({ error: 'FCM not configured' });
+
+        // Everyone except the caller
+        const targets = member_user_ids.map(String).filter(id => id && id !== String(caller_user_id));
+        console.log(`📞 GROUP call: ${caller_name} → ${targets.length} members | Room: ${room_id}`);
+
+        let notified = 0, noToken = 0;
+        for (const targetId of targets) {
+            const tokenResult = await pool.query(
+                'SELECT fcm_token FROM push_tokens WHERE user_id = $1 AND fcm_token IS NOT NULL',
+                [targetId]
+            );
+            if (tokenResult.rows.length === 0) { noToken++; continue; }
+
+            for (const row of tokenResult.rows) {
+                try {
+                    await admin.messaging().send({
+                        token: row.fcm_token,
+                        data: {
+                            type: 'INCOMING_CALL',
+                            call_kind: 'group',
+                            caller_user_id: String(caller_user_id),
+                            caller_name: caller_name || 'Unknown',
+                            group_name: group_name || 'Group Call',
+                            target_user_id: String(targetId),
+                            room_id: String(room_id),
+                            timestamp: Date.now().toString()
+                        },
+                        android: { priority: 'high', ttl: 45000 }
+                    });
+                    notified++;
+                } catch (fcmError) {
+                    console.error(`❌ Group call push failed for ${targetId}: ${fcmError.message}`);
+                    if (fcmError.code === 'messaging/registration-token-not-registered') {
+                        pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [row.fcm_token]).catch(() => {});
+                    }
+                }
+            }
+        }
+
+        console.log(`✅ Group call: notified ${notified} devices (${noToken} members had no token)`);
+        res.json({ success: notified > 0, notified, targets: targets.length, noToken });
+    } catch (error) {
+        console.error('❌ Group call notify error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ── ACS Identity & Token Helpers ─────────────────────────────────────
 
 async function createAcsIdentity(endpoint, accessKey) {
