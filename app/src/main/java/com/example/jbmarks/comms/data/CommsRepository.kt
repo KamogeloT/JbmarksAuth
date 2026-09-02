@@ -27,7 +27,7 @@ class CommsRepository(private val context: Context) {
 
     /**
      * Check if the current user has access to the Comms feature.
-     * User must be a member of the TOP MANAGEMENT workgroup (ID 12).
+     * User must be a member of the MANAGEMENT workgroup (ID 16).
      */
     suspend fun hasCommsAccess(): Boolean {
         return try {

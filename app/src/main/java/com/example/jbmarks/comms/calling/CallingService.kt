@@ -42,6 +42,24 @@ object CallingService {
     private val _callState = MutableStateFlow<CallUiState>(CallUiState.Idle)
     val callState: StateFlow<CallUiState> = _callState
 
+    // When true, the incoming-call UI should auto-accept (user tapped Answer in
+    // the notification). Consumed once by the UI.
+    private val _autoAccept = MutableStateFlow(false)
+    val autoAccept: StateFlow<Boolean> = _autoAccept
+
+    /** Restore incoming-call state from notification extras (survives process death). */
+    fun restoreIncomingCall(callerName: String, callerUserId: String, roomId: String, autoAccept: Boolean) {
+        currentRoomId = roomId
+        _callState.value = CallUiState.IncomingCall(callerName, roomId, callerUserId)
+        _autoAccept.value = autoAccept
+    }
+
+    fun consumeAutoAccept(): Boolean {
+        val v = _autoAccept.value
+        _autoAccept.value = false
+        return v
+    }
+
     sealed class CallUiState {
         object Idle : CallUiState()
         object Connecting : CallUiState()
@@ -230,24 +248,30 @@ object CallingService {
 
     fun toggleMute(): Boolean {
         val call = currentCall ?: return false
+        val ctx = context ?: return call.isMuted
         return try {
             if (call.isMuted) {
-                call.unmute(context!!).get()
+                call.unmute(ctx).get()
             } else {
-                call.mute(context!!).get()
+                call.mute(ctx).get()
             }
             call.isMuted
         } catch (e: Exception) {
             Log.e(TAG, "Mute toggle error", e)
-            false
+            call.isMuted
         }
     }
 
     fun toggleSpeaker(): Boolean {
         val audioManager = context?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return false
-        val newState = !audioManager.isSpeakerphoneOn
-        audioManager.isSpeakerphoneOn = newState
-        return newState
+        return try {
+            val newState = !audioManager.isSpeakerphoneOn
+            audioManager.isSpeakerphoneOn = newState
+            newState
+        } catch (e: Exception) {
+            Log.e(TAG, "Speaker toggle error", e)
+            false
+        }
     }
 
     fun isInCall(): Boolean = currentCall != null && currentCall?.state != CallState.DISCONNECTED

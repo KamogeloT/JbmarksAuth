@@ -121,10 +121,11 @@ fun AppNavigation() {
         }
     }
 
-    // Global incoming call overlay — shows on top of everything
+    // Global incoming call overlay — shows on top of everything.
+    // Gated to Comms members (workgroup 16); others never see call UI.
     val callUiState by CallingService.callState.collectAsState()
 
-    if (callUiState is CallingService.CallUiState.IncomingCall) {
+    if (hasCommsAccess && callUiState is CallingService.CallUiState.IncomingCall) {
         val incoming = callUiState as CallingService.CallUiState.IncomingCall
         IncomingCallScreen(
             callerName = incoming.callerName,

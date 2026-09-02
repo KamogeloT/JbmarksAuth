@@ -94,10 +94,38 @@ fun IncomingCallScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val callState by CallingService.callState.collectAsState()
+    val autoAccept by CallingService.autoAccept.collectAsState()
     var callDuration by remember { mutableIntStateOf(0) }
     var isMuted by remember { mutableStateOf(false) }
     var isSpeaker by remember { mutableStateOf(false) }
     var accepted by remember { mutableStateOf(false) }
+
+    // Shared accept action (used by the button and by auto-accept)
+    fun doAccept() {
+        if (accepted) return
+        accepted = true
+        coroutineScope.launch {
+            try {
+                val userRepo = com.example.jbmarks.user.data.UserRepository(context)
+                val currentUser = userRepo.getCurrentUser().getOrNull()
+                if (currentUser != null) {
+                    CallingService.acceptCall(context, currentUser.id, currentUser.fullName, roomId)
+                } else {
+                    CallingService.resetState(); onDismiss()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("IncomingCallScreen", "Accept failed", e)
+                CallingService.resetState(); onDismiss()
+            }
+        }
+    }
+
+    // Auto-accept when the user tapped "Answer" in the notification.
+    LaunchedEffect(autoAccept) {
+        if (autoAccept && CallingService.consumeAutoAccept()) {
+            doAccept()
+        }
+    }
 
     // Duration timer after accepting
     LaunchedEffect(callState) {
@@ -120,25 +148,7 @@ fun IncomingCallScreen(
         // Show Accept / Decline
         IncomingCallRingingUI(
             callerName = callerName,
-            onAccept = {
-                accepted = true
-                coroutineScope.launch {
-                    try {
-                        val userRepo = com.example.jbmarks.user.data.UserRepository(context)
-                        val currentUser = userRepo.getCurrentUser().getOrNull()
-                        if (currentUser != null) {
-                            CallingService.acceptCall(context, currentUser.id, currentUser.fullName, roomId)
-                        } else {
-                            CallingService.resetState()
-                            onDismiss()
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("IncomingCallScreen", "Accept failed", e)
-                        CallingService.resetState()
-                        onDismiss()
-                    }
-                }
-            },
+            onAccept = { doAccept() },
             onDecline = {
                 CallingService.declineCall(context)
                 onDismiss()

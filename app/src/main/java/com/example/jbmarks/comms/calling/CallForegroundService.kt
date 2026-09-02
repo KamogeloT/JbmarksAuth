@@ -72,11 +72,12 @@ class CallForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val callerName = intent?.getStringExtra(EXTRA_CALLER_NAME) ?: "Unknown"
         val callerId = intent?.getStringExtra(EXTRA_CALLER_ID) ?: ""
+        val roomId = intent?.getStringExtra(EXTRA_ROOM_ID) ?: ""
 
-        Log.d(TAG, "📞 Starting call foreground service for: $callerName")
+        Log.d(TAG, "📞 Starting call foreground service for: $callerName | Room: $roomId")
 
         // Build persistent notification with Accept/Decline actions
-        val notification = buildCallNotification(callerName, callerId)
+        val notification = buildCallNotification(callerName, callerId, roomId)
         startForeground(NOTIFICATION_ID, notification)
 
         // Start ringtone
@@ -104,24 +105,27 @@ class CallForegroundService : Service() {
         Log.d(TAG, "Call foreground service stopped")
     }
 
-    private fun buildCallNotification(callerName: String, callerId: String): Notification {
-        // Full-screen intent to show the incoming call UI
+    private fun buildCallNotification(callerName: String, callerId: String, roomId: String): Notification {
+        // Full-screen intent to show the incoming call UI. Carries all call data
+        // so the UI can be restored even if the app process was killed.
         val fullScreenIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("incoming_call", true)
             putExtra(EXTRA_CALLER_NAME, callerName)
             putExtra(EXTRA_CALLER_ID, callerId)
+            putExtra(EXTRA_ROOM_ID, roomId)
         }
         val fullScreenPi = PendingIntent.getActivity(
             this, 0, fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Accept action
+        // Accept action — carries call data so accept works after process death.
         val acceptIntent = Intent(this, CallActionReceiver::class.java).apply {
             action = ACTION_ACCEPT
             putExtra(EXTRA_CALLER_NAME, callerName)
             putExtra(EXTRA_CALLER_ID, callerId)
+            putExtra(EXTRA_ROOM_ID, roomId)
         }
         val acceptPi = PendingIntent.getBroadcast(
             this, 1, acceptIntent,

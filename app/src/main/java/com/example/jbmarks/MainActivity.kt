@@ -42,6 +42,10 @@ class MainActivity : ComponentActivity() {
         // Request notification permission on Android 13+ (API 33)
         requestNotificationPermission()
 
+        // Restore an incoming call if launched from the call notification
+        // (handles the case where the app process had been killed).
+        handleCallIntent(intent)
+
         setContent {
             JBmarksTheme {
                 // Auth check state — null = checking, true = authenticated, false = not
@@ -69,6 +73,36 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallIntent(intent)
+    }
+
+    /**
+     * Restore the incoming-call state from a notification/full-screen intent.
+     * Works even after process death because all call data is in the extras.
+     */
+    private fun handleCallIntent(intent: Intent?) {
+        if (intent == null) return
+        val isIncoming = intent.getBooleanExtra("incoming_call", false)
+        val isAccept = intent.getBooleanExtra("accept_call", false)
+        if (!isIncoming && !isAccept) return
+
+        val callerName = intent.getStringExtra("caller_name") ?: "Unknown"
+        val callerId = intent.getStringExtra("caller_id") ?: ""
+        val roomId = intent.getStringExtra("room_id") ?: ""
+        if (roomId.isEmpty()) return
+
+        android.util.Log.d("MainActivity", "Restoring incoming call | room=$roomId accept=$isAccept")
+        com.example.jbmarks.comms.calling.CallingService.restoreIncomingCall(
+            callerName, callerId, roomId, autoAccept = isAccept
+        )
+        // Clear the flags so a config change / relaunch doesn't re-trigger.
+        intent.removeExtra("incoming_call")
+        intent.removeExtra("accept_call")
     }
 
     private fun requestNotificationPermission() {
