@@ -27,19 +27,20 @@ class CommsRepository(private val context: Context) {
     private val chatRepository = ChatRepository(context)
 
     companion object {
-        /** Workgroup ID that gates access to the Comms feature */
+        /** Workgroup ID that historically gated access to the Comms feature (now open to all). */
         const val MANAGEMENT_BOARD_GROUP_ID = "16"
         private const val BACKEND = "https://jbmarksauth-production.up.railway.app"
     }
 
     /**
      * Check if the current user has access to the Comms feature.
-     * User must be a member of the MANAGEMENT workgroup (ID 16).
+     * Comms is now open to every workgroup: any user who belongs to at least
+     * one workgroup gets access, and each workgroup becomes a channel.
      */
     suspend fun hasCommsAccess(): Boolean {
         return try {
             val workgroups = userRepository.getUserWorkgroups().getOrDefault(emptyList())
-            workgroups.any { it.id == MANAGEMENT_BOARD_GROUP_ID }
+            workgroups.isNotEmpty()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking comms access", e)
             false

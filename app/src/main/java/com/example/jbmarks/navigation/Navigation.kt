@@ -93,7 +93,7 @@ fun AppNavigation() {
     val notificationRepo = remember { NotificationRepository(context) }
     val unreadCount by notificationRepo.unreadCount.collectAsState()
 
-    // Check if user has Comms access (member of TOP MANAGEMENT workgroup 12)
+    // Check if user has Comms access (open to any user in at least one workgroup)
     var hasCommsAccess by remember { mutableStateOf(false) }
     val commsRepo = remember { CommsRepository(context) }
     LaunchedEffect(Unit) {
@@ -122,7 +122,7 @@ fun AppNavigation() {
     }
 
     // Global incoming call overlay — shows on top of everything.
-    // Gated to Comms members (workgroup 16); others never see call UI.
+    // Shown to any Comms user (anyone in a workgroup).
     val callUiState by CallingService.callState.collectAsState()
 
     if (hasCommsAccess && callUiState is CallingService.CallUiState.IncomingCall) {
