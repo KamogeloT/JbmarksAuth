@@ -49,6 +49,11 @@ class TaskDetailViewModel(
     private val _isUploadingFile = MutableStateFlow(false)
     val isUploadingFile: StateFlow<Boolean> = _isUploadingFile
 
+    // True while a text comment is being posted — drives the Post button spinner
+    // and prevents duplicate submissions from repeated taps.
+    private val _isPostingComment = MutableStateFlow(false)
+    val isPostingComment: StateFlow<Boolean> = _isPostingComment
+
     private val _uploadError = MutableStateFlow<String?>(null)
     val uploadError: StateFlow<String?> = _uploadError
 
@@ -127,34 +132,45 @@ class TaskDetailViewModel(
             android.util.Log.w("TaskDetailViewModel", "Cannot add comment: text is empty")
             return
         }
-        
+
+        // Guard against duplicate submissions from repeated taps.
+        if (_isPostingComment.value) {
+            android.util.Log.d("TaskDetailViewModel", "Comment post already in progress — ignoring duplicate tap")
+            return
+        }
+
         viewModelScope.launch {
-            repository.addComment(taskId, trimmedText, fileIds)
-                .onSuccess { comment ->
-                    // Add new comment to list optimistically
-                    _comments.value = _comments.value + comment
-                    
-                    // Wait a moment for Bitrix24 to process the comment, then reload to get full details
-                    delay(500) // 500ms delay to ensure Bitrix24 has processed the comment
-                    loadComments()
-                    
-                    // Create notification for comment (if not from current user)
-                    val currentState = _uiState.value
-                    if (currentState is TaskDetailUiState.Success) {
-                        notificationRepository?.let { repo ->
-                            val notification = repo.createTaskCommentNotification(
-                                taskId = taskId,
-                                taskTitle = currentState.task.title,
-                                commentAuthor = "You" // TODO: Get actual user name
-                            )
-                            repo.addNotification(notification)
-                            notificationService?.showNotification(notification)
+            _isPostingComment.value = true
+            try {
+                repository.addComment(taskId, trimmedText, fileIds)
+                    .onSuccess { comment ->
+                        // Add new comment to list optimistically
+                        _comments.value = _comments.value + comment
+
+                        // Wait a moment for Bitrix24 to process the comment, then reload to get full details
+                        delay(500) // 500ms delay to ensure Bitrix24 has processed the comment
+                        loadComments()
+
+                        // Create notification for comment (if not from current user)
+                        val currentState = _uiState.value
+                        if (currentState is TaskDetailUiState.Success) {
+                            notificationRepository?.let { repo ->
+                                val notification = repo.createTaskCommentNotification(
+                                    taskId = taskId,
+                                    taskTitle = currentState.task.title,
+                                    commentAuthor = "You" // TODO: Get actual user name
+                                )
+                                repo.addNotification(notification)
+                                notificationService?.showNotification(notification)
+                            }
                         }
                     }
-                }
-                .onFailure { throwable ->
-                    android.util.Log.e("TaskDetailViewModel", "Failed to add comment", throwable)
-                }
+                    .onFailure { throwable ->
+                        android.util.Log.e("TaskDetailViewModel", "Failed to add comment", throwable)
+                    }
+            } finally {
+                _isPostingComment.value = false
+            }
         }
     }
     

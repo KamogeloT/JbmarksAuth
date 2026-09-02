@@ -121,6 +121,7 @@ fun TaskDetailScreen(
                     val isLoadingComments by viewModel.isLoadingComments.collectAsState()
                     val files by viewModel.files.collectAsState()
                     val isUploadingFile by viewModel.isUploadingFile.collectAsState()
+                    val isPostingComment by viewModel.isPostingComment.collectAsState()
                     val uploadError by viewModel.uploadError.collectAsState()
                     val timeEntries by viewModel.timeEntries.collectAsState()
                     val isLoadingTimeEntries by viewModel.isLoadingTimeEntries.collectAsState()
@@ -385,6 +386,7 @@ fun TaskDetailScreen(
                         isLoadingComments = isLoadingComments,
                         files = files,
                         isUploadingFile = isUploadingFile,
+                        isPostingComment = isPostingComment,
                         timeEntries = timeEntries,
                         isLoadingTimeEntries = isLoadingTimeEntries,
                         isLoggingTime = isLoggingTime,
@@ -506,6 +508,7 @@ fun TaskDetailContent(
     isLoadingComments: Boolean,
     files: List<com.example.jbmarks.tasks.domain.TaskFile>,
     isUploadingFile: Boolean,
+    isPostingComment: Boolean = false,
     timeEntries: List<com.example.jbmarks.tasks.domain.ElapsedTimeEntry>,
     isLoadingTimeEntries: Boolean,
     isLoggingTime: Boolean,
@@ -663,7 +666,8 @@ fun TaskDetailContent(
             onTakePhoto = onTakePhoto,
             pendingPhotoUri = pendingPhotoUri,
             onClearPendingPhoto = onClearPendingPhoto,
-            isUploading = isUploadingFile
+            isUploading = isUploadingFile,
+            isPosting = isPostingComment
         )
         
         Spacer(modifier = Modifier.height(16.dp))

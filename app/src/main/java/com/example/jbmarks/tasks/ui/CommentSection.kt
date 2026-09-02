@@ -45,16 +45,20 @@ fun CommentSection(
     onTakePhoto: () -> Unit = {},
     pendingPhotoUri: Uri? = null,
     onClearPendingPhoto: () -> Unit = {},
-    isUploading: Boolean = false  // driven by ViewModel isUploadingFile
+    isUploading: Boolean = false,  // driven by ViewModel isUploadingFile
+    isPosting: Boolean = false     // driven by ViewModel isPostingComment (text comments)
 ) {
     var commentText by remember { mutableStateOf("") }
 
-    // Reset text field when upload completes
-    LaunchedEffect(isUploading) {
-        if (!isUploading) commentText = ""
+    // Any in-flight submission (text post OR photo upload) disables the input
+    // and shows the spinner, preventing duplicate submissions.
+    val isSubmitting = isUploading || isPosting
+
+    // Clear the field once a submission completes.
+    LaunchedEffect(isSubmitting) {
+        if (!isSubmitting) commentText = ""
     }
 
-    val isSubmitting = isUploading
     val canPost = (commentText.isNotBlank() || pendingPhotoUri != null) && !isSubmitting
 
     Column(modifier = Modifier.fillMaxWidth()) {
