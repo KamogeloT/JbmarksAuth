@@ -143,41 +143,6 @@ fun DashboardContent(
             QuickActionsRow(onNavigateTo = onNavigateTo)
             Spacer(modifier = Modifier.height(24.dp))
         }
-
-        // Recent Activity
-        item {
-            Text(
-                text = "Recent Activity",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-        }
-
-        if (recentActivity.isEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Text(
-                        text = "No recent activity",
-                        modifier = Modifier.padding(32.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            items(recentActivity) { post ->
-                CompactBlogPostItem(post = post)
-            }
-        }
     }
 }
 
@@ -249,31 +214,6 @@ fun StatsGrid(stats: DashboardStats, onNavigateTo: (String) -> Unit) {
                     onClick = { onNavigateTo("tasks") }
                 )
             }
-        }
-        
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            StatCard(
-                title = "Messages",
-                value = stats.unreadMessages.toString(),
-                icon = Icons.Default.Email,
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateTo("chat") }
-            )
-            StatCard(
-                title = "Events",
-                value = stats.upcomingEvents.toString(),
-                subtitle = "Upcoming",
-                icon = Icons.Default.DateRange,
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.weight(1f),
-                onClick = { onNavigateTo("calendar") }
-            )
         }
     }
 }
