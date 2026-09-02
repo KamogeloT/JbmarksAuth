@@ -9,8 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -183,7 +183,7 @@ fun CommentSection(
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
-                            Icons.Default.Add,
+                            Icons.Default.PhotoCamera,
                             contentDescription = "Take Photo",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)

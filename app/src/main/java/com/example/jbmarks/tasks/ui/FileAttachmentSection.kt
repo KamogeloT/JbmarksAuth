@@ -7,8 +7,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,19 +56,19 @@ fun FileAttachmentSection(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Camera button
+                // Take photo button
                 IconButton(onClick = onTakePhoto) {
                     Icon(
-                        Icons.Default.Add,
+                        Icons.Default.PhotoCamera,
                         contentDescription = "Take Photo",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
-                // File upload button
+                // Attach file from device button
                 IconButton(onClick = onUploadFile) {
                     Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Add File",
+                        Icons.Default.AttachFile,
+                        contentDescription = "Attach File",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -85,7 +86,7 @@ fun FileAttachmentSection(
                 )
             ) {
                 Text(
-                    text = "No attachments. Tap + to add files.",
+                    text = "No attachments. Use the camera or attach icon to add files.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp)

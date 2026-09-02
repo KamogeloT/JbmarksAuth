@@ -90,6 +90,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    // Extended Material icons (camera, attach-file, etc.) — version from the Compose BOM
+    implementation("androidx.compose.material:material-icons-extended")
 
     // Retrofit & OkHttp
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
