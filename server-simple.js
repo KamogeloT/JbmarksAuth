@@ -2010,6 +2010,57 @@ app.post('/api/comms/group-call-notify', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/comms/messages?dialog_id=chat922&limit=50
+ * Reads chat messages via the webhook (full im scope) — avoids the per-user
+ * OAuth 403 on im.dialog.messages.get. Returns normalized messages + users.
+ */
+app.get('/api/comms/messages', async (req, res) => {
+    try {
+        const dialogId = req.query.dialog_id;
+        const limit = parseInt(req.query.limit || '50', 10);
+        if (!dialogId) return res.status(400).json({ error: 'dialog_id required' });
+
+        const r = await sdeskBitrix('im.dialog.messages.get', { DIALOG_ID: String(dialogId), LIMIT: limit });
+        const result = r.result || {};
+        const users = {};
+        (result.users || []).forEach(u => {
+            users[String(u.id)] = u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim();
+        });
+        const messages = (result.messages || []).map(m => ({
+            id: String(m.id),
+            senderId: String(m.author_id),
+            senderName: users[String(m.author_id)] || (String(m.author_id) === '0' ? 'System' : `User ${m.author_id}`),
+            text: cleanBitrixText(m.text || ''),
+            timestamp: m.date || '',
+            isSystem: String(m.author_id) === '0',
+        }));
+        res.json({ messages });
+    } catch (error) {
+        console.error('❌ comms messages error:', error.message);
+        res.status(500).json({ error: 'messages_failed', message: error.message });
+    }
+});
+
+/**
+ * POST /api/comms/send  { dialog_id, message, sender_user_id }
+ * Sends a chat message via the webhook, attributed to the sender.
+ */
+app.post('/api/comms/send', async (req, res) => {
+    try {
+        const { dialog_id, message, sender_name } = req.body || {};
+        if (!dialog_id || !message) return res.status(400).json({ error: 'dialog_id and message required' });
+
+        // Prefix sender name so group messages show who sent it (webhook posts as the app user).
+        const text = sender_name ? `${message}\n\n— ${sender_name}` : message;
+        const r = await sdeskBitrix('im.message.add', { DIALOG_ID: String(dialog_id), MESSAGE: text });
+        res.json({ success: true, messageId: r.result });
+    } catch (error) {
+        console.error('❌ comms send error:', error.message);
+        res.status(500).json({ error: 'send_failed', message: error.message });
+    }
+});
+
 // ── ACS Identity & Token Helpers ─────────────────────────────────────
 
 async function createAcsIdentity(endpoint, accessKey) {

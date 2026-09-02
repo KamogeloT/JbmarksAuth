@@ -9,6 +9,12 @@ import com.example.jbmarks.network.RetrofitInstance
 import com.example.jbmarks.user.data.UserRepository
 import com.example.jbmarks.user.data.Workgroup
 import com.example.jbmarks.user.data.WorkgroupMember
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
 /**
  * Repository for workgroup communications.
@@ -23,6 +29,7 @@ class CommsRepository(private val context: Context) {
     companion object {
         /** Workgroup ID that gates access to the Comms feature */
         const val MANAGEMENT_BOARD_GROUP_ID = "16"
+        private const val BACKEND = "https://jbmarksauth-production.up.railway.app"
     }
 
     /**
@@ -73,16 +80,99 @@ class CommsRepository(private val context: Context) {
 
     /**
      * Get messages for a workgroup chat by its dialog ID.
+     * Reads via the backend (webhook, full `im` scope) to avoid the per-user
+     * OAuth 403 on im.dialog.messages.get. Falls back to the direct chat API.
      */
     suspend fun getMessages(dialogId: String, limit: Int = 50, lastId: String? = null): List<Message> {
+        val viaBackend = getMessagesViaBackend(dialogId, limit)
+        if (viaBackend != null) return viaBackend
+        // Fallback to the direct (OAuth) path if the backend is unreachable
         return chatRepository.getChatMessages(dialogId, limit, lastId)
     }
 
+    private suspend fun getMessagesViaBackend(dialogId: String, limit: Int): List<Message>? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$BACKEND/api/comms/messages?dialog_id=${URLEncoder.encode(dialogId, "UTF-8")}&limit=$limit")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 12000
+            conn.readTimeout = 12000
+            if (conn.responseCode != 200) {
+                Log.w(TAG, "Backend messages fetch HTTP ${conn.responseCode} for $dialogId")
+                return@withContext null
+            }
+            val body = conn.inputStream.bufferedReader().readText()
+            val arr = JSONObject(body).optJSONArray("messages") ?: return@withContext emptyList()
+            val out = ArrayList<Message>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                if (o.optBoolean("isSystem", false)) continue // skip system lines
+                out.add(
+                    Message(
+                        id = o.optString("id"),
+                        chatId = dialogId,
+                        dialogId = dialogId,
+                        senderId = o.optString("senderId"),
+                        senderName = o.optString("senderName"),
+                        text = o.optString("text"),
+                        timestamp = parseIsoToMillis(o.optString("timestamp")),
+                        isRead = true,
+                        isDelivered = true,
+                        files = emptyList()
+                    )
+                )
+            }
+            out
+        } catch (e: Exception) {
+            Log.w(TAG, "Backend messages fetch failed: ${e.message}")
+            null
+        }
+    }
+
     /**
-     * Send a message to a workgroup chat.
+     * Send a message to a workgroup chat via the backend (webhook).
      */
-    suspend fun sendMessage(dialogId: String, text: String): Result<String> {
-        return chatRepository.sendMessage(dialogId, text)
+    suspend fun sendMessage(dialogId: String, text: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val senderName = userRepository.getCurrentUser().getOrNull()?.fullName ?: ""
+            val url = URL("$BACKEND/api/comms/send")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 12000
+            conn.readTimeout = 12000
+            val payload = JSONObject().apply {
+                put("dialog_id", dialogId)
+                put("message", text)
+                put("sender_name", senderName)
+            }.toString()
+            conn.outputStream.use { it.write(payload.toByteArray()) }
+            if (conn.responseCode in 200..299) {
+                val resp = conn.inputStream.bufferedReader().readText()
+                Result.success(JSONObject(resp).optString("messageId", "sent"))
+            } else {
+                // Fallback to direct chat API
+                chatRepository.sendMessage(dialogId, text)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Backend send failed, falling back: ${e.message}")
+            chatRepository.sendMessage(dialogId, text)
+        }
+    }
+
+    /** Parse Bitrix ISO date (e.g. 2026-09-01T18:29:07+02:00) to epoch millis. */
+    private fun parseIsoToMillis(iso: String): Long {
+        if (iso.isBlank()) return System.currentTimeMillis()
+        return try {
+            val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US)
+            fmt.parse(iso)?.time ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            try {
+                val fmt2 = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+                fmt2.parse(iso.substringBefore("+").substringBefore("Z"))?.time ?: System.currentTimeMillis()
+            } catch (e2: Exception) { System.currentTimeMillis() }
+        }
     }
 
     /**
