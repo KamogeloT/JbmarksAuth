@@ -38,6 +38,14 @@ enum class TaskStatus(val value: String, val displayName: String) {
     COMPLETED("5", "Completed"),
     DEFERRED("6", "Deferred");
     
+    /**
+     * A task counts as "completed" once the doer has marked it done — this is
+     * true for both COMPLETED (5) and SUPPOSEDLY_COMPLETED (4, awaiting the
+     * creator's approval). Such tasks belong under the Completed tile, not Open.
+     */
+    val isCompletedLike: Boolean
+        get() = this == COMPLETED || this == SUPPOSEDLY_COMPLETED
+
     companion object {
         fun fromValue(value: String?): TaskStatus {
             return when (value) {
@@ -113,6 +121,6 @@ data class Task(
      * Check if task is active (not completed or deferred)
      */
     fun isActive(): Boolean {
-        return status != TaskStatus.COMPLETED && status != TaskStatus.DEFERRED
+        return !status.isCompletedLike && status != TaskStatus.DEFERRED
     }
 }

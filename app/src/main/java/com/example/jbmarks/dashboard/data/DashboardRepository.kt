@@ -45,24 +45,25 @@ class DashboardRepository(context: Context) {
                 android.util.Log.d("DashboardRepository", "Task: ${task.id} - ${task.title} - Status: ${task.status}")
             }
             
-            val activeTasks = tasks.count { it.status != com.example.jbmarks.tasks.domain.TaskStatus.COMPLETED }
+            // A task is "open/active" only if it is NOT completed-like. Tasks the
+            // user has marked done — COMPLETED (5) or SUPPOSEDLY_COMPLETED (4,
+            // awaiting approval) — move to the Completed tile, not Active.
+            val activeTasks = tasks.count { !it.status.isCompletedLike }
             android.util.Log.d("DashboardRepository", "Active tasks: $activeTasks (out of ${tasks.size} total)")
             
             // Get recent active tasks (limit to 3 for display)
             val recentActiveTasks = tasks
-                .filter { it.status != com.example.jbmarks.tasks.domain.TaskStatus.COMPLETED }
+                .filter { !it.status.isCompletedLike }
                 .take(3)
             android.util.Log.d("DashboardRepository", "Recent active tasks: ${recentActiveTasks.size}, first task: ${recentActiveTasks.firstOrNull()?.title}")
             
-            // Count completed tasks
-            val completedToday = tasks.count { task ->
-                task.status == com.example.jbmarks.tasks.domain.TaskStatus.COMPLETED
-            }
+            // Count completed tasks (COMPLETED + awaiting-approval)
+            val completedToday = tasks.count { it.status.isCompletedLike }
             android.util.Log.d("DashboardRepository", "Completed tasks: $completedToday (out of ${tasks.size} total)")
             
             // Get recent completed tasks (limit to 3 for display)
             val recentCompletedTasks = tasks
-                .filter { it.status == com.example.jbmarks.tasks.domain.TaskStatus.COMPLETED }
+                .filter { it.status.isCompletedLike }
                 .take(3)
             android.util.Log.d("DashboardRepository", "Recent completed tasks: ${recentCompletedTasks.size}, first task: ${recentCompletedTasks.firstOrNull()?.title}")
             
