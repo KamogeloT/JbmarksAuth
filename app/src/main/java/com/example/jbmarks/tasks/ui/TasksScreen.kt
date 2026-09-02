@@ -92,6 +92,8 @@ fun TasksScreen(
     val showMyTasksOnly by viewModel.showMyTasksOnly.collectAsState()
     val sortNewestFirst by viewModel.sortNewestFirst.collectAsState()
     val workgroupMembershipKey by viewModel.workgroupMembershipSignature.collectAsState()
+    val workgroups by viewModel.workgroups.collectAsState()
+    val selectedWorkgroupId by viewModel.selectedWorkgroupId.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
     
@@ -121,6 +123,15 @@ fun TasksScreen(
 
                 is TasksUiState.Success -> {
                     Column(modifier = Modifier.fillMaxSize()) {
+                        // Workgroup selector — only when the user is in more than one
+                        if (workgroups.size > 1) {
+                            WorkgroupSelector(
+                                workgroups = workgroups,
+                                selectedId = selectedWorkgroupId,
+                                onSelect = { viewModel.selectWorkgroup(it) }
+                            )
+                        }
+
                         // Search and Filter Section
                         SearchAndFilterSection(
                             searchQuery = searchQuery,
@@ -706,4 +717,39 @@ fun TaskFilterChip(
             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     )
+}
+
+/**
+ * Horizontal chip row to pick which workgroup's tasks to view.
+ * Shown only when the user belongs to more than one workgroup.
+ */
+@Composable
+fun WorkgroupSelector(
+    workgroups: List<TasksViewModel.WorkgroupOption>,
+    selectedId: String?,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        workgroups.forEach { wg ->
+            FilterChip(
+                selected = wg.id == selectedId,
+                onClick = { onSelect(wg.id) },
+                label = { Text(wg.name, maxLines = 1) },
+                leadingIcon = if (wg.id == selectedId) {
+                    { Icon(Icons.Filled.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                } else null,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    }
 }

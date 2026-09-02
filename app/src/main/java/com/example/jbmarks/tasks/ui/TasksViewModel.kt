@@ -59,8 +59,44 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
     private val _sortNewestFirst = MutableStateFlow(true)
     val sortNewestFirst: StateFlow<Boolean> = _sortNewestFirst.asStateFlow()
 
+    // ── Workgroup scoping ──────────────────────────────────────────────
+    // The user's workgroups, in display order, for the selector chips.
+    private val _workgroups = MutableStateFlow<List<WorkgroupOption>>(emptyList())
+    val workgroups: StateFlow<List<WorkgroupOption>> = _workgroups.asStateFlow()
+
+    // Currently selected workgroup id. PERSONAL_ID = tasks with no workgroup.
+    private val _selectedWorkgroupId = MutableStateFlow<String?>(null)
+    val selectedWorkgroupId: StateFlow<String?> = _selectedWorkgroupId.asStateFlow()
+
+    data class WorkgroupOption(val id: String, val name: String)
+
+    companion object {
+        const val PERSONAL_ID = "__personal__"
+    }
+
     init {
         loadTasks()
+    }
+
+    fun selectWorkgroup(id: String?) {
+        _selectedWorkgroupId.value = id
+        applyFilters()
+    }
+
+    /** Build the selector list from the user's workgroups + a Personal bucket if needed. */
+    private fun rebuildWorkgroupOptions(userWorkgroups: List<Pair<String, String>>) {
+        val options = mutableListOf<WorkgroupOption>()
+        userWorkgroups.forEach { (id, name) -> options.add(WorkgroupOption(id, name)) }
+        // Add "Personal" only if the user has any no-workgroup tasks
+        val hasPersonal = _allTasks.value.any { it.groupId.isNullOrBlank() }
+        if (hasPersonal) options.add(WorkgroupOption(PERSONAL_ID, "Personal"))
+        _workgroups.value = options
+
+        // Default selection: keep current if still valid, else first workgroup.
+        val current = _selectedWorkgroupId.value
+        if (current == null || options.none { it.id == current }) {
+            _selectedWorkgroupId.value = options.firstOrNull()?.id
+        }
     }
 
     private fun updateWorkgroupMembershipSignature() {
@@ -101,11 +137,13 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
                     .filter { it.isNotEmpty() }
                     .toSet()
                 _membershipKnown.value = true
+                rebuildWorkgroupOptions(list.map { it.id to it.name })
             }
             .onFailure {
                 _userWorkgroupIds.value = emptySet()
                 _userWorkgroupNamesLower.value = emptySet()
                 _membershipKnown.value = false
+                rebuildWorkgroupOptions(emptyList())
             }
         updateWorkgroupMembershipSignature()
     }
@@ -114,13 +152,31 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
         val currentState = _uiState.value
         if (currentState is TasksUiState.Success || currentState is TasksUiState.Loading) {
             val myUserId = _currentUserId.value
+            val selectedWg = _selectedWorkgroupId.value
+            val myGroupIds = _userWorkgroupIds.value
             val filtered = _allTasks.value.filter { task ->
+                // ── Workgroup isolation ──
+                // Only show tasks from the SELECTED workgroup. Personal bucket =
+                // tasks with no workgroup. Tasks from groups the user isn't in
+                // are never shown (defensive — the API may return more).
+                val taskGroup = task.groupId
+                val matchesWorkgroup = when {
+                    selectedWg == null -> true // membership not loaded yet — show all briefly
+                    selectedWg == PERSONAL_ID -> taskGroup.isNullOrBlank()
+                    else -> taskGroup == selectedWg
+                }
+                // Extra guard: if membership is known, never show tasks from
+                // groups the user doesn't belong to (except personal tasks).
+                val isAccessible = if (!_membershipKnown.value) true
+                    else taskGroup.isNullOrBlank() || taskGroup in myGroupIds
+
                 // "My Tasks" toggle — only show tasks assigned to the current user
                 val matchesOwnership = if (_showMyTasksOnly.value && myUserId != null) {
                     task.responsibleId == myUserId
                 } else {
                     true
                 }
+                if (!matchesWorkgroup || !isAccessible) return@filter false
 
                 // Search filter
                 val matchesSearch = _searchQuery.value.isBlank() ||
@@ -160,8 +216,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = TasksUiState.Loading
             try {
                 val tasks = repository.getTasks()
+                _allTasks.value = tasks        // set first so option-building sees personal tasks
                 refreshWorkgroupMembership()
-                _allTasks.value = tasks
                 applyFilters()
             } catch (t: Throwable) {
                 _uiState.value = TasksUiState.Error(t.message ?: "An unexpected error occurred")
@@ -178,8 +234,8 @@ class TasksViewModel(application: Application) : AndroidViewModel(application) {
             _isRefreshing.value = true
             try {
                 val tasks = repository.getTasks()
-                refreshWorkgroupMembership()
                 _allTasks.value = tasks
+                refreshWorkgroupMembership()
                 applyFilters()
             } catch (t: Throwable) {
                 // Keep current state on refresh error, just stop refreshing indicator
