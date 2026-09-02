@@ -1,10 +1,10 @@
 package com.example.jbmarks.dashboard.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -103,7 +103,7 @@ fun DashboardContent(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(vertical = 16.dp)
+        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
     ) {
 
         // ── Pending Invitations (shown only when there are invites) ──────
@@ -118,30 +118,209 @@ fun DashboardContent(
             }
         }
 
-        // Stats Cards
+        // ── Progress hero banner ─────────────────────────────────────────
         item {
-            Text(
-                text = "Overview",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            ProgressHeroBanner(stats = stats, onNavigateTo = onNavigateTo)
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // ── Overview stat tiles ──────────────────────────────────────────
+        item {
+            SectionHeader(title = "Overview")
             StatsGrid(stats = stats, onNavigateTo = onNavigateTo)
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // Quick Actions
+        // ── Quick Actions (full 2-column grid) ───────────────────────────
         item {
-            Text(
-                text = "Quick Actions",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            QuickActionsRow(onNavigateTo = onNavigateTo)
+            SectionHeader(title = "Quick Actions")
+            QuickActionsGrid(onNavigateTo = onNavigateTo)
             Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // ── Recent Tasks (fills remaining space) ─────────────────────────
+        if (stats.recentActiveTasks.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Recent Tasks",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "View all",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onNavigateTo("tasks") }
+                    )
+                }
+            }
+            items(stats.recentActiveTasks.take(5)) { task ->
+                RecentTaskItem(task = task, onClick = { onNavigateTo("tasks") })
+            }
+            item { Spacer(modifier = Modifier.height(8.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        color = MaterialTheme.colorScheme.onBackground
+    )
+}
+
+@Composable
+fun ProgressHeroBanner(stats: DashboardStats, onNavigateTo: (String) -> Unit) {
+    val total = stats.activeTasks + stats.completedToday
+    val progress = if (total > 0) stats.completedToday.toFloat() / total.toFloat() else 0f
+    val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = progress,
+        label = "progress"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clickable { onNavigateTo("tasks") },
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.tertiary
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Today's Progress",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (total > 0)
+                            "${stats.completedToday} of $total tasks completed"
+                        else
+                            "No tasks yet — you're all caught up",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = Color.White,
+                        trackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecentTaskItem(task: Task, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 5.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.List,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title.ifEmpty { "Untitled task" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (task.description.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = task.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -285,42 +464,46 @@ fun StatCard(
 }
 
 @Composable
-fun QuickActionsRow(onNavigateTo: (String) -> Unit) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 20.dp)
+fun QuickActionsGrid(onNavigateTo: (String) -> Unit) {
+    data class QuickAction(
+        val title: String,
+        val icon: ImageVector,
+        val containerColor: Color,
+        val route: String
+    )
+
+    val actions = listOf(
+        QuickAction("Water Levels", Icons.Default.Create, Color(0xFF1976D2), "water_levels"),
+        QuickAction("My Tasks", Icons.Default.List, MaterialTheme.colorScheme.primary, "tasks"),
+        QuickAction("Messages", Icons.Default.Email, MaterialTheme.colorScheme.secondary, "chat"),
+        QuickAction("Calendar", Icons.Default.DateRange, MaterialTheme.colorScheme.tertiary, "calendar")
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            QuickActionCard(
-                title = "Water Levels",
-                icon = Icons.Default.Create,
-                containerColor = Color(0xFF1976D2),
-                onClick = { onNavigateTo("water_levels") }
-            )
-        }
-        item {
-            QuickActionCard(
-                title = "My Tasks",
-                icon = Icons.Default.List,
-                containerColor = MaterialTheme.colorScheme.primary,
-                onClick = { onNavigateTo("tasks") }
-            )
-        }
-        item {
-            QuickActionCard(
-                title = "Messages",
-                icon = Icons.Default.Email,
-                containerColor = MaterialTheme.colorScheme.secondary,
-                onClick = { onNavigateTo("chat") }
-            )
-        }
-        item {
-            QuickActionCard(
-                title = "Calendar",
-                icon = Icons.Default.DateRange,
-                containerColor = MaterialTheme.colorScheme.tertiary,
-                onClick = { onNavigateTo("calendar") }
-            )
+        actions.chunked(2).forEach { rowActions ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                rowActions.forEach { action ->
+                    QuickActionCard(
+                        title = action.title,
+                        icon = action.icon,
+                        containerColor = action.containerColor,
+                        modifier = Modifier.weight(1f),
+                        onClick = { onNavigateTo(action.route) }
+                    )
+                }
+                // Fill the row if it has an odd number of items
+                if (rowActions.size < 2) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -330,38 +513,47 @@ fun QuickActionCard(
     title: String,
     icon: ImageVector,
     containerColor: Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .width(140.dp)
-            .height(100.dp)
+        modifier = modifier
+            .height(96.dp)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = containerColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2
             )
         }
     }
