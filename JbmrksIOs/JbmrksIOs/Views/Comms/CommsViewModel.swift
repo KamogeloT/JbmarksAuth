@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - Models
 
@@ -85,7 +86,7 @@ class CommsViewModel: ObservableObject {
     @Published var isLoadingMessages = false
     @Published var isSending = false
     
-    private var pollingTask: Task<Void, Never>?
+    private var pollingTask: _Concurrency.Task<Void, Never>?
     
     init() {
         _Concurrency.Task {
@@ -161,14 +162,16 @@ class CommsViewModel: ObservableObject {
         }
     }
     
-    /// Check if the current user has access to Comms (is in MANAGEMENT group)
+    /// Check if the current user has access to Comms.
+    /// Comms is open to every workgroup: any user who belongs to at least one
+    /// workgroup gets access, and each workgroup becomes a channel.
     static func checkAccess(webhookUrl: String = "https://jbmarks.sdinmotion.co.za/rest/1/accwtpjw1vnywkss") async -> Bool {
         guard let url = URL(string: "\(webhookUrl)/sonet_group.user.groups.json") else { return false }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let result = json["result"] as? [[String: Any]] {
-                return result.contains(where: { ($0["GROUP_ID"] as? String) == managementGroupId })
+                return !result.isEmpty
             }
         } catch {}
         return false

@@ -47,6 +47,8 @@ struct ContentView: View {
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshTasks"), object: nil)
             case .chat:
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshChats"), object: nil)
+            case .comms:
+                NotificationCenter.default.post(name: NSNotification.Name("RefreshChats"), object: nil)
             case .calendar:
                 NotificationCenter.default.post(name: NSNotification.Name("RefreshCalendar"), object: nil)
             }
