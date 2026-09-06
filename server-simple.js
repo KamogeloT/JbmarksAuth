@@ -2043,23 +2043,81 @@ app.get('/api/comms/messages', async (req, res) => {
 });
 
 /**
- * POST /api/comms/send  { dialog_id, message, sender_user_id }
- * Sends a chat message via the webhook, attributed to the sender.
+ * POST /api/comms/send
+ * Body: { dialog_id, message, sender_name, sender_user_id, recipient_user_ids: [] }
+ * Sends a chat message via the webhook, attributed to the sender, then pushes a
+ * high-priority FCM "CHAT_MESSAGE" to each recipient so their phone wakes/heads-up
+ * even when the app is closed (mirrors the call-notify flow).
  */
 app.post('/api/comms/send', async (req, res) => {
     try {
-        const { dialog_id, message, sender_name } = req.body || {};
+        const { dialog_id, message, sender_name, sender_user_id, recipient_user_ids } = req.body || {};
         if (!dialog_id || !message) return res.status(400).json({ error: 'dialog_id and message required' });
 
-        // Prefix sender name so group messages show who sent it (webhook posts as the app user).
+        // Prefix sender name so messages show who sent it (webhook posts as the app user).
         const text = sender_name ? `${message}\n\n— ${sender_name}` : message;
         const r = await sdeskBitrix('im.message.add', { DIALOG_ID: String(dialog_id), MESSAGE: text });
+
+        // Fire-and-forget push to recipients (never fails the send if push fails).
+        sendChatMessagePush({
+            dialogId: String(dialog_id),
+            senderName: sender_name || 'New message',
+            senderUserId: sender_user_id ? String(sender_user_id) : '',
+            preview: String(message).slice(0, 140),
+            recipientUserIds: Array.isArray(recipient_user_ids) ? recipient_user_ids.map(String) : []
+        }).catch(err => console.error('⚠️ chat push failed (non-fatal):', err.message));
+
         res.json({ success: true, messageId: r.result });
     } catch (error) {
         console.error('❌ comms send error:', error.message);
         res.status(500).json({ error: 'send_failed', message: error.message });
     }
 });
+
+/**
+ * Sends a high-priority data-only FCM to each recipient for a new chat message.
+ * Data-only + priority:high means the app's onMessageReceived runs even when
+ * backgrounded/killed, so it can raise a full-screen/heads-up message notification.
+ */
+async function sendChatMessagePush({ dialogId, senderName, senderUserId, preview, recipientUserIds }) {
+    if (!firebaseInitialized) { console.warn('⚠️ FCM not configured — chat push skipped'); return; }
+    if (!pool) { console.warn('⚠️ DB not configured — chat push skipped'); return; }
+
+    // Never notify the sender's own devices.
+    const targets = [...new Set((recipientUserIds || []).filter(id => id && id !== senderUserId))];
+    if (targets.length === 0) { console.log('ℹ️ chat push: no recipient user ids provided'); return; }
+
+    let sent = 0;
+    for (const userId of targets) {
+        const tokens = await pool.query(
+            'SELECT fcm_token FROM push_tokens WHERE user_id = $1 AND fcm_token IS NOT NULL',
+            [userId]
+        );
+        for (const row of tokens.rows) {
+            try {
+                await admin.messaging().send({
+                    token: row.fcm_token,
+                    data: {
+                        type: 'CHAT_MESSAGE',
+                        dialog_id: dialogId,
+                        sender_user_id: senderUserId,
+                        sender_name: senderName,
+                        message: preview,
+                        timestamp: Date.now().toString()
+                    },
+                    android: { priority: 'high' }
+                });
+                sent++;
+            } catch (fcmError) {
+                console.error(`❌ chat push failed for ${userId}: ${fcmError.message}`);
+                if (fcmError.code === 'messaging/registration-token-not-registered') {
+                    pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [row.fcm_token]).catch(() => {});
+                }
+            }
+        }
+    }
+    console.log(`✅ chat push: notified ${sent} device(s) across ${targets.length} recipient(s)`);
+}
 
 // ── ACS Identity & Token Helpers ─────────────────────────────────────
 

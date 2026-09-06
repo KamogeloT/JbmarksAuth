@@ -159,14 +159,32 @@ class CommsViewModel(application: Application) : AndroidViewModel(application) {
 
         _state.value = _state.value.copy(isSending = true)
 
+        // Resolve who to push-notify:
+        //  - Direct message: the other user (currentDialogId is their bare user id)
+        //  - Group chat: all workgroup members except the current user
+        val myId = _state.value.currentUserId
+        val recipients: List<String> = when (_state.value.activeView) {
+            ActiveView.DirectMessage ->
+                if (!dialogId.startsWith("chat")) listOf(dialogId) else emptyList()
+            ActiveView.GroupChat ->
+                _state.value.members.map { it.userId }.filter { it.isNotBlank() && it != myId }
+            else -> emptyList()
+        }
+
         viewModelScope.launch {
             try {
-                val result = repository.sendMessage(dialogId, text.trim())
+                val result = repository.sendMessage(dialogId, text.trim(), recipients)
                 if (result.isSuccess) {
                     // Refresh messages for the ACTIVE dialog only
                     loadMessages(dialogId)
+                    _state.value = _state.value.copy(isSending = false)
+                } else {
+                    Log.e(TAG, "Send failed", result.exceptionOrNull())
+                    _state.value = _state.value.copy(
+                        isSending = false,
+                        error = "Message could not be sent. Please try again."
+                    )
                 }
-                _state.value = _state.value.copy(isSending = false)
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending message", e)
                 _state.value = _state.value.copy(

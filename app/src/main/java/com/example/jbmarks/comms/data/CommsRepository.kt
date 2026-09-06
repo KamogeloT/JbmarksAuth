@@ -131,11 +131,31 @@ class CommsRepository(private val context: Context) {
     }
 
     /**
-     * Send a message to a workgroup chat via the backend (webhook).
+     * Send a message to a workgroup chat or a direct message via the backend (webhook).
+     *
+     * @param dialogId    "chatNN" for a group chat, or a bare numeric user id for a DM.
+     * @param text        the message body.
+     * @param recipientUserIds user ids to push-notify (DM: the other user; group: members).
+     *                    The backend excludes the sender and pushes a high-priority FCM so
+     *                    recipients' phones wake even when the app is closed.
      */
-    suspend fun sendMessage(dialogId: String, text: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun sendMessage(
+        dialogId: String,
+        text: String,
+        recipientUserIds: List<String> = emptyList()
+    ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val senderName = userRepository.getCurrentUser().getOrNull()?.fullName ?: ""
+            val currentUser = userRepository.getCurrentUser().getOrNull()
+            val senderName = currentUser?.fullName ?: ""
+            val senderId = currentUser?.id ?: ""
+
+            // Resolve recipients if not provided: for a DM the dialogId IS the recipient user id.
+            val recipients = when {
+                recipientUserIds.isNotEmpty() -> recipientUserIds
+                !dialogId.startsWith("chat") && dialogId.toLongOrNull() != null -> listOf(dialogId)
+                else -> emptyList()
+            }
+
             val url = URL("$BACKEND/api/comms/send")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -147,12 +167,15 @@ class CommsRepository(private val context: Context) {
                 put("dialog_id", dialogId)
                 put("message", text)
                 put("sender_name", senderName)
+                put("sender_user_id", senderId)
+                put("recipient_user_ids", org.json.JSONArray(recipients))
             }.toString()
             conn.outputStream.use { it.write(payload.toByteArray()) }
             if (conn.responseCode in 200..299) {
                 val resp = conn.inputStream.bufferedReader().readText()
                 Result.success(JSONObject(resp).optString("messageId", "sent"))
             } else {
+                Log.w(TAG, "Backend send HTTP ${conn.responseCode} for $dialogId; falling back to direct API")
                 // Fallback to direct chat API
                 chatRepository.sendMessage(dialogId, text)
             }

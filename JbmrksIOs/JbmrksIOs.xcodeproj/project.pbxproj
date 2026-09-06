@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		437563102CEF27D305F76579 /* Pods_JbmrksIOs.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC5AD0B41697CE3322831FEB /* Pods_JbmrksIOs.framework */; };
+		DC704374677BC6963197C9DA /* Pods_JbmrksIOs.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D5316934259B08B1C17EE49D /* Pods_JbmrksIOs.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -47,22 +47,28 @@
 		4875E7092F45F6DD0076FCC2 /* JbmrksIOsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = JbmrksIOsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9FDCCF7BEF7F28C56AAF7710 /* Pods-JbmrksIOs.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-JbmrksIOs.release.xcconfig"; path = "Target Support Files/Pods-JbmrksIOs/Pods-JbmrksIOs.release.xcconfig"; sourceTree = "<group>"; };
 		D085BA185969C4ED04731C7E /* Pods-JbmrksIOs.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-JbmrksIOs.debug.xcconfig"; path = "Target Support Files/Pods-JbmrksIOs/Pods-JbmrksIOs.debug.xcconfig"; sourceTree = "<group>"; };
-		DC5AD0B41697CE3322831FEB /* Pods_JbmrksIOs.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_JbmrksIOs.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5316934259B08B1C17EE49D /* Pods_JbmrksIOs.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_JbmrksIOs.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4875E6F22F45F6DC0076FCC2 /* JbmrksIOs */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = JbmrksIOs;
 			sourceTree = "<group>";
 		};
 		4875E7022F45F6DD0076FCC2 /* JbmrksIOsTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = JbmrksIOsTests;
 			sourceTree = "<group>";
 		};
 		4875E70C2F45F6DD0076FCC2 /* JbmrksIOsUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = JbmrksIOsUITests;
 			sourceTree = "<group>";
 		};
@@ -73,7 +79,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				437563102CEF27D305F76579 /* Pods_JbmrksIOs.framework in Frameworks */,
+				DC704374677BC6963197C9DA /* Pods_JbmrksIOs.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,7 +134,7 @@
 		8C3FBA2C09726D1364E521ED /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				DC5AD0B41697CE3322831FEB /* Pods_JbmrksIOs.framework */,
+				D5316934259B08B1C17EE49D /* Pods_JbmrksIOs.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

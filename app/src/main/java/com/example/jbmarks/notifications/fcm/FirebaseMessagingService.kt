@@ -85,6 +85,13 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
                 return
             }
 
+            // Handle new chat message — wake the phone with a heads-up/full-screen
+            // notification (like calls) so it's seen even when the app is closed.
+            if (type == "CHAT_MESSAGE" || type == "NEW_MESSAGE") {
+                handleChatMessagePush(data)
+                return
+            }
+
             val title = data["title"] ?: "New Notification"
             val message = data["message"] ?: ""
             val relatedId = data["related_id"]
@@ -134,6 +141,84 @@ class JBmarksFirebaseMessagingService : FirebaseMessagingService() {
         // For group calls, show the group name as the caller label.
         val displayName = if (isGroup && groupName.isNotBlank()) "$groupName (group call)" else callerName
         CallForegroundService.start(applicationContext, displayName, callerUserId, roomId)
+    }
+
+    /**
+     * Show a new chat message as a high-priority, phone-waking notification.
+     * Uses a HIGH-importance channel + full-screen intent + CATEGORY_MESSAGE so the
+     * screen turns on and a heads-up shows even when the app is backgrounded/killed —
+     * matching the incoming-call behavior. Also records it in the in-app repository.
+     */
+    private fun handleChatMessagePush(data: Map<String, String>) {
+        val senderName = data["sender_name"]?.takeIf { it.isNotBlank() } ?: "New message"
+        val messageText = data["message"] ?: ""
+        val dialogId = data["dialog_id"] ?: ""
+
+        Log.d(TAG, "💬 CHAT MESSAGE push from $senderName | dialog: $dialogId")
+
+        val channelId = "urgent_messages"
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "New chat messages"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+
+        // Tapping (or the full-screen intent) opens the app to the conversation.
+        val intent = android.content.Intent(this, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_chat", true)
+            putExtra("dialog_id", dialogId)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            this,
+            dialogId.hashCode(),
+            intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
+            .setContentTitle(senderName)
+            .setContentText(messageText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true) // wakes the screen like a call
+            .setAutoCancel(true)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .build()
+
+        // Distinct id per dialog so multiple conversations don't overwrite each other.
+        val notifId = 4000 + (dialogId.hashCode() and 0x0FFF)
+        getSystemService(NotificationManager::class.java).notify(notifId, notification)
+
+        // Also record it in-app so it appears in the notifications list.
+        try {
+            notificationRepository.addNotification(
+                Notification(
+                    id = data["timestamp"] ?: System.currentTimeMillis().toString(),
+                    type = NotificationType.CHAT_MESSAGE,
+                    title = senderName,
+                    message = messageText,
+                    timestamp = System.currentTimeMillis(),
+                    isRead = false,
+                    priority = NotificationPriority.HIGH,
+                    relatedId = dialogId,
+                    actionUrl = null
+                )
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to record chat notification in-app: ${e.message}")
+        }
     }
 
     /**
