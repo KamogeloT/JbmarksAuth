@@ -144,18 +144,34 @@ class CommsRepository(private val context: Context) {
         text: String,
         recipientUserIds: List<String> = emptyList()
     ): Result<String> = withContext(Dispatchers.IO) {
-        try {
-            val currentUser = userRepository.getCurrentUser().getOrNull()
-            val senderName = currentUser?.fullName ?: ""
-            val senderId = currentUser?.id ?: ""
+        val currentUser = userRepository.getCurrentUser().getOrNull()
+        val senderName = currentUser?.fullName ?: ""
+        val senderId = currentUser?.id ?: ""
 
-            // Resolve recipients if not provided: for a DM the dialogId IS the recipient user id.
-            val recipients = when {
-                recipientUserIds.isNotEmpty() -> recipientUserIds
-                !dialogId.startsWith("chat") && dialogId.toLongOrNull() != null -> listOf(dialogId)
-                else -> emptyList()
+        // Resolve recipients if not provided: for a DM the dialogId IS the recipient user id.
+        val recipients = when {
+            recipientUserIds.isNotEmpty() -> recipientUserIds
+            !dialogId.startsWith("chat") && dialogId.toLongOrNull() != null -> listOf(dialogId)
+            else -> emptyList()
+        }
+
+        val isDirectMessage = !dialogId.startsWith("chat") && dialogId.toLongOrNull() != null
+
+        // DIRECT MESSAGES: post with the sender's OWN OAuth token so the message is
+        // attributed to the real sender (Kamogelo -> Katlego lands in their actual
+        // conversation), NOT the webhook user. Then fire the push separately.
+        if (isDirectMessage) {
+            val result = chatRepository.sendMessage(dialogId, text)
+            if (result.isSuccess) {
+                notifyRecipients(dialogId, text, senderName, senderId, recipients)
             }
+            return@withContext result
+        }
 
+        // GROUP / WORKGROUP CHATS: the user may not be able to post to a workgroup
+        // chat directly (membership/permission), so route through the backend webhook,
+        // which also fires the recipient push. Fall back to the direct token path.
+        try {
             val url = URL("$BACKEND/api/comms/send")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
@@ -176,12 +192,46 @@ class CommsRepository(private val context: Context) {
                 Result.success(JSONObject(resp).optString("messageId", "sent"))
             } else {
                 Log.w(TAG, "Backend send HTTP ${conn.responseCode} for $dialogId; falling back to direct API")
-                // Fallback to direct chat API
                 chatRepository.sendMessage(dialogId, text)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Backend send failed, falling back: ${e.message}")
             chatRepository.sendMessage(dialogId, text)
+        }
+    }
+
+    /**
+     * Fire-and-forget high-priority push to recipients via the backend (push-only
+     * endpoint — does NOT post the message, since the app already did that with the
+     * sender's token). Never fails the send if the push can't be delivered.
+     */
+    private suspend fun notifyRecipients(
+        dialogId: String,
+        text: String,
+        senderName: String,
+        senderId: String,
+        recipients: List<String>
+    ) {
+        if (recipients.isEmpty()) return
+        try {
+            val url = URL("$BACKEND/api/comms/notify")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            val payload = JSONObject().apply {
+                put("dialog_id", dialogId)
+                put("message", text)
+                put("sender_name", senderName)
+                put("sender_user_id", senderId)
+                put("recipient_user_ids", org.json.JSONArray(recipients))
+            }.toString()
+            conn.outputStream.use { it.write(payload.toByteArray()) }
+            conn.responseCode // drain
+        } catch (e: Exception) {
+            Log.w(TAG, "Recipient push notify failed (non-fatal): ${e.message}")
         }
     }
 

@@ -2075,6 +2075,32 @@ app.post('/api/comms/send', async (req, res) => {
 });
 
 /**
+ * POST /api/comms/notify  (push-only, does NOT post to Bitrix)
+ * Body: { dialog_id, message, sender_name, sender_user_id, recipient_user_ids: [] }
+ * Used when the APP posts the message itself with the sender's own OAuth token
+ * (so it's attributed to the real sender). This only fires the high-priority FCM
+ * wake-up push to recipients.
+ */
+app.post('/api/comms/notify', async (req, res) => {
+    try {
+        const { dialog_id, message, sender_name, sender_user_id, recipient_user_ids } = req.body || {};
+        if (!dialog_id) return res.status(400).json({ error: 'dialog_id required' });
+
+        await sendChatMessagePush({
+            dialogId: String(dialog_id),
+            senderName: sender_name || 'New message',
+            senderUserId: sender_user_id ? String(sender_user_id) : '',
+            preview: String(message || '').slice(0, 140),
+            recipientUserIds: Array.isArray(recipient_user_ids) ? recipient_user_ids.map(String) : []
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ comms notify error:', error.message);
+        res.status(500).json({ error: 'notify_failed', message: error.message });
+    }
+});
+
+/**
  * Sends a high-priority data-only FCM to each recipient for a new chat message.
  * Data-only + priority:high means the app's onMessageReceived runs even when
  * backgrounded/killed, so it can raise a full-screen/heads-up message notification.
