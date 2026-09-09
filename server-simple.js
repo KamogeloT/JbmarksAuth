@@ -325,6 +325,45 @@ async function resolveRole(userId) {
     return ROLES.REQUESTER;
 }
 
+// ── Network Monitor: outage notifications to the IT group ────────────────
+// De-dupe guard so a flapping node can't spam the same alert. Keyed by
+// `${nodeId}:${kind}` -> timestamp of last send.
+const _netAlertSent = new Map();
+const NET_ALERT_COOLDOWN_MS = 5 * 60 * 1000; // don't repeat the same alert within 5 min
+
+/**
+ * Send a Bitrix system notification to every member of the IT support group.
+ * Best-effort: failures are logged, never thrown (must not break status writes).
+ * @param {string} nodeId  used only for de-dupe keying
+ * @param {'down'|'recovered'} kind
+ * @param {string} message  notification text
+ */
+async function notifyItGroupOutage(nodeId, kind, message) {
+    try {
+        const key = `${nodeId}:${kind}`;
+        const now = Date.now();
+        const last = _netAlertSent.get(key) || 0;
+        if (now - last < NET_ALERT_COOLDOWN_MS) return; // throttled
+        _netAlertSent.set(key, now);
+
+        const grp = await sdeskBitrix('sonet_group.user.get', { ID: SDESK_IT_GROUP });
+        const members = grp.result || [];
+        const userIds = [...new Set(members.map(m => String(m.USER_ID)).filter(Boolean))];
+        if (userIds.length === 0) {
+            console.warn('⚠️ network alert: IT group has no members to notify');
+            return;
+        }
+
+        await Promise.all(userIds.map(uid =>
+            sdeskBitrix('im.notify.system.add', { USER_ID: uid, MESSAGE: message })
+                .catch(e => console.warn(`⚠️ network alert to user ${uid} failed: ${e.message}`))
+        ));
+        console.log(`🔔 network ${kind} alert sent to ${userIds.length} IT member(s) for node ${nodeId}`);
+    } catch (e) {
+        console.error('❌ notifyItGroupOutage error:', e.message);
+    }
+}
+
 // Middleware: require a valid JWT; attaches req.auth = { sub, role, name, email }
 function requireAuth(req, res, next) {
     const hdr = req.headers['authorization'] || '';
@@ -2410,11 +2449,56 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
             return res.status(400).json({ error: 'Body must include a "results" array' });
         }
 
+        // Snapshot previous statuses + node metadata BEFORE writing, so we can
+        // detect edges (transitions into/out of 'down') and craft readable alerts.
+        const incomingIds = [...new Set(results.filter(r => r && r.nodeId).map(r => String(r.nodeId)))];
+        const prevStatusById = {};
+        const nodeMetaById = {};
+        if (incomingIds.length > 0) {
+            try {
+                const prev = await pool.query(
+                    'SELECT node_id, status FROM network_status WHERE node_id = ANY($1)',
+                    [incomingIds]
+                );
+                for (const row of prev.rows) prevStatusById[row.node_id] = row.status;
+                const meta = await pool.query(
+                    'SELECT id, name, url, location FROM network_nodes WHERE id = ANY($1)',
+                    [incomingIds]
+                );
+                for (const row of meta.rows) nodeMetaById[row.id] = row;
+            } catch (e) {
+                console.warn('⚠️ network alert pre-read failed (continuing without alerts):', e.message);
+            }
+        }
+        const alertEvents = []; // { nodeId, kind: 'down'|'recovered', message }
+
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
             for (const r of results) {
                 if (!r || !r.nodeId || !r.status) continue;
+
+                // Edge detection: alert only on transitions, not every cycle.
+                const nid = String(r.nodeId);
+                const prevStatus = prevStatusById[nid];
+                const newStatus = String(r.status);
+                const meta = nodeMetaById[nid] || {};
+                const label = meta.name || nid;
+                const where = meta.url ? ` (${meta.url})` : '';
+                const loc = meta.location ? ` @ ${meta.location}` : '';
+                if (newStatus === 'down' && prevStatus !== 'down') {
+                    const why = r.error ? ` — ${String(r.error)}` : '';
+                    alertEvents.push({
+                        nodeId: nid, kind: 'down',
+                        message: `🔴 Network alert: ${label}${where}${loc} is DOWN${why}`,
+                    });
+                } else if (prevStatus === 'down' && (newStatus === 'up' || newStatus === 'slow')) {
+                    alertEvents.push({
+                        nodeId: nid, kind: 'recovered',
+                        message: `✅ Recovered: ${label}${where}${loc} is back ${newStatus === 'slow' ? '(slow)' : 'online'}`,
+                    });
+                }
+
                 await client.query(
                     `INSERT INTO network_status (node_id, status, response_time, status_code, error, method, last_checked, agent_id)
                      VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7)
@@ -2458,6 +2542,15 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
         }
 
         console.log(`✅ network_status updated by agent "${agentId || 'unknown'}" (${results.length} results)`);
+
+        // Fire outage/recovery notifications AFTER the commit so Bitrix latency
+        // or failures can never roll back or delay the status write. Fire-and-forget.
+        if (alertEvents.length > 0) {
+            for (const ev of alertEvents) {
+                notifyItGroupOutage(ev.nodeId, ev.kind, ev.message); // no await — best-effort
+            }
+        }
+
         res.json({ success: true, count: results.length });
     } catch (error) {
         console.error('❌ network-status POST error:', error.message);
