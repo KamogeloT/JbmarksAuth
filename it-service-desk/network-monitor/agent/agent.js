@@ -225,6 +225,8 @@ function parseHostPort(s) {
 
 // ── Main loop ───────────────────────────────────────────────────────────
 
+// Returns true if the full cycle (fetch nodes + push status) reached the
+// backend, false if a backend call failed — the caller uses this to back off.
 async function runOnce() {
   let nodes = [];
   try {
@@ -232,12 +234,12 @@ async function runOnce() {
     nodes = Array.isArray(data.nodes) ? data.nodes : [];
   } catch (e) {
     console.error(`[${new Date().toISOString()}] Failed to fetch nodes: ${e.message}`);
-    return;
+    return false;
   }
 
   if (nodes.length === 0) {
     console.log(`[${new Date().toISOString()}] No nodes configured.`);
-    return;
+    return true; // backend reachable, just nothing to do
   }
 
   const results = await Promise.all(nodes.map(async (n) => {
@@ -251,9 +253,35 @@ async function runOnce() {
     const slow = results.filter((r) => r.status === 'slow').length;
     const down = results.filter((r) => r.status === 'down').length;
     console.log(`[${new Date().toISOString()}] Reported ${results.length} nodes — up:${up} slow:${slow} down:${down}`);
+    return true;
   } catch (e) {
     console.error(`[${new Date().toISOString()}] Failed to push status: ${e.message}`);
+    return false;
   }
+}
+
+// Exponential backoff so a down/unreachable backend isn't hammered every
+// INTERVAL_MS. On success we run again after the normal interval; on failure
+// we wait longer each time (2x), capped at MAX_BACKOFF_MS, then reset on
+// the next success.
+const MAX_BACKOFF_MS = parseInt(process.env.MAX_BACKOFF_MS || '300000', 10); // 5 min cap
+let consecutiveFailures = 0;
+
+function nextDelay(ok) {
+  if (ok) {
+    consecutiveFailures = 0;
+    return INTERVAL_MS;
+  }
+  consecutiveFailures += 1;
+  // 2^n * interval, capped. n starts at 1 on first failure.
+  const backoff = Math.min(INTERVAL_MS * Math.pow(2, consecutiveFailures), MAX_BACKOFF_MS);
+  console.warn(`[${new Date().toISOString()}] Backend unreachable (${consecutiveFailures}x) — backing off ${Math.round(backoff / 1000)}s`);
+  return backoff;
+}
+
+async function loop() {
+  const ok = await runOnce();
+  setTimeout(loop, nextDelay(ok));
 }
 
 async function main() {
@@ -263,11 +291,11 @@ async function main() {
   console.log(`Agent ID:   ${AGENT_ID}`);
   console.log(`Backend:    ${API_BASE}`);
   console.log(`Interval:   ${INTERVAL_MS} ms`);
+  console.log(`Max backoff:${MAX_BACKOFF_MS} ms`);
   console.log(`Auth token: ${AGENT_TOKEN ? 'set' : 'NOT SET (backend must also be unset)'}`);
   console.log('='.repeat(60));
 
-  await runOnce();
-  setInterval(runOnce, INTERVAL_MS);
+  loop();
 }
 
 main();

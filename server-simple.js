@@ -119,6 +119,10 @@ async function setupDatabase() {
         `);
         console.log('✅ network_status_history table created/verified');
 
+        // Prune history on startup, then daily, to cap table growth.
+        pruneNetworkHistory();
+        setInterval(pruneNetworkHistory, 24 * 60 * 60 * 1000);
+
         // Service Desk: escalation tracking (dedupe so a ticket isn't re-escalated each cycle)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS ticket_escalations (
@@ -361,6 +365,28 @@ async function notifyItGroupOutage(nodeId, kind, message) {
         console.log(`🔔 network ${kind} alert sent to ${userIds.length} IT member(s) for node ${nodeId}`);
     } catch (e) {
         console.error('❌ notifyItGroupOutage error:', e.message);
+    }
+}
+
+// Prune old rows from network_status_history so it doesn't grow unbounded.
+// One agent reporting N nodes every 30s = ~2880*N rows/day. Keep a rolling
+// retention window (default 30 days) for uptime reporting; drop the rest.
+const NET_HISTORY_RETENTION_DAYS = parseInt(process.env.NET_HISTORY_RETENTION_DAYS || '30', 10);
+async function pruneNetworkHistory() {
+    if (!pool) return;
+    try {
+        const days = Number.isFinite(NET_HISTORY_RETENTION_DAYS) && NET_HISTORY_RETENTION_DAYS > 0
+            ? NET_HISTORY_RETENTION_DAYS : 30;
+        const r = await pool.query(
+            `DELETE FROM network_status_history
+             WHERE checked_at < NOW() - ($1 || ' days')::interval`,
+            [String(days)]
+        );
+        if (r.rowCount > 0) {
+            console.log(`🧹 pruned ${r.rowCount} network_status_history row(s) older than ${days}d`);
+        }
+    } catch (e) {
+        console.error('❌ pruneNetworkHistory error:', e.message);
     }
 }
 
@@ -2448,6 +2474,18 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
         if (!Array.isArray(results)) {
             return res.status(400).json({ error: 'Body must include a "results" array' });
         }
+        // Size guard: cap the batch so a rogue/buggy agent (or a leaked token)
+        // can't push an enormous payload and hammer the DB. A real deployment
+        // monitors tens of nodes, not thousands.
+        const MAX_RESULTS_PER_REPORT = 500;
+        if (results.length > MAX_RESULTS_PER_REPORT) {
+            return res.status(413).json({
+                error: 'too_many_results',
+                message: `results array exceeds limit of ${MAX_RESULTS_PER_REPORT}`,
+            });
+        }
+        // Cap agentId length too (it's stored and logged).
+        const safeAgentId = agentId != null ? String(agentId).slice(0, 128) : null;
 
         // Snapshot previous statuses + node metadata BEFORE writing, so we can
         // detect edges (transitions into/out of 'down') and craft readable alerts.
@@ -2460,7 +2498,7 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
                     'SELECT node_id, status, agent_id FROM network_status WHERE node_id = ANY($1)',
                     [incomingIds]
                 );
-                const thisAgent = agentId != null ? String(agentId) : null;
+                const thisAgent = safeAgentId;
                 for (const row of prev.rows) {
                     prevStatusById[row.node_id] = row.status;
                     // Single-agent design: warn (don't fail) if a DIFFERENT agent
@@ -2526,7 +2564,7 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
                         Number.isInteger(r.statusCode) ? r.statusCode : null,
                         r.error != null ? String(r.error) : null,
                         r.method != null ? String(r.method) : null,
-                        agentId != null ? String(agentId) : null,
+                        safeAgentId,
                     ]
                 );
 
@@ -2538,7 +2576,7 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
                         String(r.nodeId),
                         String(r.status),
                         Number.isInteger(r.responseTime) ? r.responseTime : null,
-                        agentId != null ? String(agentId) : null,
+                        safeAgentId,
                     ]
                 );
             }
@@ -2550,7 +2588,7 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
             client.release();
         }
 
-        console.log(`✅ network_status updated by agent "${agentId || 'unknown'}" (${results.length} results)`);
+        console.log(`✅ network_status updated by agent "${safeAgentId || 'unknown'}" (${results.length} results)`);
 
         // Fire outage/recovery notifications AFTER the commit so Bitrix latency
         // or failures can never roll back or delay the status write. Fire-and-forget.
