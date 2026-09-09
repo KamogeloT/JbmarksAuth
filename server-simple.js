@@ -99,6 +99,26 @@ async function setupDatabase() {
         `);
         console.log('✅ network_status table created/verified');
 
+        // Network Monitor: append-only status history for uptime % and "down since".
+        // network_status holds only the latest state per node; this table records
+        // every reading so we can compute uptime over a window and find outage starts.
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS network_status_history (
+                id BIGSERIAL PRIMARY KEY,
+                node_id VARCHAR(64) NOT NULL,
+                status VARCHAR(16) NOT NULL,
+                response_time INTEGER,
+                agent_id VARCHAR(128),
+                checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // Index for the common query: history for one node, newest first / by time.
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_net_hist_node_time
+            ON network_status_history (node_id, checked_at DESC);
+        `);
+        console.log('✅ network_status_history table created/verified');
+
         // Service Desk: escalation tracking (dedupe so a ticket isn't re-escalated each cycle)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS ticket_escalations (
@@ -2416,6 +2436,18 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
                         agentId != null ? String(agentId) : null,
                     ]
                 );
+
+                // Append to history (time-series) for uptime % and outage timing.
+                await client.query(
+                    `INSERT INTO network_status_history (node_id, status, response_time, agent_id, checked_at)
+                     VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+                    [
+                        String(r.nodeId),
+                        String(r.status),
+                        Number.isInteger(r.responseTime) ? r.responseTime : null,
+                        agentId != null ? String(agentId) : null,
+                    ]
+                );
             }
             await client.query('COMMIT');
         } catch (txErr) {
@@ -2430,6 +2462,68 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
     } catch (error) {
         console.error('❌ network-status POST error:', error.message);
         res.status(500).json({ error: 'Failed to save network status', message: error.message });
+    }
+});
+
+/**
+ * GET /api/network-uptime?hours=24
+ * Uptime summary per node over a time window, computed from the history table.
+ * Response: { windowHours, uptime: { [nodeId]: { uptimePct, samples, lastDown } } }
+ *   uptimePct  % of samples that were 'up' or 'slow' (reachable) in the window
+ *   samples    number of readings in the window
+ *   lastDown   ISO timestamp of the most recent 'down' reading, or null
+ * "slow" counts as reachable (the device answered), only "down" counts against uptime.
+ */
+app.get('/api/network-uptime', async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(503).json({ error: 'Database not configured', message: 'DATABASE_URL not set' });
+        }
+
+        // Clamp the window to a sane range (1h .. 30 days) to keep queries cheap.
+        let hours = parseInt(req.query.hours, 10);
+        if (!Number.isFinite(hours) || hours <= 0) hours = 24;
+        hours = Math.min(hours, 24 * 30);
+
+        // Aggregate reachability per node in a single pass.
+        const agg = await pool.query(
+            `SELECT node_id,
+                    COUNT(*)::int AS samples,
+                    COUNT(*) FILTER (WHERE status IN ('up','slow'))::int AS reachable
+             FROM network_status_history
+             WHERE checked_at >= NOW() - ($1 || ' hours')::interval
+             GROUP BY node_id`,
+            [String(hours)]
+        );
+
+        // Most recent 'down' per node within the window.
+        const lastDown = await pool.query(
+            `SELECT node_id, MAX(checked_at) AS last_down
+             FROM network_status_history
+             WHERE status = 'down'
+               AND checked_at >= NOW() - ($1 || ' hours')::interval
+             GROUP BY node_id`,
+            [String(hours)]
+        );
+        const lastDownMap = {};
+        for (const r of lastDown.rows) {
+            lastDownMap[r.node_id] = r.last_down ? new Date(r.last_down).toISOString() : null;
+        }
+
+        const uptime = {};
+        for (const r of agg.rows) {
+            const pct = r.samples > 0 ? Math.round((r.reachable / r.samples) * 1000) / 10 : null;
+            uptime[r.node_id] = {
+                uptimePct: pct,
+                samples: r.samples,
+                lastDown: lastDownMap[r.node_id] || null,
+            };
+        }
+
+        res.json({ windowHours: hours, uptime });
+    } catch (error) {
+        console.error('❌ network-uptime GET error:', error.message);
+        res.status(500).json({ error: 'Failed to compute uptime', message: error.message });
     }
 });
 
