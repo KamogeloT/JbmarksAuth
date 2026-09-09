@@ -2457,10 +2457,19 @@ app.post('/api/network-status', requireAgentOrAdmin, async (req, res) => {
         if (incomingIds.length > 0) {
             try {
                 const prev = await pool.query(
-                    'SELECT node_id, status FROM network_status WHERE node_id = ANY($1)',
+                    'SELECT node_id, status, agent_id FROM network_status WHERE node_id = ANY($1)',
                     [incomingIds]
                 );
-                for (const row of prev.rows) prevStatusById[row.node_id] = row.status;
+                const thisAgent = agentId != null ? String(agentId) : null;
+                for (const row of prev.rows) {
+                    prevStatusById[row.node_id] = row.status;
+                    // Single-agent design: warn (don't fail) if a DIFFERENT agent
+                    // starts reporting a node another agent owns. Last-write-wins
+                    // still applies; this just makes accidental overlap visible.
+                    if (row.agent_id && thisAgent && row.agent_id !== thisAgent) {
+                        console.warn(`⚠️ node "${row.node_id}" now reported by agent "${thisAgent}" but was last reported by "${row.agent_id}" — multiple agents may be monitoring the same node (expected: one agent).`);
+                    }
+                }
                 const meta = await pool.query(
                     'SELECT id, name, url, location FROM network_nodes WHERE id = ANY($1)',
                     [incomingIds]

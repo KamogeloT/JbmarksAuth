@@ -94,6 +94,10 @@ sudo journalctl -u jbmarks-agent -f     # watch logs
 
 ## Notes
 - No inbound firewall changes needed — the agent only makes **outbound** HTTPS calls.
-- Run **one** agent per network segment. Running several is fine; the last write per
-  node wins, and the dashboard shows which `agentId` reported it.
+- **Run exactly one agent.** The backend stores a single status per node
+  (keyed by `node_id`), so a node must be owned by one agent. If two agents
+  report the **same** node, their readings clobber each other (last write wins)
+  and the backend logs a warning. If you need to cover multiple isolated network
+  segments, that's fine — but give each agent a **non-overlapping** node list so
+  no node is checked by more than one agent.
 - Zero npm dependencies — only Node built-ins. `npm install` is not required.
