@@ -2226,6 +2226,15 @@ async function sendChatMessagePush({ dialogId, senderName, senderUserId, preview
                 }
             }
         }
+
+        // iOS: wake via APNs too (time-sensitive) so messages alert on iPhone.
+        if (apnProvider) {
+            await sendWakePush(userId, {
+                type: 'CHAT_MESSAGE', title: senderName || 'New message', body: preview,
+                data: { dialog_id: dialogId, sender_user_id: senderUserId, sender_name: senderName },
+                apnsOnly: true
+            }).catch(() => {});
+        }
     }
     console.log(`✅ chat push: notified ${sent} device(s) across ${targets.length} recipient(s)`);
 }
@@ -3189,6 +3198,265 @@ async function runEscalationScan() {
     return { scanned, escalated };
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// WAKE NOTIFICATIONS — high-priority, phone-waking pushes for every event
+// type (task assigned / comment / reopened / due-soon / overdue, feed post,
+// chat message). Sends to BOTH FCM (Android) and APNs (iOS) so the client can
+// present a heads-up / full-screen alert like an incoming call.
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * Send a high-priority "wake" push to every device of a user.
+ * @param {string} userId  Bitrix user id
+ * @param {{type:string, title:string, body:string, data?:object}} payload
+ */
+async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = false }) {
+    if (!pool) return;
+    const uid = String(userId || '').trim();
+    if (!uid) return;
+
+    let rows = [];
+    try {
+        const r = await pool.query(
+            'SELECT apns_token, fcm_token, platform FROM push_tokens WHERE user_id = $1',
+            [uid]
+        );
+        rows = r.rows || [];
+    } catch (e) {
+        console.error('❌ sendWakePush token lookup failed:', e.message);
+        return;
+    }
+    if (rows.length === 0) return;
+
+    // Common string-only data payload (FCM requires string values).
+    const strData = {};
+    for (const [k, v] of Object.entries({ type, title, message: body, ...data })) {
+        strData[k] = v == null ? '' : String(v);
+    }
+
+    // ── FCM (Android) ──
+    if (firebaseInitialized && !apnsOnly) {
+        const fcmTokens = [...new Set(rows.map(r => r.fcm_token).filter(Boolean))];
+        for (const token of fcmTokens) {
+            try {
+                await admin.messaging().send({
+                    token,
+                    data: strData,                       // data-only so the app's handler wakes + builds the notification
+                    android: { priority: 'high' }
+                });
+            } catch (err) {
+                if (err.code === 'messaging/registration-token-not-registered' ||
+                    err.code === 'messaging/invalid-registration-token') {
+                    pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [token]).catch(() => {});
+                }
+            }
+        }
+    }
+
+    // ── APNs (iOS) ── time-sensitive, high priority so it wakes/alerts.
+    if (apnProvider) {
+        const apnsTokens = [...new Set(rows.map(r => r.apns_token).filter(Boolean))];
+        if (apnsTokens.length > 0) {
+            const note = new apn.Notification();
+            note.alert = { title, body };
+            note.sound = 'default';
+            note.topic = process.env.APNS_BUNDLE_ID || 'com.example.jbmarks';
+            note.priority = 10;                          // deliver immediately
+            note.pushType = 'alert';
+            note.payload = strData;
+            // iOS 15+ time-sensitive interruption level (breaks through Focus).
+            note.interruptionLevel = 'time-sensitive';
+            note.expiry = Math.floor(Date.now() / 1000) + 3600;
+            try {
+                const resp = await apnProvider.send(note, apnsTokens);
+                (resp.failed || []).forEach(f => {
+                    if (f.error === 'BadDeviceToken' || f.error === 'Unregistered') {
+                        pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [f.device]).catch(() => {});
+                    }
+                });
+            } catch (e) {
+                console.error('❌ sendWakePush APNs failed:', e.message);
+            }
+        }
+    }
+}
+
+// Per-(entity,event) dedupe so we notify once. Reuses a small state table.
+async function ensureNotificationStateTable() {
+    if (!pool) return;
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS notification_state (
+            key VARCHAR(160) PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `).catch(() => {});
+}
+
+async function getNotifState(key) {
+    if (!pool) return null;
+    try {
+        const r = await pool.query('SELECT value FROM notification_state WHERE key = $1', [key]);
+        return r.rows[0]?.value ?? null;
+    } catch { return null; }
+}
+
+async function setNotifState(key, value) {
+    if (!pool) return;
+    await pool.query(
+        `INSERT INTO notification_state (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+        [key, String(value)]
+    ).catch(() => {});
+}
+
+/** True once per (key) — records the marker so it won't fire again. */
+async function fireOnce(key) {
+    if (!pool) return false;
+    const existing = await getNotifState(key);
+    if (existing != null) return false;
+    await setNotifState(key, '1');
+    return true;
+}
+
+// How far ahead (ms) counts as "about to be overdue".
+const DUE_SOON_MS = parseInt(process.env.DUE_SOON_MINUTES || '120', 10) * 60000; // 2h
+
+/**
+ * Scan all open tasks and fire wake pushes to the responsible user for:
+ *   task_assigned (first time we see this responsible on this task),
+ *   task_reopened (status went from completed back to active),
+ *   task_comment  (comment count increased),
+ *   task_due_soon (deadline within DUE_SOON_MS),
+ *   task_overdue  (deadline passed).
+ * Also scans the activity feed for new posts (feed_post).
+ * All deduped via notification_state so each event notifies once.
+ */
+async function runNotificationScan() {
+    if (!pool || !(firebaseInitialized || apnProvider)) return { skipped: 'no push transport' };
+    await ensureNotificationStateTable();
+    let notified = 0, scanned = 0;
+    const now = Date.now();
+
+    try {
+        // Pull tasks across the portal (respects webhook scope).
+        const resp = await bitrixCall('tasks.task.list', {
+            select: ['ID', 'TITLE', 'STATUS', 'DEADLINE', 'RESPONSIBLE_ID', 'COMMENTS_COUNT'],
+            order: { ID: 'DESC' }
+        });
+        const tasks = (resp.result && resp.result.tasks) || [];
+
+        for (const t of tasks) {
+            const id = String(t.id || t.ID || '');
+            if (!id) continue;
+            const title = t.title || t.TITLE || `Task #${id}`;
+            const status = String(t.status || t.STATUS || '');
+            const deadline = t.deadline || t.DEADLINE || null;
+            const responsibleId = String(t.responsibleId || t.RESPONSIBLE_ID || '');
+            const commentsCount = parseInt(t.commentsCount || t.COMMENTS_COUNT || '0', 10);
+            if (!responsibleId || responsibleId === WEBHOOK_USER_ID) continue;
+            scanned++;
+
+            // 1) Assignment — responsible recorded for the first time or changed.
+            const prevResp = await getNotifState(`task:${id}:resp`);
+            if (prevResp !== responsibleId) {
+                await setNotifState(`task:${id}:resp`, responsibleId);
+                // Avoid notifying for pre-existing tasks on first boot: only fire
+                // when we had a previous (different) recorded value.
+                if (prevResp != null) {
+                    await sendWakePush(responsibleId, {
+                        type: 'TASK_ASSIGNED', title: 'New task assigned',
+                        body: title, data: { task_id: id }
+                    });
+                    notified++;
+                }
+            }
+
+            // 2) Reopened — previously completed ('5'), now active again.
+            const prevStatus = await getNotifState(`task:${id}:status`);
+            if (prevStatus === '5' && status !== '5' && status !== '6') {
+                await sendWakePush(responsibleId, {
+                    type: 'TASK_REOPENED', title: 'Task reopened',
+                    body: title, data: { task_id: id }
+                });
+                notified++;
+            }
+            if (prevStatus !== status) await setNotifState(`task:${id}:status`, status);
+
+            // 3) New comment — comment count increased.
+            const prevComments = parseInt((await getNotifState(`task:${id}:comments`)) || '-1', 10);
+            if (prevComments >= 0 && commentsCount > prevComments) {
+                await sendWakePush(responsibleId, {
+                    type: 'TASK_COMMENT', title: 'New comment on your task',
+                    body: title, data: { task_id: id }
+                });
+                notified++;
+            }
+            if (prevComments !== commentsCount) await setNotifState(`task:${id}:comments`, commentsCount);
+
+            // 4) Deadline-based (open tasks only).
+            if (deadline && status !== '5' && status !== '6') {
+                const dueMs = new Date(deadline).getTime();
+                if (Number.isFinite(dueMs)) {
+                    if (now > dueMs) {
+                        if (await fireOnce(`task:${id}:overdue`)) {
+                            await sendWakePush(responsibleId, {
+                                type: 'TASK_OVERDUE', title: 'Task overdue',
+                                body: title, data: { task_id: id }
+                            });
+                            notified++;
+                        }
+                    } else if (dueMs - now <= DUE_SOON_MS) {
+                        if (await fireOnce(`task:${id}:duesoon`)) {
+                            await sendWakePush(responsibleId, {
+                                type: 'TASK_DUE_SOON', title: 'Task due soon',
+                                body: title, data: { task_id: id }
+                            });
+                            notified++;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('❌ Notification task scan error:', e.message);
+    }
+
+    // 5) Feed posts — notify everyone (except the author) of new activity posts.
+    try {
+        const feed = await bitrixCall('log.blogpost.get', {});
+        const raw = feed.result;
+        const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.posts) ? raw.posts : []);
+        const lastSeen = parseInt((await getNotifState('feed:lastPostId')) || '0', 10);
+        let maxId = lastSeen;
+        for (const p of list) {
+            const postId = parseInt(p.ID || p.id || '0', 10);
+            if (!postId || postId <= lastSeen) continue;
+            maxId = Math.max(maxId, postId);
+            const authorId = String(p.AUTHOR_ID || p.authorId || '');
+            const title = p.TITLE || p.title || p.DETAIL_TEXT || 'New post';
+            if (lastSeen > 0) { // skip the initial baseline run
+                const recips = await pool.query(
+                    'SELECT DISTINCT user_id FROM push_tokens WHERE user_id <> $1',
+                    [authorId || '0']
+                );
+                for (const row of recips.rows) {
+                    await sendWakePush(row.user_id, {
+                        type: 'FEED_POST', title: 'New feed post',
+                        body: String(title).slice(0, 140), data: { post_id: String(postId) }
+                    });
+                    notified++;
+                }
+            }
+        }
+        if (maxId > lastSeen) await setNotifState('feed:lastPostId', maxId);
+    } catch (e) {
+        console.error('❌ Notification feed scan error:', e.message);
+    }
+
+    return { scanned, notified };
+}
+
 /** Manual trigger for testing / on-demand runs. */
 app.post('/api/escalation/run', requireAgentOrAdmin, async (req, res) => {
     console.log('▶️ Manual escalation scan triggered');
@@ -3196,12 +3464,26 @@ app.post('/api/escalation/run', requireAgentOrAdmin, async (req, res) => {
     res.json({ success: !result.error, ...result });
 });
 
-// Kick off the periodic scan (only if DB is available)
+/** Manual trigger for the wake-notification scan. */
+app.post('/api/notifications/run', requireAgentOrAdmin, async (req, res) => {
+    console.log('▶️ Manual notification scan triggered');
+    const result = await runNotificationScan();
+    res.json({ success: !result.error, ...result });
+});
+
+// Kick off the periodic scans (only if DB is available)
+const NOTIFICATION_SCAN_INTERVAL_MS = parseInt(process.env.NOTIFICATION_SCAN_INTERVAL_MS || '120000', 10); // 2 min
 setTimeout(() => {
     if (pool) {
         console.log(`🕒 Escalation engine active (every ${Math.round(ESCALATION_INTERVAL_MS / 60000)} min)`);
         runEscalationScan().then(r => console.log('   Initial scan:', JSON.stringify(r)));
         setInterval(() => { runEscalationScan().catch(e => console.error('Escalation loop error:', e.message)); }, ESCALATION_INTERVAL_MS);
+
+        // Wake-notification engine: task events + feed posts pushed to devices.
+        console.log(`🔔 Notification engine active (every ${Math.round(NOTIFICATION_SCAN_INTERVAL_MS / 60000)} min)`);
+        // First run establishes a baseline (records current state) without spamming.
+        runNotificationScan().then(r => console.log('   Initial notification scan:', JSON.stringify(r)));
+        setInterval(() => { runNotificationScan().catch(e => console.error('Notification loop error:', e.message)); }, NOTIFICATION_SCAN_INTERVAL_MS);
     }
 }, 5000);
 
