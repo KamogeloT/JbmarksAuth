@@ -2139,9 +2139,10 @@ app.post('/api/comms/send', async (req, res) => {
         const { dialog_id, message, sender_name, sender_user_id, recipient_user_ids } = req.body || {};
         if (!dialog_id || !message) return res.status(400).json({ error: 'dialog_id and message required' });
 
-        // Prefix sender name so messages show who sent it (webhook posts as the app user).
-        const text = sender_name ? `${message}\n\n— ${sender_name}` : message;
-        const r = await sdeskBitrix('im.message.add', { DIALOG_ID: String(dialog_id), MESSAGE: text });
+        // Post the message verbatim. The chat UI already shows who you're
+        // chatting with, so we do NOT append the sender's name to the body.
+        // (The push notification still carries sender_name separately below.)
+        const r = await sdeskBitrix('im.message.add', { DIALOG_ID: String(dialog_id), MESSAGE: String(message) });
 
         // Fire-and-forget push to recipients (never fails the send if push fails).
         sendChatMessagePush({
