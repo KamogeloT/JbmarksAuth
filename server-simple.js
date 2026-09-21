@@ -3488,6 +3488,77 @@ app.post('/api/notifications/run', requireAgentOrAdmin, async (req, res) => {
     res.json({ success: !result.error, ...result });
 });
 
+/**
+ * GET /api/push/diagnostics
+ * Read-only health/diagnostics for the push pipeline. Does NOT expose raw
+ * tokens — only counts, platforms, and truncated fingerprints — so it's safe
+ * to hit without leaking device tokens. Guarded by the agent/admin token.
+ * Optional ?send_test=<user_id> sends a harmless test wake push to that user
+ * and reports the transport result, so we can confirm end-to-end delivery.
+ */
+app.get('/api/push/diagnostics', requireAgentOrAdmin, async (req, res) => {
+    try {
+        if (!pool) return res.status(503).json({ error: 'db_unavailable' });
+
+        const summary = await pool.query(`
+            SELECT platform,
+                   COUNT(*)::int AS tokens,
+                   COUNT(DISTINCT user_id)::int AS users,
+                   COUNT(apns_token)::int AS with_apns,
+                   COUNT(fcm_token)::int AS with_fcm,
+                   MAX(updated_at) AS last_updated
+            FROM push_tokens
+            GROUP BY platform
+            ORDER BY platform
+        `);
+
+        const recent = await pool.query(`
+            SELECT user_id, platform,
+                   CASE WHEN apns_token IS NOT NULL THEN LEFT(apns_token, 8) END AS apns_fp,
+                   CASE WHEN fcm_token  IS NOT NULL THEN LEFT(fcm_token, 8)  END AS fcm_fp,
+                   updated_at
+            FROM push_tokens
+            ORDER BY updated_at DESC
+            LIMIT 20
+        `);
+
+        const totals = await pool.query('SELECT COUNT(*)::int AS total, COUNT(DISTINCT user_id)::int AS users FROM push_tokens');
+
+        const out = {
+            transports: {
+                apns: apnProvider ? 'ready' : 'not configured',
+                apnsSandbox: apnProviderSandbox ? 'ready' : 'not configured',
+                fcm: firebaseInitialized ? 'ready' : 'not configured',
+            },
+            config: {
+                apnsBundleId: process.env.APNS_BUNDLE_ID || 'jbmarks.JbmrksIOs',
+                apnsTeamIdSet: !!process.env.APNS_TEAM_ID,
+                apnsKeyId: process.env.APNS_KEY_ID || 'KGVWC4F2KA',
+                scanIntervalMs: NOTIFICATION_SCAN_INTERVAL_MS,
+                webhookUserId: WEBHOOK_USER_ID,
+            },
+            totals: totals.rows[0],
+            byPlatform: summary.rows,
+            recent: recent.rows,
+        };
+
+        // Optional live test push to a specific user.
+        const testUser = req.query.send_test;
+        if (testUser) {
+            await sendWakePush(String(testUser), {
+                type: 'TEST', title: 'JBmarks test', body: 'Push pipeline test — you can ignore this.',
+                data: { test: '1' }
+            });
+            out.testPush = { sentTo: String(testUser), note: 'Check device + Railway logs for APNs/FCM send result.' };
+        }
+
+        res.json(out);
+    } catch (e) {
+        console.error('❌ push diagnostics failed:', e.message);
+        res.status(500).json({ error: 'diagnostics_failed', message: e.message });
+    }
+});
+
 // Kick off the periodic scans (only if DB is available)
 const NOTIFICATION_SCAN_INTERVAL_MS = parseInt(process.env.NOTIFICATION_SCAN_INTERVAL_MS || '120000', 10); // 2 min
 setTimeout(() => {
