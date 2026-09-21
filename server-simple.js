@@ -3213,9 +3213,14 @@ async function runEscalationScan() {
  * @param {{type:string, title:string, body:string, data?:object}} payload
  */
 async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = false }) {
-    if (!pool) return;
-    const uid = String(userId || '').trim();
-    if (!uid) return;
+    // Result object so callers (and diagnostics) can see what actually happened.
+    const result = { userId: String(userId || '').trim(), tokens: 0,
+                     fcm: { attempted: 0, sent: 0, failed: 0, errors: [] },
+                     apns: { attempted: 0, sent: 0, failed: 0, errors: [] } };
+
+    if (!pool) { result.error = 'no db'; return result; }
+    const uid = result.userId;
+    if (!uid) { result.error = 'no user id'; return result; }
 
     let rows = [];
     try {
@@ -3226,9 +3231,11 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
         rows = r.rows || [];
     } catch (e) {
         console.error('❌ sendWakePush token lookup failed:', e.message);
-        return;
+        result.error = 'token lookup failed: ' + e.message;
+        return result;
     }
-    if (rows.length === 0) return;
+    result.tokens = rows.length;
+    if (rows.length === 0) { result.error = 'no tokens registered for user'; return result; }
 
     // Common string-only data payload (FCM requires string values).
     const strData = {};
@@ -3239,6 +3246,7 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
     // ── FCM (Android) ──
     if (firebaseInitialized && !apnsOnly) {
         const fcmTokens = [...new Set(rows.map(r => r.fcm_token).filter(Boolean))];
+        result.fcm.attempted = fcmTokens.length;
         for (const token of fcmTokens) {
             try {
                 await admin.messaging().send({
@@ -3246,18 +3254,26 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
                     data: strData,                       // data-only so the app's handler wakes + builds the notification
                     android: { priority: 'high' }
                 });
+                result.fcm.sent++;
             } catch (err) {
+                result.fcm.failed++;
+                result.fcm.errors.push(err.code || err.message);
                 if (err.code === 'messaging/registration-token-not-registered' ||
                     err.code === 'messaging/invalid-registration-token') {
                     pool.query('DELETE FROM push_tokens WHERE fcm_token = $1', [token]).catch(() => {});
                 }
             }
         }
+    } else if (apnsOnly) {
+        result.fcm.skipped = 'apnsOnly';
+    } else if (!firebaseInitialized) {
+        result.fcm.skipped = 'fcm not configured';
     }
 
     // ── APNs (iOS) ── time-sensitive, high priority so it wakes/alerts.
     if (apnProvider) {
         const apnsTokens = [...new Set(rows.map(r => r.apns_token).filter(Boolean))];
+        result.apns.attempted = apnsTokens.length;
         if (apnsTokens.length > 0) {
             const note = new apn.Notification();
             note.alert = { title, body };
@@ -3275,27 +3291,37 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
                 // Xcode debug-build tokens also work. Only delete a token if BOTH
                 // environments report it Unregistered (truly dead).
                 const prodResp = await apnProvider.send(note, apnsTokens);
+                result.apns.sent += (prodResp.sent || []).length;
                 const retryTokens = (prodResp.failed || [])
                     .filter(f => f.error === 'BadDeviceToken' || f.status === '400')
                     .map(f => f.device);
                 (prodResp.failed || []).forEach(f => {
+                    result.apns.errors.push(`prod:${f.error || f.status}`);
                     if (f.error === 'Unregistered') {
                         pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [f.device]).catch(() => {});
                     }
                 });
                 if (retryTokens.length > 0 && apnProviderSandbox) {
                     const sbResp = await apnProviderSandbox.send(note, retryTokens);
+                    result.apns.sent += (sbResp.sent || []).length;
                     console.log(`ℹ️ APNs sandbox retry: sent ${sbResp.sent.length}/${retryTokens.length}`);
                     (sbResp.failed || []).forEach(f => {
+                        result.apns.errors.push(`sandbox:${f.error || f.status}`);
                         console.warn(`⚠️ APNs sandbox failed for ${String(f.device).slice(0,12)}…: ${f.error || f.status}`);
                     });
                 }
+                result.apns.failed = result.apns.errors.filter(e => !e.startsWith('prod:BadDeviceToken')).length;
                 console.log(`📲 APNs: prod sent ${prodResp.sent.length}/${apnsTokens.length}, retried ${retryTokens.length} on sandbox`);
             } catch (e) {
                 console.error('❌ sendWakePush APNs failed:', e.message);
+                result.apns.errors.push('exception:' + e.message);
             }
         }
+    } else {
+        result.apns.skipped = 'apns not configured';
     }
+
+    return result;
 }
 
 // Per-(entity,event) dedupe so we notify once. Reuses a small state table.
@@ -3545,11 +3571,11 @@ app.get('/api/push/diagnostics', requireAgentOrAdmin, async (req, res) => {
         // Optional live test push to a specific user.
         const testUser = req.query.send_test;
         if (testUser) {
-            await sendWakePush(String(testUser), {
+            const pushResult = await sendWakePush(String(testUser), {
                 type: 'TEST', title: 'JBmarks test', body: 'Push pipeline test — you can ignore this.',
                 data: { test: '1' }
             });
-            out.testPush = { sentTo: String(testUser), note: 'Check device + Railway logs for APNs/FCM send result.' };
+            out.testPush = { sentTo: String(testUser), result: pushResult };
         }
 
         res.json(out);
