@@ -162,6 +162,7 @@ setupDatabase();
 // APNs SETUP
 // ============================================
 let apnProvider;
+let apnProviderSandbox;
 function initAPNs() {
     try {
         const teamId = process.env.APNS_TEAM_ID;
@@ -184,16 +185,16 @@ function initAPNs() {
             return;
         }
         
-        apnProvider = new apn.Provider({
-            token: {
-                key: key,
-                keyId: keyId,
-                teamId: teamId
-            },
-            production: process.env.NODE_ENV === 'production'
-        });
+        const tokenCfg = { key: key, keyId: keyId, teamId: teamId };
+        // Create BOTH production and sandbox providers. Xcode debug builds get a
+        // sandbox device token; TestFlight/App Store builds get a production one.
+        // We can't tell which a given token is, so on send we try production and
+        // fall back to sandbox on BadDeviceToken. This makes pushes work for both
+        // regardless of NODE_ENV.
+        apnProvider = new apn.Provider({ token: tokenCfg, production: true });
+        apnProviderSandbox = new apn.Provider({ token: tokenCfg, production: false });
         
-        console.log('✅ APNs provider initialized');
+        console.log('✅ APNs providers initialized (production + sandbox)');
     } catch (error) {
         console.error('❌ Failed to initialize APNs:', error.message);
     }
@@ -1313,7 +1314,7 @@ app.post('/api/push/send', async (req, res) => {
         notification.alert = { title, body };
         notification.sound = 'default';
         notification.badge = badge || 1;
-        notification.topic = process.env.APNS_BUNDLE_ID || 'com.example.jbmarks';
+        notification.topic = process.env.APNS_BUNDLE_ID || 'jbmarks.JbmrksIOs';
         notification.payload = data || {};
         notification.expiry = Math.floor(Date.now() / 1000) + 3600;
         
@@ -3261,7 +3262,8 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
             const note = new apn.Notification();
             note.alert = { title, body };
             note.sound = 'default';
-            note.topic = process.env.APNS_BUNDLE_ID || 'com.example.jbmarks';
+            // MUST match the iOS app's bundle identifier, else APNs rejects it.
+            note.topic = process.env.APNS_BUNDLE_ID || 'jbmarks.JbmrksIOs';
             note.priority = 10;                          // deliver immediately
             note.pushType = 'alert';
             note.payload = strData;
@@ -3269,12 +3271,26 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
             note.interruptionLevel = 'time-sensitive';
             note.expiry = Math.floor(Date.now() / 1000) + 3600;
             try {
-                const resp = await apnProvider.send(note, apnsTokens);
-                (resp.failed || []).forEach(f => {
-                    if (f.error === 'BadDeviceToken' || f.error === 'Unregistered') {
+                // Try production first; retry any BadDeviceToken via sandbox so
+                // Xcode debug-build tokens also work. Only delete a token if BOTH
+                // environments report it Unregistered (truly dead).
+                const prodResp = await apnProvider.send(note, apnsTokens);
+                const retryTokens = (prodResp.failed || [])
+                    .filter(f => f.error === 'BadDeviceToken' || f.status === '400')
+                    .map(f => f.device);
+                (prodResp.failed || []).forEach(f => {
+                    if (f.error === 'Unregistered') {
                         pool.query('DELETE FROM push_tokens WHERE apns_token = $1', [f.device]).catch(() => {});
                     }
                 });
+                if (retryTokens.length > 0 && apnProviderSandbox) {
+                    const sbResp = await apnProviderSandbox.send(note, retryTokens);
+                    console.log(`ℹ️ APNs sandbox retry: sent ${sbResp.sent.length}/${retryTokens.length}`);
+                    (sbResp.failed || []).forEach(f => {
+                        console.warn(`⚠️ APNs sandbox failed for ${String(f.device).slice(0,12)}…: ${f.error || f.status}`);
+                    });
+                }
+                console.log(`📲 APNs: prod sent ${prodResp.sent.length}/${apnsTokens.length}, retried ${retryTokens.length} on sandbox`);
             } catch (e) {
                 console.error('❌ sendWakePush APNs failed:', e.message);
             }
