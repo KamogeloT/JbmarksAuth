@@ -3283,12 +3283,11 @@ async function sendWakePush(userId, { type, title, body, data = {}, apnsOnly = f
             note.priority = 10;                          // deliver immediately
             note.pushType = 'alert';
             note.payload = strData;
-            // Interruption level. 'time-sensitive' requires the Time Sensitive
-            // Notifications capability in the app entitlements; without it iOS can
-            // silently drop the alert. Default to 'active' (normal banner+sound,
-            // no entitlement needed); opt into time-sensitive via env only once
-            // the entitlement is added to the app.
-            note.interruptionLevel = (process.env.APNS_TIME_SENSITIVE === 'true') ? 'time-sensitive' : 'active';
+            // Interruption level. The iOS app now ships the Time Sensitive
+            // Notifications entitlement, so default to 'time-sensitive' (breaks
+            // through Focus/DND). Set APNS_TIME_SENSITIVE=false to fall back to
+            // 'active' (plain banner+sound) if a build ever lacks the entitlement.
+            note.interruptionLevel = (process.env.APNS_TIME_SENSITIVE === 'false') ? 'active' : 'time-sensitive';
             note.expiry = Math.floor(Date.now() / 1000) + 3600;
             try {
                 // Try production first; retry any BadDeviceToken via sandbox so
