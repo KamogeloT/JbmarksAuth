@@ -942,9 +942,31 @@ const DEFAULT_SDESK_CONFIG = {
     },
     escalation: {
         enabled: true,
-        intervalMinutes: 15,
-        unassignedSlaMinutes: 60,
+        intervalMinutes: 15,          // scan frequency
+        unassignedSlaMinutes: 60,     // unassigned-beyond-SLA fallback (level 1)
         notifyEmail: process.env.ESCALATION_EMAIL || 'admin@t3ssystems.co.za',
+        reassignOnEscalate: true,     // reassign the Bitrix ticket to the role holder on escalation
+        // Configurable escalation chain. Ordered by level. `afterMinutes` is the
+        // cumulative time since the ticket was created before it escalates to
+        // that level. `role` must match a roles.definitions[].id below.
+        chain: [
+            { level: 1, role: 'tech',       afterMinutes: 60,  notify: ['assignee'] },
+            { level: 2, role: 'supervisor', afterMinutes: 120, notify: ['role', 'assignee'] },
+            { level: 3, role: 'manager',    afterMinutes: 240, notify: ['role'] },
+            { level: 4, role: 'director',   afterMinutes: 480, notify: ['role'] },
+        ],
+    },
+    // Named escalation roles mapped to real Bitrix users from the IT group.
+    // `definitions` is the list of role slots; `assignments` maps role id -> Bitrix user id.
+    roles: {
+        definitions: [
+            { id: 'tech',        label: 'Technician' },
+            { id: 'supervisor',  label: 'Supervisor' },
+            { id: 'manager',     label: 'IT Manager' },
+            { id: 'serveradmin', label: 'Server Admin' },
+            { id: 'director',    label: 'Director' },
+        ],
+        assignments: {},   // e.g. { supervisor: '27', manager: '14', director: '9' }
     },
     notifications: {
         onCreated: true,
@@ -1033,6 +1055,37 @@ app.get('/api/team', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN, ROLES.MA
         res.json({ members });
     } catch (error) {
         res.status(500).json({ error: 'team_failed', message: error.message });
+    }
+});
+
+/**
+ * GET /api/roles — IT-group members plus current role definitions/assignments.
+ * Feeds the Settings UI so admins can map named escalation roles (Technician,
+ * Supervisor, IT Manager, Server Admin, Director) to real people in the group.
+ * Admin/Manager.
+ */
+app.get('/api/roles', requireAuth, requireRole(ROLES.ADMIN, ROLES.MANAGER), async (req, res) => {
+    try {
+        const cfg = await loadSdeskConfig();
+        const roles = cfg.roles || { definitions: [], assignments: {} };
+        const members = [];
+        try {
+            const resp = await sdeskBitrix('sonet_group.user.get', { ID: SDESK_IT_GROUP });
+            const memberIds = [...new Set((resp.result || []).map(m => String(m.USER_ID)).filter(Boolean))];
+            for (const uid of memberIds) {
+                try {
+                    const u = await sdeskBitrix('user.get', { ID: uid });
+                    const f = (u.result || [])[0];
+                    if (f) {
+                        const name = [f.NAME, f.LAST_NAME].filter(Boolean).join(' ').trim() || `User ${f.ID}`;
+                        members.push({ id: String(f.ID), name, email: f.EMAIL || '', position: f.WORK_POSITION || '' });
+                    }
+                } catch { /* skip */ }
+            }
+        } catch (e) { console.warn('roles member fetch failed:', e.message); }
+        res.json({ definitions: roles.definitions || [], assignments: roles.assignments || {}, members });
+    } catch (error) {
+        res.status(500).json({ error: 'roles_failed', message: error.message });
     }
 });
 
@@ -3165,25 +3218,84 @@ async function recordEscalation(ticketId, level, reason) {
     ).catch(() => {});
 }
 
-async function escalateTicket(task, level, reason) {
+// Resolve a role id (e.g. 'supervisor') to the assigned Bitrix user.
+// Returns { id, name, email } or null if the role is unassigned/unknown.
+async function resolveRoleHolder(cfg, roleId) {
+    const assignments = (cfg.roles && cfg.roles.assignments) || {};
+    const uid = assignments[roleId];
+    if (!uid) return null;
+    try {
+        const u = await bitrixCall('user.get', { ID: String(uid) });
+        const f = (u.result || [])[0];
+        const name = f ? ([f.NAME, f.LAST_NAME].filter(Boolean).join(' ').trim() || `User ${uid}`) : `User ${uid}`;
+        const email = f ? (f.EMAIL || '') : '';
+        return { id: String(uid), name, email };
+    } catch {
+        return { id: String(uid), name: `User ${uid}`, email: '' };
+    }
+}
+
+/**
+ * Escalate a ticket to a chain level.
+ * @param {object} task    normalized ticket
+ * @param {number} level   escalation level number
+ * @param {string} reason  short reason code
+ * @param {object} cfg     service desk config
+ * @param {object} step    the matched chain entry { level, role, afterMinutes, notify }
+ */
+async function escalateTicket(task, level, reason, cfg = {}, step = null) {
     const ticketId = task.id;
     const title = task.title || `Ticket #${ticketId}`;
+    const esc = cfg.escalation || {};
+    const roleId = step && step.role ? step.role : null;
+    const roleDef = roleId && cfg.roles && Array.isArray(cfg.roles.definitions)
+        ? cfg.roles.definitions.find(d => d.id === roleId) : null;
+    const roleLabel = roleDef ? roleDef.label : (roleId || 'IT Manager');
+
     const reasonLabel = reason === 'unassigned' ? 'Unassigned beyond SLA'
         : reason === 'overdue' ? 'Past resolution deadline'
-        : reason === 'overdue_critical' ? 'Severely overdue' : reason;
+        : reason === 'overdue_critical' ? 'Severely overdue'
+        : reason === 'chain' ? `Unresolved past ${step ? step.afterMinutes : '?'} min` : reason;
 
-    // 1) Bump Bitrix priority (max is 2 = High in Bitrix)
+    // 1) Resolve the target role holder (who this level routes to)
+    const holder = roleId ? await resolveRoleHolder(cfg, roleId) : null;
+
+    // 2) Reassign the Bitrix ticket to the role holder (if enabled and resolvable)
+    let reassigned = false;
+    if (esc.reassignOnEscalate !== false && holder && holder.id && holder.id !== String(task.responsibleId || '')) {
+        try {
+            await bitrixCall('tasks.task.update', { taskId: ticketId, fields: { RESPONSIBLE_ID: holder.id } });
+            reassigned = true;
+        } catch (e) { console.warn(`   ⚠️ reassign failed for #${ticketId}: ${e.message}`); }
+    }
+
+    // 3) Bump Bitrix priority (max is 2 = High in Bitrix)
     try {
         await bitrixCall('tasks.task.update', { taskId: ticketId, fields: { PRIORITY: '2' } });
     } catch (e) { console.warn(`   ⚠️ priority bump failed for #${ticketId}: ${e.message}`); }
 
-    // 2) Add an audit comment on the ticket
-    const comment = `⚠️ [AUTO-ESCALATION L${level}] ${reasonLabel}. This ticket has been flagged and priority raised. Please action promptly.`;
+    // 4) Add an audit comment on the ticket
+    const routeNote = holder
+        ? ` Routed to ${roleLabel}: ${holder.name}.${reassigned ? ' Ticket reassigned.' : ''}`
+        : (roleId ? ` Role "${roleLabel}" is unassigned — please set an owner in Settings.` : '');
+    const comment = `⚠️ [AUTO-ESCALATION L${level}] ${reasonLabel}.${routeNote} Priority raised — please action promptly.`;
     try {
         await bitrixCall('task.commentitem.add', [ticketId, { POST_MESSAGE: comment }]);
     } catch (e) { console.warn(`   ⚠️ comment failed for #${ticketId}: ${e.message}`); }
 
-    // 3) Send a branded escalation email (to manager mailbox + caller if known)
+    // 5) In-app notifications — role holder and/or current assignee per step.notify
+    const notifyTargets = (step && Array.isArray(step.notify)) ? step.notify : ['role'];
+    const notified = new Set();
+    const msg = `⚠️ Ticket #${ticketId} escalated to L${level} (${roleLabel}): ${title}`;
+    if (notifyTargets.includes('role') && holder && holder.id) {
+        await notifyTicketUser(holder.id, msg, 'onStatusChanged');
+        notified.add(holder.id);
+    }
+    if (notifyTargets.includes('assignee') && task.responsibleId && task.responsibleId !== WEBHOOK_USER_ID && !notified.has(String(task.responsibleId))) {
+        await notifyTicketUser(String(task.responsibleId), msg, 'onStatusChanged');
+    }
+
+    // 6) Send a branded escalation email (to role holder, else manager mailbox; plus caller if known)
     const callerEmail = parseDescField(task.description, 'Email');
     const callerName = parseDescField(task.description, 'Reported By') || parseDescField(task.description, 'Full Name');
     if (process.env.AZURE_COMMS_CONNECTION_STRING) {
@@ -3191,11 +3303,12 @@ async function escalateTicket(task, level, reason) {
             const { endpoint, accessKey } = parseConnectionString(process.env.AZURE_COMMS_CONNECTION_STRING);
             const { subject, html } = buildTicketEmailContent({
                 type: 'escalated', ticketId, ticketTitle: title,
-                recipientName: 'IT Manager', status: TICKET_STATUS_LABEL(task.status),
-                comment: reasonLabel,
+                recipientName: holder ? holder.name : roleLabel, status: TICKET_STATUS_LABEL(task.status),
+                comment: `${reasonLabel}${holder ? ` — routed to ${roleLabel}` : ''}`,
             });
-            const recipients = [{ address: ESCALATION_EMAIL, displayName: 'IT Manager' }];
-            if (callerEmail && callerEmail !== ESCALATION_EMAIL) {
+            const toAddress = (holder && holder.email) ? holder.email : (esc.notifyEmail || ESCALATION_EMAIL);
+            const recipients = [{ address: toAddress, displayName: holder ? holder.name : roleLabel }];
+            if (callerEmail && callerEmail !== toAddress) {
                 recipients.push({ address: callerEmail, displayName: callerName || callerEmail });
             }
             await sendAzureEmail(endpoint, accessKey, {
@@ -3207,7 +3320,7 @@ async function escalateTicket(task, level, reason) {
     }
 
     await recordEscalation(ticketId, level, reason);
-    console.log(`   🚨 Escalated #${ticketId} (L${level}, ${reason}): ${title}`);
+    console.log(`   🚨 Escalated #${ticketId} (L${level}, ${reason}${holder ? `, → ${roleLabel}/${holder.name}` : ''}): ${title}`);
 }
 
 function TICKET_STATUS_LABEL(code) {
@@ -3222,8 +3335,13 @@ async function runEscalationScan() {
         const cfg = (await loadSdeskConfig()) || {};
         const esc = cfg.escalation || {};
         if (esc.enabled === false) return { skipped: 'escalation disabled', scanned: 0, escalated: 0 };
-        const graceMs = (Number.isFinite(esc.intervalMinutes) ? esc.intervalMinutes * 60000 : ESCALATION_INTERVAL_MS);
         const unassignedMs = (Number.isFinite(esc.unassignedSlaMinutes) ? esc.unassignedSlaMinutes : UNASSIGNED_SLA_MINUTES) * 60000;
+
+        // The configurable chain, sorted descending by afterMinutes so we escalate
+        // to the HIGHEST level whose threshold has been passed (and not yet recorded).
+        const chain = Array.isArray(esc.chain) && esc.chain.length
+            ? [...esc.chain].filter(s => Number.isFinite(s.afterMinutes)).sort((a, b) => b.afterMinutes - a.afterMinutes)
+            : [];
 
         // Pull open IT tickets (not Resolved '5' / Deferred '6')
         const resp = await bitrixCall('tasks.task.list', {
@@ -3247,25 +3365,29 @@ async function runEscalationScan() {
             if (task.status === '5' || task.status === '6') continue; // closed
             scanned++;
 
-            const deadlineMs = task.deadline ? new Date(task.deadline).getTime() : null;
             const createdMs = task.createdDate ? new Date(task.createdDate).getTime() : null;
+            const ageMs = createdMs ? now - createdMs : 0;
             const isUnassigned = !task.responsibleId || task.responsibleId === WEBHOOK_USER_ID;
 
-            // Level 2 — severely overdue (past deadline by >= grace window again)
-            if (deadlineMs && now > deadlineMs + graceMs && !(await alreadyEscalated(task.id, 2))) {
-                await escalateTicket(task, 2, 'overdue_critical');
-                escalated++;
-                continue;
+            // 1) Configurable chain — escalate to the highest level whose
+            //    time-since-created threshold has been crossed and not yet recorded.
+            let didChain = false;
+            if (chain.length && createdMs) {
+                for (const step of chain) {
+                    if (ageMs >= step.afterMinutes * 60000 && !(await alreadyEscalated(task.id, step.level))) {
+                        await escalateTicket(task, step.level, 'chain', cfg, step);
+                        escalated++;
+                        didChain = true;
+                        break; // one escalation per scan cycle per ticket
+                    }
+                }
             }
-            // Level 1 — past deadline
-            if (deadlineMs && now > deadlineMs && !(await alreadyEscalated(task.id, 1))) {
-                await escalateTicket(task, 1, 'overdue');
-                escalated++;
-                continue;
-            }
-            // Level 1 — unassigned beyond SLA
-            if (isUnassigned && createdMs && now > createdMs + unassignedMs && !(await alreadyEscalated(task.id, 1))) {
-                await escalateTicket(task, 1, 'unassigned');
+            if (didChain) continue;
+
+            // 2) Fallback — unassigned beyond SLA (level 1) when no chain step applied.
+            if (isUnassigned && createdMs && ageMs > unassignedMs && !(await alreadyEscalated(task.id, 1))) {
+                const l1 = chain.find(s => s.level === 1) || null;
+                await escalateTicket(task, 1, 'unassigned', cfg, l1);
                 escalated++;
             }
         }
