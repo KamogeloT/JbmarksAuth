@@ -257,32 +257,14 @@ const JWT_TTL_SECONDS = parseInt(process.env.JWT_TTL_SECONDS || '43200', 10); //
 
 const ROLES = { ADMIN: 'admin', AGENT: 'agent', MANAGER: 'manager', REQUESTER: 'requester' };
 
-function b64url(buf) {
-    return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function b64urlJson(obj) { return b64url(JSON.stringify(obj)); }
+// Pure helpers live in lib/sdesk-helpers.js (unit-tested there). Thin wrappers
+// keep the existing call sites (which rely on module-level JWT_SECRET/TTL) intact.
+const sdeskHelpers = require('./lib/sdesk-helpers');
+const b64url = sdeskHelpers.b64url;
+const b64urlJson = sdeskHelpers.b64urlJson;
 
-function signJwt(payload) {
-    const header = { alg: 'HS256', typ: 'JWT' };
-    const now = Math.floor(Date.now() / 1000);
-    const body = { ...payload, iat: now, exp: now + JWT_TTL_SECONDS };
-    const data = `${b64urlJson(header)}.${b64urlJson(body)}`;
-    const sig = b64url(authCrypto.createHmac('sha256', JWT_SECRET).update(data).digest());
-    return `${data}.${sig}`;
-}
-
-function verifyJwt(token) {
-    try {
-        const [h, p, s] = token.split('.');
-        if (!h || !p || !s) return null;
-        const expected = b64url(authCrypto.createHmac('sha256', JWT_SECRET).update(`${h}.${p}`).digest());
-        // constant-time compare
-        if (s.length !== expected.length || !authCrypto.timingSafeEqual(Buffer.from(s), Buffer.from(expected))) return null;
-        const payload = JSON.parse(Buffer.from(p.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
-        if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
-        return payload;
-    } catch { return null; }
-}
+function signJwt(payload) { return sdeskHelpers.signJwt(payload, JWT_SECRET, JWT_TTL_SECONDS); }
+function verifyJwt(token) { return sdeskHelpers.verifyJwt(token, JWT_SECRET); }
 
 // Server-side Bitrix call (keeps the webhook token off the client)
 function sdeskBitrix(method, params) {
@@ -646,15 +628,7 @@ function bitrixUserCurrent(accessToken, clientEndpoint) {
 // SERVICE DESK TICKET PROXY (role-enforced; keeps Bitrix token server-side)
 // ============================================
 
-function extractDescField(description, label) {
-    if (!description) return '';
-    const re = new RegExp(`^${label}:\\s*(.+)`, 'im');
-    for (const line of String(description).split('\n')) {
-        const m = re.exec(line.trim());
-        if (m && m[1] && m[1].trim() && m[1].trim() !== 'Not provided') return m[1].trim();
-    }
-    return '';
-}
+function extractDescField(description, label) { return sdeskHelpers.parseDescField(description, label); }
 
 /**
  * GET /api/tickets
@@ -771,13 +745,7 @@ async function fetchTaskComments(taskId) {
 }
 
 // Strip Bitrix BBCode / emoji hex codes from message text for clean display.
-function cleanBitrixText(text) {
-    return String(text)
-        .replace(/\[USER=\d+\]([^\[]*)\[\/USER\]/gi, '$1')
-        .replace(/\[\/?[A-Z]+(=[^\]]*)?\]/gi, '')
-        .replace(/:[0-9a-f]{8}:/gi, '')
-        .trim();
-}
+function cleanBitrixText(text) { return sdeskHelpers.cleanBitrixText(text); }
 
 /**
  * POST /api/tickets  — create a ticket (any authenticated user = requester+).
@@ -2965,14 +2933,7 @@ app.post('/api/email/ticket-notification', requireAuth, async (req, res) => {
 
 // ── Email Helper Functions ────────────────────────────────────────────
 
-function parseConnectionString(connStr) {
-    const parts = {};
-    connStr.split(';').forEach(part => {
-        const [key, ...valueParts] = part.split('=');
-        parts[key.trim()] = valueParts.join('=').trim();
-    });
-    return { endpoint: parts['endpoint'], accessKey: parts['accesskey'] };
-}
+function parseConnectionString(connStr) { return sdeskHelpers.parseConnectionString(connStr); }
 
 async function sendAzureEmail(endpoint, accessKey, emailPayload) {
     const apiVersion = '2023-03-31';
@@ -3193,15 +3154,7 @@ function bitrixCall(method, params) {
 }
 
 // Parse a "Field: value" line out of the ticket description (caller info).
-function parseDescField(description, label) {
-    if (!description) return '';
-    const re = new RegExp(`^${label}:\\s*(.+)`, 'im');
-    for (const line of description.split('\n')) {
-        const m = re.exec(line.trim());
-        if (m && m[1] && m[1].trim() && m[1].trim() !== 'Not provided') return m[1].trim();
-    }
-    return '';
-}
+function parseDescField(description, label) { return sdeskHelpers.parseDescField(description, label); }
 
 async function alreadyEscalated(ticketId, level) {
     if (!pool) return false;
@@ -3323,9 +3276,7 @@ async function escalateTicket(task, level, reason, cfg = {}, step = null) {
     console.log(`   🚨 Escalated #${ticketId} (L${level}, ${reason}${holder ? `, → ${roleLabel}/${holder.name}` : ''}): ${title}`);
 }
 
-function TICKET_STATUS_LABEL(code) {
-    return ({ '2': 'New', '3': 'In Progress', '4': 'Awaiting User', '5': 'Resolved', '6': 'Deferred' })[String(code)] || 'Open';
-}
+function TICKET_STATUS_LABEL(code) { return sdeskHelpers.ticketStatusLabel(code); }
 
 async function runEscalationScan() {
     if (!pool) return { skipped: 'no database' };
