@@ -819,6 +819,16 @@ app.post('/api/tickets/:id/action', requireAuth, requireRole(ROLES.AGENT, ROLES.
         await sdeskBitrix(map[action], { taskId: req.params.id });
         // Attributable audit comment
         await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `📋 Status "${action}" by ${req.auth.name} (${req.auth.role})` }]).catch(() => {});
+        // In-app notify the responsible tech on reopen (their resolved ticket is active again).
+        if (action === 'reopen') {
+            try {
+                const g = await sdeskBitrix('tasks.task.get', { taskId: req.params.id, select: ['RESPONSIBLE_ID'] });
+                const respId = String(g.result && g.result.task && g.result.task.responsibleId || '');
+                if (respId && respId !== String(req.auth.sub)) {
+                    await notifyTicketUser(respId, `🔄 Ticket #${req.params.id} was reopened by ${req.auth.name}.`, 'onReopened');
+                }
+            } catch { /* best-effort */ }
+        }
         res.json({ success: true });
     } catch (error) {
         console.error('❌ ticket action error:', error.message);
@@ -827,12 +837,36 @@ app.post('/api/tickets/:id/action', requireAuth, requireRole(ROLES.AGENT, ROLES.
 });
 
 /** POST /api/tickets/:id/assign { userId } — Agent/Admin only */
+/**
+ * Best-effort in-app Bitrix notification to a user, gated by a config toggle.
+ * Never throws (must not break the ticket action).
+ * @param {string} userId  Bitrix user id to notify (skips webhook user '1'/empty)
+ * @param {string} message
+ * @param {string} toggleKey  key in config.notifications (default on if unknown)
+ */
+async function notifyTicketUser(userId, message, toggleKey) {
+    try {
+        const uid = String(userId || '').trim();
+        if (!uid || uid === WEBHOOK_USER_ID) return; // unassigned/system — nobody to notify
+        if (toggleKey) {
+            const cfg = (await loadSdeskConfig()) || {};
+            const n = cfg.notifications || {};
+            if (typeof n[toggleKey] !== 'undefined' && !n[toggleKey]) return; // disabled
+        }
+        await sdeskBitrix('im.notify.system.add', { USER_ID: uid, MESSAGE: message });
+    } catch (e) {
+        console.warn(`⚠️ in-app notify to user ${userId} failed: ${e.message}`);
+    }
+}
+
 app.post('/api/tickets/:id/assign', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN), async (req, res) => {
     try {
         const { userId } = req.body || {};
         if (!userId) return res.status(400).json({ error: 'bad_request', message: 'userId required' });
         await sdeskBitrix('tasks.task.update', { taskId: req.params.id, fields: { RESPONSIBLE_ID: String(userId) } });
         await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `🔧 Assigned to user ${userId} by ${req.auth.name}` }]).catch(() => {});
+        // Real in-app notification to the newly-assigned technician.
+        await notifyTicketUser(userId, `🎫 Ticket #${req.params.id} was assigned to you by ${req.auth.name}.`, 'onAssigned');
         res.json({ success: true });
     } catch (error) {
         console.error('❌ ticket assign error:', error.message);
@@ -859,6 +893,14 @@ app.post('/api/tickets/:id/comment', requireAuth, async (req, res) => {
             }
         }
         await sdeskBitrix('task.commentitem.add', [req.params.id, { POST_MESSAGE: `${text}\n\n— ${req.auth.name}` }]);
+        // Notify the responsible technician in-app (unless they are the commenter).
+        try {
+            const g = await sdeskBitrix('tasks.task.get', { taskId: req.params.id, select: ['RESPONSIBLE_ID'] });
+            const respId = String(g.result && g.result.task && g.result.task.responsibleId || '');
+            if (respId && respId !== String(req.auth.sub)) {
+                await notifyTicketUser(respId, `💬 New comment on ticket #${req.params.id} from ${req.auth.name}.`, 'onCommentAdded');
+            }
+        } catch { /* best-effort */ }
         res.json({ success: true });
     } catch (error) {
         console.error('❌ ticket comment error:', error.message);
@@ -991,6 +1033,40 @@ app.get('/api/team', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN, ROLES.MA
         res.json({ members });
     } catch (error) {
         res.status(500).json({ error: 'team_failed', message: error.message });
+    }
+});
+
+/**
+ * GET /api/escalations — real escalation data from the ticket_escalations table.
+ * Query: ?since=<ISO date> to scope by escalated_at (optional).
+ * Returns { total, byLevel: {1,2}, ticketIds:[...], rows:[...] }.
+ * Agent/Admin/Manager.
+ */
+app.get('/api/escalations', requireAuth, requireRole(ROLES.AGENT, ROLES.ADMIN, ROLES.MANAGER), async (req, res) => {
+    try {
+        if (!pool) return res.json({ total: 0, byLevel: {}, ticketIds: [], rows: [] });
+        const since = req.query.since ? new Date(String(req.query.since)) : null;
+        const params = [];
+        let where = '';
+        if (since && !isNaN(since.getTime())) { params.push(since.toISOString()); where = 'WHERE escalated_at >= $1'; }
+        const r = await pool.query(
+            `SELECT ticket_id, level, reason, escalated_at FROM ticket_escalations ${where} ORDER BY escalated_at DESC`,
+            params
+        );
+        const rows = r.rows || [];
+        const byLevel = {};
+        const ticketIds = new Set();
+        rows.forEach(row => { byLevel[row.level] = (byLevel[row.level] || 0) + 1; ticketIds.add(String(row.ticket_id)); });
+        res.json({
+            total: rows.length,
+            uniqueTickets: ticketIds.size,
+            byLevel,
+            ticketIds: [...ticketIds],
+            rows,
+        });
+    } catch (error) {
+        console.error('❌ /api/escalations error:', error.message);
+        res.status(500).json({ error: 'escalations_failed', message: error.message });
     }
 });
 
